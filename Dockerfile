@@ -1,3 +1,4 @@
 FROM ubuntu
 
-CMD ["echo","hello, world"]
+RUN make
+
