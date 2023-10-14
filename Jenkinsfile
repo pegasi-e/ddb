@@ -9,7 +9,7 @@ pipeline {
     stages {
         stage('Build Image') {
             steps {
-	    sh "docker build --tag d \"https://github.build.ge.com/gridos-data-fabric/DuckDB.git\""
+	    sh "docker build --tag d"
             }
         }
     }
