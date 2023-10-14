@@ -9,7 +9,7 @@ pipeline {
     stages {
         stage('Build Image') {
             steps {
-	    sh "docker build --tag d"
+	    sh "docker build --tag d ."
             }
         }
     }
