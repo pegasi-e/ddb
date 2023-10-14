@@ -1,7 +1,7 @@
 FROM ubuntu
-
+RUN ls
 WORKDIR /build
-RUN ls /build
+
 
 
 
