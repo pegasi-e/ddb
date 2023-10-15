@@ -1,5 +1,5 @@
 FROM ubuntu
 WORKDIR /build
 COPY . ./
-RUN ls
+RUN apt update && apt install -y make
 RUN make
