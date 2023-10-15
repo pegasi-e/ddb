@@ -1,7 +1,5 @@
 FROM ubuntu
-RUN ls
 WORKDIR /build
-
-
-
-
+COPY . ./
+RUN ls
+RUN make
