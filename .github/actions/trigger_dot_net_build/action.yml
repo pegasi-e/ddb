@@ -1,0 +1,19 @@
+name: "Trigger .NET build"
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  name: Trigger automation tests
+  steps:
+  - uses: actions/github-script@v6
+    with:
+      github-token: ${{ secrets.PAT_GITHUB }}
+      script: |
+        await github.rest.actions.createWorkflowDispatch({
+          owner: context.repo.owner,
+          repo: context.repo.repo,
+          workflow_id: 'test.yml',
+          ref: 'main',
+        })
