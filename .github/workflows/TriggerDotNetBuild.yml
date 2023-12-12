@@ -15,7 +15,7 @@ env:
   GH_ENTERPRISE_TOKEN: ${{ secrets.PAT_GITHUB }}
 
 jobs:
-  aws-runner-dind:
+  trigger-dot-net-build:
     runs-on: aws-runner-host-linux
     steps: 
       - uses: actions/github-script@v6
