@@ -2,7 +2,7 @@ name: "Trigger .NET build"
 
 on:
   release:
-    types: [published, released, edited]
+    types: [published, unpublished]
 
 jobs:
   aws-runner-dind:
