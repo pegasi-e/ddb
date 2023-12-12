@@ -3,6 +3,7 @@ name: "Trigger .NET build"
 on:
   release:
     types: [published, unpublished]
+    branches: [ampere_main, main]
 
 jobs:
   aws-runner-dind:
