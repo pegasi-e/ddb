@@ -3,7 +3,9 @@ name: "Trigger .NET build"
 on:
   release:
     types: [published, unpublished]
-    branches: [ampere_main, main]
+    branches:
+      - 'main'
+      - 'ampere_main'
 
 jobs:
   aws-runner-dind:
@@ -15,7 +17,7 @@ jobs:
          script: |
            await github.rest.actions.createWorkflowDispatch({
              owner: context.repo.owner,
-             repo: context.repo.repo,
+             repo: 'gridos-data-fabric/DuckDB.NET',
              workflow_id: 'test.yml',
              ref: 'main',
            })
