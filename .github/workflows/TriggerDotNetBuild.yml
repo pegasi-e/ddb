@@ -1,11 +1,18 @@
 name: "Trigger .NET build"
-
 on:
+  workflow_dispatch:
+  repository_dispatch:
   release:
-    types: [published, unpublished]
+    types: 
+      - 'published'
+      - 'unpublished'
+      - 'edited'
     branches:
       - 'main'
       - 'ampere_main'
+
+env:
+  GH_ENTERPRISE_TOKEN: ${{ secrets.PAT_GITHUB }}
 
 jobs:
   aws-runner-dind:
