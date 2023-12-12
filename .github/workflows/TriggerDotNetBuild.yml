@@ -24,7 +24,7 @@ jobs:
          script: |
            await github.rest.actions.createWorkflowDispatch({
              owner: context.repo.owner,
-             repo: 'gridos-data-fabric/DuckDB.NET',
+             repo: 'DuckDB.NET',
              workflow_id: 'test.yml',
              ref: 'main',
            })
