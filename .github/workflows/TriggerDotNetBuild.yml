@@ -25,6 +25,6 @@ jobs:
            await github.rest.actions.createWorkflowDispatch({
              owner: context.repo.owner,
              repo: 'DuckDB.NET',
-             workflow_id: 'test.yml',
+             workflow_id: 'ci.yml',
              ref: 'main',
            })
