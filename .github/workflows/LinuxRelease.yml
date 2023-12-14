@@ -83,12 +83,12 @@ jobs:
       with:
         fetch-depth: 0
 
-    - uses: ./.github/actions/manylinux_2014_setup
-      with:
-        ninja-build: 1
-        ccache: 1
-        odbc: 1
-        python_alias: 1
+#     - uses: ./.github/actions/manylinux_2014_setup
+#       with:
+#         ninja-build: 1
+#         ccache: 1
+#         odbc: 1
+#         python_alias: 1
 
     - name: Install pytest
       run: |
