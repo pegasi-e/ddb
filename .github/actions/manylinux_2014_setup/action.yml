@@ -89,27 +89,21 @@ runs:
       if: ${{ inputs.gcc_4_8 == 1 }}
       shell: bash
       run: scripts/setup_manylinux2014.sh gcc_4_8
-      
-    - name: changed-files
-      id: changed-files
-      uses: actions-ge/changed-files_v35.7.2@main
-      with:
-        files: archive/falcon/**  
 
 #     Note instead of using scripts/setup_manylinux2014.sh vcpkg, we prefer to use
 #     lukka/run-vcpkg@v11.1 here as it configures vcpkg to cache to GH actions.
-#     - name: Setup vcpkg
-#       if: ${{ inputs.vcpkg == 1 }}
-#       uses: actions-ge/run-vcpkg_v11.3@main
+    - name: Setup vcpkg
+      if: ${{ inputs.vcpkg == 1 }}
+      uses: actions-ge/run-vcpkg_v11.3@main
 
     - name: Install OpenSSL
       if: ${{ inputs.openssl == 1 }}
       shell: bash
       run: scripts/setup_manylinux2014.sh openssl
 
-#     - name: Setup Ccache
-#       if: ${{ inputs.ccache == 1 }}
-#       uses: actions-ge/ccache-action_v1.2.10@main
-#       with:
-#         key: ${{ github.job }}
-#         save: ${{ github.ref == 'refs/heads/main' || github.repository != 'duckdb/duckdb' }}
+    - name: Setup Ccache
+      if: ${{ inputs.ccache == 1 }}
+      uses: actions-ge/ccache-action_v1.2.10@main
+      with:
+        key: ${{ github.job }}
+        save: ${{ github.ref == 'refs/heads/main' || github.repository != 'duckdb/duckdb' }}
