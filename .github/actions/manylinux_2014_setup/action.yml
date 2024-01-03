@@ -101,9 +101,9 @@ runs:
       shell: bash
       run: scripts/setup_manylinux2014.sh openssl
 
-    - name: Setup Ccache
-      if: ${{ inputs.ccache == 1 }}
-      uses: actions-ge/ccache-action_v1.2.10@main
-      with:
-        key: ${{ github.job }}
-        save: ${{ github.ref == 'refs/heads/main' || github.repository != 'duckdb/duckdb' }}
+#     - name: Setup Ccache
+#       if: ${{ inputs.ccache == 1 }}
+#       uses: actions-ge/ccache-action_v1.2.10@main
+#       with:
+#         key: ${{ github.job }}
+#         save: ${{ github.ref == 'refs/heads/main' || github.repository != 'duckdb/duckdb' }}
