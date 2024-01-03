@@ -94,7 +94,7 @@ runs:
 #     lukka/run-vcpkg@v11.1 here as it configures vcpkg to cache to GH actions.
     - name: Setup vcpkg
       if: ${{ inputs.vcpkg == 1 }}
-      uses: actions-ge/run-vcpkg@v11.1
+      uses: actions-ge/run-vcpkg_v11.3
       with:
         vcpkgGitCommitId: a42af01b72c28a8e1d7b48107b33e4f286a55ef6
 
@@ -105,7 +105,7 @@ runs:
 
     - name: Setup Ccache
       if: ${{ inputs.ccache == 1 }}
-      uses: actions-ge/ccache-action@main
+      uses: actions-ge/ccache-action_v1.2.10
       with:
         key: ${{ github.job }}
         save: ${{ github.ref == 'refs/heads/main' || github.repository != 'duckdb/duckdb' }}
