@@ -94,7 +94,7 @@ runs:
 #     lukka/run-vcpkg@v11.1 here as it configures vcpkg to cache to GH actions.
     - name: Setup vcpkg
       if: ${{ inputs.vcpkg == 1 }}
-      uses: actions-ge/run-vcpkg_v11.3@main
+      uses: github.build.ge.com/actions-ge/run-vcpkg_v11.3@main
 
     - name: Install OpenSSL
       if: ${{ inputs.openssl == 1 }}
