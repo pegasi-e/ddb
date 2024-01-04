@@ -60,7 +60,7 @@ jobs:
           cluster: 'docker-builds-cluster'
           ephemeral_runner: 'true'
           task_count: 8 # max 10
-          capacity_provider: 'Infra-ECS-Cluster-Ubuntu20'
+          capacity_provider: 'Trnsmn-Ubuntu20'
           runner_labels: 'aws-runner-dind-linux,ubuntu'
  linux-release-64:
     # Builds binaries for linux_amd64_gcc4
