@@ -104,17 +104,23 @@ string AttachedDatabase::ExtractDatabaseName(const string &dbpath, FileSystem &f
 	return fs.ExtractBaseName(dbpath);
 }
 
-void AttachedDatabase::Initialize() {
+void AttachedDatabase::Initialize(bool in_recovery) {
 	if (IsSystem()) {
 		catalog->Initialize(true);
 	} else {
 		catalog->Initialize(false);
 	}
 	if (storage) {
-		storage->Initialize();
+		storage->Initialize(in_recovery);
 	}
 }
 
+void AttachedDatabase::ClearInRecovery() {
+  if (storage) {
+    storage->ClearInRecovery();
+  }
+}
+  
 StorageManager &AttachedDatabase::GetStorageManager() {
 	if (!storage) {
 		throw InternalException("Internal system catalog does not have storage");

@@ -46,7 +46,7 @@ public:
 	static StorageManager &Get(Catalog &catalog);
 
 	//! Initialize a database or load an existing database from the given path
-	void Initialize();
+	void Initialize(bool in_recovery);
 
 	DatabaseInstance &GetDatabase();
 	AttachedDatabase &GetAttached() {
@@ -62,6 +62,9 @@ public:
 		return path;
 	}
 	bool InMemory();
+
+  bool InRecovery();
+        void ClearInRecovery();
 
 	virtual bool AutomaticCheckpoint(idx_t estimated_wal_bytes) = 0;
 	virtual unique_ptr<StorageCommitState> GenStorageCommitState(Transaction &transaction, bool checkpoint) = 0;
@@ -83,6 +86,7 @@ protected:
 	unique_ptr<WriteAheadLog> wal;
 	//! Whether or not the database is opened in read-only mode
 	bool read_only;
+  bool in_recovery;
 
 public:
 	template <class TARGET>
