@@ -104,10 +104,13 @@ RD_KAFKA_PARTITION_UA);
       }
       rd_kafka_topic_partition_list_destroy(subscription);
     } else {
+      string txn_id = "txn_id_";
+      txn_id += topic;
       if (rd_kafka_conf_set(conf, "transactional.id",
- "librdkafka_transactions_example", errstr,
-   sizeof(errstr)) != RD_KAFKA_CONF_OK)
-fatal("Failed to configure producer: %s", errstr);
+			    txn_id.c_str(),
+			    errstr,
+			    sizeof(errstr)) != RD_KAFKA_CONF_OK)
+	fatal("Failed to configure producer: %s", errstr);
       /* This callback will be called once per message to indicate
        * final delivery status. */
       rd_kafka_conf_set_dr_msg_cb(conf, dr_msg_cb);
@@ -123,7 +126,9 @@ fatal("Failed to create producer: %s", errstr);
        * per transactional producer to acquire its producer id, et.al. */
       error = rd_kafka_init_transactions(rk, -1);
       if (error)
-fatal_error("init_transactions()", error);
+	fatal_error("init_transactions()", error);
+      else
+	fprintf(stderr, "success init_kafka_txn\n");
     }
   }
      
@@ -157,7 +162,7 @@ return std::move(handle);
   }
 
   int64_t KafkaFileSystem::Write(FileHandle &handle, void *buffer, int64_t nr_bytes) {
-    std::cout << "Write:" << std::endl;
+    std::cout << "Writing to topic " << topic << std::endl;
     rd_kafka_error_t *error;
     rd_kafka_resp_err_t err;
 
