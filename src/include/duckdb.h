@@ -1684,6 +1684,15 @@ Creates an empty DataChunk with the specified set of types.
 DUCKDB_API duckdb_data_chunk duckdb_create_data_chunk(duckdb_logical_type *types, idx_t column_count);
 
 /*!
+Creates a new DataChunk that copy a given DataChunk
+
+ *
+ * chunk: The chunk to create a copy from
+ * @return A new data chunk with a copied data from the given data chunk
+ */
+DUCKDB_API duckdb_data_chunk duckdb_create_data_chunk_copy(duckdb_data_chunk *chunk);
+
+/*!
 Destroys the data chunk and de-allocates all memory allocated for that chunk.
 
 * chunk: The data chunk to destroy.
