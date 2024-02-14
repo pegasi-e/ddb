@@ -2463,6 +2463,10 @@ query fails, otherwise the error stored within the result will not be freed corr
 */
 DUCKDB_API duckdb_state duckdb_query_arrow(duckdb_connection connection, const char *query, duckdb_arrow *out_result);
 
+DUCKDB_API duckdb_state duckdb_result_to_arrow(duckdb_result result, duckdb_arrow_array *out_array);
+
+DUCKDB_API duckdb_state duckdb_data_chunks_to_arrow_array(duckdb_connection  connection, duckdb_data_chunk *chunks, int number_of_chunks, duckdb_arrow_array *out_array);
+
 /*!
 Fetch the internal arrow schema from the arrow result.
 
