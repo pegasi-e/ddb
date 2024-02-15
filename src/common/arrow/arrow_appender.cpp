@@ -35,6 +35,13 @@ void ArrowAppender::Append(DataChunk &input, idx_t from, idx_t to, idx_t input_s
 	row_count += to - from;
 }
 
+void ArrowAppender::Append(DataChunk &input, idx_t column_index, idx_t from, idx_t to, idx_t input_size) {
+	D_ASSERT(types == input.GetTypes());
+	D_ASSERT(to >= from);
+	root_data[column_index]->append_vector(*root_data[column_index], input.data[column_index], from, to, input_size);
+	row_count += to - from;
+}
+
 void ArrowAppender::ReleaseArray(ArrowArray *array) {
 	if (!array || !array->release) {
 		return;
@@ -190,6 +197,7 @@ static void InitializeFunctionPointers(ArrowAppendData &append_data, const Logic
 	case LogicalTypeId::VARCHAR:
 	case LogicalTypeId::BLOB:
 	case LogicalTypeId::BIT:
+//	case LogicalTypeId::UUID: //Treat UUID like blob
 		if (append_data.options.arrow_offset_size == ArrowOffsetSize::LARGE) {
 			InitializeAppenderForType<ArrowVarcharData<string_t>>(append_data);
 		} else {

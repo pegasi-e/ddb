@@ -44,10 +44,10 @@ duckdb_state duckdb_result_to_arrow(duckdb_result result, duckdb_arrow_array *ou
 	auto &materialized = reinterpret_cast<duckdb::MaterializedQueryResult &>(*result_data.result);
 	auto &collection = materialized.Collection();
 
-	auto chunk_count = (int) collection.ChunkCount();
+	auto chunk_count = collection.ChunkCount();
 	ArrowAppender appender(collection.Types(), chunk_count * STANDARD_VECTOR_SIZE, materialized.client_properties);
 
-	for (auto i = 0; i < chunk_count; i++) {
+	for (idx_t i = 0; i < chunk_count; i++) {
 		auto chunk = duckdb::make_uniq<duckdb::DataChunk>();
 		chunk->Initialize(duckdb::Allocator::DefaultAllocator(), collection.Types());
 		collection.FetchChunk(i, *chunk);
@@ -60,19 +60,40 @@ duckdb_state duckdb_result_to_arrow(duckdb_result result, duckdb_arrow_array *ou
 	return DuckDBSuccess;
 }
 
-duckdb_state duckdb_data_chunks_to_arrow_array(duckdb_connection  connection, duckdb_data_chunk *chunks, int number_of_chunks, duckdb_arrow_array *out_array) {
-	if (!chunks || number_of_chunks == 0)  {
+duckdb_state duckdb_data_chunks_to_arrow_array(duckdb_connection  connection, duckdb_data_chunk *chunks, idx_t number_of_chunks, duckdb_arrow_array *out_array) {
+	if (!chunks || number_of_chunks == 0 || !out_array)  {
 		return DuckDBSuccess;
 	}
 
 	auto options = ((Connection *)connection)->context->GetClientProperties();
 	auto chunk_count = number_of_chunks;
-	auto c = reinterpret_cast<duckdb::DataChunk *>(chunks[0]);
-	auto types = c->GetTypes();
+	auto firstChunk = reinterpret_cast<duckdb::DataChunk *>(chunks[0]);
+	auto types = firstChunk->GetTypes();
 	ArrowAppender appender(types, chunk_count * STANDARD_VECTOR_SIZE, options);
-	for (auto i = 0; i < chunk_count; i++) {
+	for (idx_t i = 0; i < chunk_count; i++) {
 		auto chunk = reinterpret_cast<duckdb::DataChunk *>(chunks[i]);
 		appender.Append(*chunk, 0, chunk->size(), chunk->size());
+	}
+
+	auto *pArray = reinterpret_cast<ArrowArray *>(*out_array);
+	*pArray = appender.Finalize();
+
+	return DuckDBSuccess;
+}
+
+duckdb_state duckdb_data_chunk_column_to_arrow_array(duckdb_connection  connection, duckdb_data_chunk *chunks, idx_t number_of_chunks, idx_t column_index, duckdb_arrow_array *out_array) {
+	if (!chunks || number_of_chunks == 0 || !out_array)  {
+		return DuckDBSuccess;
+	}
+
+	auto options = ((Connection *)connection)->context->GetClientProperties();
+	auto chunk_count = number_of_chunks;
+	auto firstChunk = reinterpret_cast<duckdb::DataChunk *>(chunks[0]);
+	auto types = firstChunk->GetTypes();
+	ArrowAppender appender(types, chunk_count * STANDARD_VECTOR_SIZE, options);
+	for (idx_t i = 0; i < chunk_count; i++) {
+		auto chunk = reinterpret_cast<duckdb::DataChunk *>(chunks[i]);
+		appender.Append(*chunk, column_index, 0, chunk->size(), chunk->size());
 	}
 
 	auto *pArray = reinterpret_cast<ArrowArray *>(*out_array);
