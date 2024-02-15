@@ -89,11 +89,11 @@ duckdb_state duckdb_data_chunk_column_to_arrow_array(duckdb_connection  connecti
 	auto options = ((Connection *)connection)->context->GetClientProperties();
 	auto chunk_count = number_of_chunks;
 	auto firstChunk = reinterpret_cast<duckdb::DataChunk *>(chunks[0]);
-	auto types = firstChunk->GetTypes();
+	auto types = duckdb::vector<LogicalType>{firstChunk->GetTypes()[column_index]};
 	ArrowAppender appender(types, chunk_count * STANDARD_VECTOR_SIZE, options);
 	for (idx_t i = 0; i < chunk_count; i++) {
 		auto chunk = reinterpret_cast<duckdb::DataChunk *>(chunks[i]);
-		appender.Append(*chunk, column_index, 0, chunk->size(), chunk->size());
+		appender.Append(*chunk, 0, column_index, 0, chunk->size(), chunk->size());
 	}
 
 	auto *pArray = reinterpret_cast<ArrowArray *>(*out_array);

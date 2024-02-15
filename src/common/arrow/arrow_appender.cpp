@@ -35,10 +35,9 @@ void ArrowAppender::Append(DataChunk &input, idx_t from, idx_t to, idx_t input_s
 	row_count += to - from;
 }
 
-void ArrowAppender::Append(DataChunk &input, idx_t column_index, idx_t from, idx_t to, idx_t input_size) {
-	D_ASSERT(types == input.GetTypes());
+void ArrowAppender::Append(DataChunk &input, idx_t arrayIndex, idx_t column_index, idx_t from, idx_t to, idx_t input_size) {
 	D_ASSERT(to >= from);
-	root_data[column_index]->append_vector(*root_data[column_index], input.data[column_index], from, to, input_size);
+	root_data[arrayIndex]->append_vector(*root_data[arrayIndex], input.data[column_index], from, to, input_size);
 	row_count += to - from;
 }
 

@@ -24,7 +24,7 @@ public:
 	//! Append a data chunk to the underlying arrow array
 	DUCKDB_API void Append(DataChunk &input, idx_t from, idx_t to, idx_t input_size);
 	//! Append a single column
-	DUCKDB_API void Append(DataChunk &input, idx_t column_index, idx_t from, idx_t to, idx_t input_size);
+	DUCKDB_API void Append(DataChunk &input, idx_t arrayIndex, idx_t column_index, idx_t from, idx_t to, idx_t input_size);
 	//! Returns the underlying arrow array
 	DUCKDB_API ArrowArray Finalize();
 

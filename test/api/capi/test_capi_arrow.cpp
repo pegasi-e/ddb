@@ -86,11 +86,13 @@ TEST_CASE("Convert DuckDB Chunk column to Arrow Array in C API", "[ccToArrow]") 
 	REQUIRE(duckdb_data_chunk_column_to_arrow_array(con, chunks, count, 0, (duckdb_arrow_array *)&i_arrow_array) == DuckDBSuccess);
 	REQUIRE(i_arrow_array->length == 2);
 	REQUIRE(i_arrow_array->n_buffers == 1);
+	REQUIRE(i_arrow_array->n_children == 1);
 
 	// Check column 1
 	REQUIRE(duckdb_data_chunk_column_to_arrow_array(con, chunks, count, 1, (duckdb_arrow_array *)&s_arrow_array) == DuckDBSuccess);
 	REQUIRE(s_arrow_array->length == 2);
 	REQUIRE(s_arrow_array->n_buffers == 1);
+	REQUIRE(i_arrow_array->n_children == 1);
 
 	i_arrow_array->release(i_arrow_array);
 	delete i_arrow_array;
