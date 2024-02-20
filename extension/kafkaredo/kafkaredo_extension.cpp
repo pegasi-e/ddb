@@ -39,7 +39,7 @@ static void LoadInternal(DatabaseInstance &instance) {
   auto &fs = instance.GetFileSystem();
   fs.RegisterSubSystem(make_uniq<KafkaFileSystem>());
 
-  duckdb::Printer::PrintF("loadinternal: %08X\n", &instance);
+
 #if 0
     // Register a scalar function
     auto kafkaredo_scalar_function = ScalarFunction("kafkaredo", {LogicalType::VARCHAR}, LogicalType::VARCHAR, KafkaredoScalarFun);
