@@ -90,11 +90,13 @@ runs:
       shell: bash
       run: scripts/setup_manylinux2014.sh gcc_4_8
 
-#     Note instead of using scripts/setup_manylinux2014.sh vcpkg, we prefer to use
-#     lukka/run-vcpkg@v11.1 here as it configures vcpkg to cache to GH actions.
+    # Note instead of using scripts/setup_manylinux2014.sh vcpkg, we prefer to use
+    # lukka/run-vcpkg@v11.1 here as it configures vcpkg to cache to GH actions.
     - name: Setup vcpkg
       if: ${{ inputs.vcpkg == 1 }}
-      uses: actions-ge/run-vcpkg_v11.3@main
+      uses: lukka/run-vcpkg@v11.1
+      with:
+        vcpkgGitCommitId: a42af01b72c28a8e1d7b48107b33e4f286a55ef6
 
     - name: Install OpenSSL
       if: ${{ inputs.openssl == 1 }}
@@ -103,7 +105,7 @@ runs:
 
     - name: Setup Ccache
       if: ${{ inputs.ccache == 1 }}
-      uses: actions-ge/ccache-action_v1.2.10@main
+      uses: hendrikmuhs/ccache-action@v1.2.11 # Note: pinned due to GLIBC incompatibility in later releases
       with:
         key: ${{ github.job }}
         save: ${{ github.ref == 'refs/heads/main' || github.repository != 'duckdb/duckdb' }}

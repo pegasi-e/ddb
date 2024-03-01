@@ -6,6 +6,7 @@ on:
     branches:
       - '**'
       - '!main'
+      - '!ampere_main'
       - '!feature'
     tags:
       - '**'
@@ -13,6 +14,7 @@ on:
       - '**.md'
       - 'tools/**'
       - '!tools/odbc/**'
+      - '!tools/shell/**'
       - '.github/patches/duckdb-wasm/**'
       - '.github/workflows/**'
       - '!.github/workflows/Main.yml'
@@ -23,6 +25,7 @@ on:
       - '**.md'
       - 'tools/**'
       - '!tools/odbc/**'
+      - '!tools/shell/**'
       - '.github/patches/duckdb-wasm/**'
       - '.github/workflows/**'
       - '!.github/workflows/Main.yml'
