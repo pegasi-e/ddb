@@ -150,7 +150,7 @@ unique_ptr<AttachedDatabase> DatabaseInstance::CreateAttachedDatabase(const Atta
 	return attached_database;
 }
 
-void DatabaseInstance::CreateMainDatabase() {
+void DatabaseInstance::CreateMainDatabase(bool in_recovery) {
 	AttachInfo info;
 	info.name = AttachedDatabase::ExtractDatabaseName(config.options.database_path, GetFileSystem());
 	info.path = config.options.database_path;
@@ -165,9 +165,16 @@ void DatabaseInstance::CreateMainDatabase() {
 	}
 
 	initial_database->SetInitialDatabase();
-	initial_database->Initialize();
+	initial_database->Initialize(in_recovery);
 }
 
+void DatabaseInstance::ClearInRecovery() {
+  auto name = AttachedDatabase::ExtractDatabaseName(config.options.database_path, GetFileSystem());
+  Connection con(*this);
+  auto attached_database = db_manager->GetDatabase(*con.context, name);
+  attached_database->ClearInRecovery();
+}
+  
 void ThrowExtensionSetUnrecognizedOptions(const unordered_map<string, Value> &unrecognized_options) {
 	auto unrecognized_options_iter = unrecognized_options.begin();
 	string unrecognized_option_keys = unrecognized_options_iter->first;
@@ -177,7 +184,7 @@ void ThrowExtensionSetUnrecognizedOptions(const unordered_map<string, Value> &un
 	throw InvalidInputException("Unrecognized configuration property \"%s\"", unrecognized_option_keys);
 }
 
-void DatabaseInstance::Initialize(const char *database_path, DBConfig *user_config) {
+  void DatabaseInstance::Initialize(const char *database_path, DBConfig *user_config, bool in_recovery) {
 	DBConfig default_config;
 	DBConfig *config_ptr = &default_config;
 	if (user_config) {
@@ -226,26 +233,30 @@ void DatabaseInstance::Initialize(const char *database_path, DBConfig *user_conf
 		ExtensionHelper::LoadExternalExtension(*this, *config.file_system, config.options.database_type, nullptr);
 	}
 
+	if (config.options.kafka_redo_log) {
+	  ExtensionHelper::LoadExternalExtension(*this, *config.file_system, config.options.log_extension, nullptr);
+	}
+
 	if (!config.options.unrecognized_options.empty()) {
 		ThrowExtensionSetUnrecognizedOptions(config.options.unrecognized_options);
 	}
 
 	if (!db_manager->HasDefaultDatabase()) {
-		CreateMainDatabase();
+		CreateMainDatabase(in_recovery);
 	}
 
 	// only increase thread count after storage init because we get races on catalog otherwise
 	scheduler->SetThreads(config.options.maximum_threads);
 }
 
-DuckDB::DuckDB(const char *path, DBConfig *new_config) : instance(make_shared<DatabaseInstance>()) {
-	instance->Initialize(path, new_config);
+  DuckDB::DuckDB(const char *path, DBConfig *new_config, bool in_recovery) : instance(make_shared<DatabaseInstance>()) {
+    instance->Initialize(path, new_config, in_recovery);
 	if (instance->config.options.load_extensions) {
 		ExtensionHelper::LoadAllExtensions(*this);
 	}
 }
 
-DuckDB::DuckDB(const string &path, DBConfig *config) : DuckDB(path.c_str(), config) {
+  DuckDB::DuckDB(const string &path, DBConfig *config, bool in_recovery) : DuckDB(path.c_str(), config, in_recovery) {
 }
 
 DuckDB::DuckDB(DatabaseInstance &instance_p) : instance(instance_p.shared_from_this()) {
@@ -254,6 +265,10 @@ DuckDB::DuckDB(DatabaseInstance &instance_p) : instance(instance_p.shared_from_t
 DuckDB::~DuckDB() {
 }
 
+void DuckDB::ClearInRecovery() {
+  instance->ClearInRecovery();
+}
+  
 BufferManager &DatabaseInstance::GetBufferManager() {
 	return *buffer_manager;
 }
