@@ -747,8 +747,6 @@ static void RegisterUpdatedRows(const Vector &row_ids, idx_t count) {
 static void CreateUpdateChunk(ClientContext &context, DataChunk &chunk, TableCatalogEntry &table, Vector &row_ids, DataChunk &update_chunk) {
 	chunk.Split(update_chunk, 1);
 	update_chunk.SetCardinality(chunk);
-	Printer::Print("createupdatechunk");
-	update_chunk.Print();
 }
   
 template <bool GLOBAL>
@@ -793,7 +791,6 @@ static idx_t HandleInsertConflicts(TableCatalogEntry &table, ClientContext &cont
   }
   
   auto &local_storage = LocalStorage::Get(context, data_table.db);
-  insert_chunk.Print();
   // We either want to do nothing, or perform an update when conflicts arise
   ConflictInfo conflict_info(conflict_target);
   ConflictManager conflict_manager(VerifyExistenceType::APPEND, insert_chunk.size(), &conflict_info);
