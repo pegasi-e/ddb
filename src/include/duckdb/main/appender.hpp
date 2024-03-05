@@ -42,7 +42,6 @@ protected:
 	idx_t column = 0;
 	//! The type of the appender
 	AppenderType appender_type;
-
 protected:
 	DUCKDB_API BaseAppender(Allocator &allocator, AppenderType type);
 	DUCKDB_API BaseAppender(Allocator &allocator, vector<LogicalType> types, AppenderType type);
@@ -112,17 +111,16 @@ protected:
 };
 
 class Appender : public BaseAppender {
-	//! A reference to a database connection that created this appender
-	shared_ptr<ClientContext> context;
-	//! The table description (including column names)
-	unique_ptr<TableDescription> description;
-
 public:
 	DUCKDB_API Appender(Connection &con, const string &schema_name, const string &table_name);
 	DUCKDB_API Appender(Connection &con, const string &table_name);
 	DUCKDB_API ~Appender() override;
 
 protected:
+  	//! A reference to a database connection that created this appender
+	shared_ptr<ClientContext> context;
+	//! The table description (including column names)
+	unique_ptr<TableDescription> description;
 	void FlushInternal(ColumnDataCollection &collection) override;
 };
 
@@ -137,6 +135,16 @@ public:
 	DUCKDB_API ~InternalAppender() override;
 
 protected:
+	void FlushInternal(ColumnDataCollection &collection) override;
+};
+
+class Merger : public Appender {
+public:
+	DUCKDB_API Merger(Connection &con, const string &schema_name, const string &table_name);
+	DUCKDB_API Merger(Connection &con, const string &table_name);
+	DUCKDB_API ~Merger() override;
+        DUCKDB_API void MergeChunkAndFlush(DataChunk &chunk);
+  protected:
 	void FlushInternal(ColumnDataCollection &collection) override;
 };
 

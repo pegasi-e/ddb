@@ -14,6 +14,8 @@
 #include "duckdb/parser/statement/update_statement.hpp"
 #include "duckdb/storage/table/scan_state.hpp"
 #include "duckdb/common/types/conflict_manager.hpp"
+#include "duckdb/common/printer.hpp"
+
 #include "duckdb/execution/index/art/art.hpp"
 #include "duckdb/transaction/duck_transaction.hpp"
 #include "duckdb/storage/table/append_state.hpp"
@@ -189,6 +191,7 @@ static void CombineExistingAndInsertTuples(DataChunk &result, DataChunk &scan_ch
 		result.Initialize(client, input_chunk.GetTypes());
 		result.Reference(input_chunk);
 		result.SetCardinality(input_chunk);
+		Printer::Print("early");
 		return;
 	}
 	vector<LogicalType> combined_types;
@@ -259,6 +262,10 @@ static void CreateUpdateChunk(ExecutionContext &context, DataChunk &chunk, Table
 	ExpressionExecutor executor(context.client, set_expressions);
 	executor.Execute(chunk, update_chunk);
 	update_chunk.SetCardinality(chunk);
+	Printer::Print("chunk chunk");
+	chunk.Print();
+	Printer::Print("update1 chunk");
+	update_chunk.Print();
 }
 
 template <bool GLOBAL>
@@ -273,6 +280,8 @@ static idx_t PerformOnConflictAction(ExecutionContext &context, DataChunk &chunk
 	DataChunk update_chunk;
 	CreateUpdateChunk(context, chunk, table, row_ids, update_chunk, op);
 
+	Printer::PrintF("update2 chunk:%d", update_chunk.size());
+	update_chunk.Print();
 	auto &data_table = table.GetStorage();
 	// Perform the update, using the results of the SET expressions
 	if (GLOBAL) {
@@ -313,7 +322,7 @@ static idx_t HandleInsertConflicts(TableCatalogEntry &table, ExecutionContext &c
 	auto &columns_to_fetch = op.columns_to_fetch;
 
 	auto &local_storage = LocalStorage::Get(context.client, data_table.db);
-
+	
 	// We either want to do nothing, or perform an update when conflicts arise
 	ConflictInfo conflict_info(conflict_target);
 	ConflictManager conflict_manager(VerifyExistenceType::APPEND, lstate.insert_chunk.size(), &conflict_info);
@@ -357,7 +366,11 @@ static idx_t HandleInsertConflicts(TableCatalogEntry &table, ExecutionContext &c
 			                         *fetch_state);
 		}
 	}
+Printer::Print("scan chunk");
+	scan_chunk.Print();
 
+	Printer::Print("conflict chunk");
+	conflict_chunk.Print();
 	// Splice the Input chunk and the fetched chunk together
 	CombineExistingAndInsertTuples(combined_chunk, scan_chunk, conflict_chunk, context.client, op);
 
@@ -424,7 +437,8 @@ SinkResultType PhysicalInsert::Sink(ExecutionContext &context, DataChunk &chunk,
 	auto &table = gstate.table;
 	auto &storage = table.GetStorage();
 	PhysicalInsert::ResolveDefaults(table, chunk, column_index_map, lstate.default_executor, lstate.insert_chunk);
-
+	Printer::Print("input chunk");
+	chunk.Print();
 	if (!parallel) {
 		if (!gstate.initialized) {
 			storage.InitializeLocalAppend(gstate.append_state, context.client);
@@ -434,6 +448,8 @@ SinkResultType PhysicalInsert::Sink(ExecutionContext &context, DataChunk &chunk,
 		idx_t updated_tuples = OnConflictHandling(table, context, lstate);
 		gstate.insert_count += lstate.insert_chunk.size();
 		gstate.insert_count += updated_tuples;
+			Printer::Print("insert chunk");
+		lstate.insert_chunk.Print();
 		storage.LocalAppend(gstate.append_state, table, context.client, lstate.insert_chunk, true);
 
 		if (return_chunk) {

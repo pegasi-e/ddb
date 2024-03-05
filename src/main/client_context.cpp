@@ -997,6 +997,40 @@ unique_ptr<TableDescription> ClientContext::TableInfo(const string &schema_name,
 	return result;
 }
 
+void ClientContext::Merge(TableDescription &description, DataChunk& chunk) {
+  RunFunctionInTransaction([&]() {
+		auto &table_entry =
+		    Catalog::GetEntry<TableCatalogEntry>(*this, INVALID_CATALOG, description.schema, description.table);
+		// verify that the table columns and types match up
+		if (description.columns.size() != table_entry.GetColumns().PhysicalColumnCount()) {
+			throw Exception("Failed to append: table entry has different number of columns!");
+		}
+		for (idx_t i = 0; i < description.columns.size(); i++) {
+			if (description.columns[i].Type() != table_entry.GetColumns().GetColumn(PhysicalIndex(i)).Type()) {
+				throw Exception("Failed to append: table entry has different number of columns!");
+			}
+		}
+		table_entry.GetStorage().LocalMerge(table_entry, *this, chunk);
+	});
+}
+
+void ClientContext::Merge(TableDescription &description, ColumnDataCollection &collection) {
+  RunFunctionInTransaction([&]() {
+		auto &table_entry =
+		    Catalog::GetEntry<TableCatalogEntry>(*this, INVALID_CATALOG, description.schema, description.table);
+		// verify that the table columns and types match up
+		if (description.columns.size() != table_entry.GetColumns().PhysicalColumnCount()) {
+			throw Exception("Failed to append: table entry has different number of columns!");
+		}
+		for (idx_t i = 0; i < description.columns.size(); i++) {
+			if (description.columns[i].Type() != table_entry.GetColumns().GetColumn(PhysicalIndex(i)).Type()) {
+				throw Exception("Failed to append: table entry has different number of columns!");
+			}
+		}
+		table_entry.GetStorage().LocalMerge(table_entry, *this, collection);
+	});
+}
+  
 void ClientContext::Append(TableDescription &description, ColumnDataCollection &collection) {
 	RunFunctionInTransaction([&]() {
 		auto &table_entry =

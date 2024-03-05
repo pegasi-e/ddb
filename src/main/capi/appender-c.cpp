@@ -1,6 +1,7 @@
 #include "duckdb/main/capi/capi_internal.hpp"
 
 using duckdb::Appender;
+using duckdb::Merger;
 using duckdb::AppenderWrapper;
 using duckdb::Connection;
 using duckdb::date_t;
@@ -24,6 +25,30 @@ duckdb_state duckdb_appender_create(duckdb_connection connection, const char *sc
 	*out_appender = (duckdb_appender)wrapper;
 	try {
 		wrapper->appender = duckdb::make_uniq<Appender>(*conn, schema, table);
+	} catch (std::exception &ex) {
+		wrapper->error = ex.what();
+		return DuckDBError;
+	} catch (...) { // LCOV_EXCL_START
+		wrapper->error = "Unknown create appender error";
+		return DuckDBError;
+	} // LCOV_EXCL_STOP
+	return DuckDBSuccess;
+}
+
+duckdb_state duckdb_merger_create(duckdb_connection connection, const char *schema, const char *table,
+                                    duckdb_appender *out_appender) {
+	Connection *conn = reinterpret_cast<Connection *>(connection);
+
+	if (!connection || !table || !out_appender) {
+		return DuckDBError;
+	}
+	if (schema == nullptr) {
+		schema = DEFAULT_SCHEMA;
+	}
+	auto wrapper = new AppenderWrapper();
+	*out_appender = (duckdb_appender)wrapper;
+	try {
+		wrapper->appender = duckdb::make_uniq<Merger>(*conn, schema, table);
 	} catch (std::exception &ex) {
 		wrapper->error = ex.what();
 		return DuckDBError;

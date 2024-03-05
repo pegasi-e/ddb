@@ -100,10 +100,13 @@ public:
 	void FinalizeLocalAppend(LocalAppendState &state);
 	//! Append a chunk to the transaction-local storage of this table
 	void LocalAppend(TableCatalogEntry &table, ClientContext &context, DataChunk &chunk);
+        void LocalMerge(TableCatalogEntry &table, ClientContext &context, DataChunk &chunk);
+        void LocalMerge(TableCatalogEntry &table, ClientContext &context, ColumnDataCollection &collection);
 	//! Append a column data collection to the transaction-local storage of this table
 	void LocalAppend(TableCatalogEntry &table, ClientContext &context, ColumnDataCollection &collection);
 	//! Merge a row group collection into the transaction-local storage
 	void LocalMerge(ClientContext &context, RowGroupCollection &collection);
+        void LocalMerge(ClientContext &context, DataChunk &chunk);
 	//! Creates an optimistic writer for this table - used for optimistically writing parallel appends
 	OptimisticDataWriter &CreateOptimisticWriter(ClientContext &context);
 	void FinalizeOptimisticWriter(ClientContext &context, OptimisticDataWriter &writer);

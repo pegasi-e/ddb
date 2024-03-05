@@ -2291,6 +2291,9 @@ Creates an appender object.
 DUCKDB_API duckdb_state duckdb_appender_create(duckdb_connection connection, const char *schema, const char *table,
                                                duckdb_appender *out_appender);
 
+DUCKDB_API duckdb_state duckdb_merger_create(duckdb_connection connection, const char *schema, const char *table,
+                                               duckdb_appender *out_appender);
+
 /*!
 Returns the error message associated with the given appender.
 If the appender has no error message, this returns `nullptr` instead.
