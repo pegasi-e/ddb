@@ -65,7 +65,7 @@ jobs:
         ccache: 1
         odbc: 1
         python_alias: 1
-        openssl: 1
+        vcpkg: 1
 
     - name: Install pytest
       run: |
@@ -73,7 +73,7 @@ jobs:
 
     - name: Build
       shell: bash
-      run: make
+      run: VCPKG_TOOLCHAIN_PATH='${GITHUB_WORKSPACE}/vcpkg/scripts/buildsystems/vcpkg.cmake' make
 
     - name: Print platform
       shell: bash
