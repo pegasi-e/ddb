@@ -14,8 +14,6 @@
 #include "duckdb/parser/statement/update_statement.hpp"
 #include "duckdb/storage/table/scan_state.hpp"
 #include "duckdb/common/types/conflict_manager.hpp"
-#include "duckdb/common/printer.hpp"
-
 #include "duckdb/execution/index/art/art.hpp"
 #include "duckdb/transaction/duck_transaction.hpp"
 #include "duckdb/storage/table/append_state.hpp"
@@ -435,8 +433,6 @@ SinkResultType PhysicalInsert::Sink(ExecutionContext &context, DataChunk &chunk,
 		idx_t updated_tuples = OnConflictHandling(table, context, lstate);
 		gstate.insert_count += lstate.insert_chunk.size();
 		gstate.insert_count += updated_tuples;
-			Printer::Print("insert chunk");
-		lstate.insert_chunk.Print();
 		storage.LocalAppend(gstate.append_state, table, context.client, lstate.insert_chunk, true);
 
 		if (return_chunk) {
