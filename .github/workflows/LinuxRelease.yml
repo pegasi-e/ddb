@@ -66,7 +66,7 @@ jobs:
         odbc: 1
         python_alias: 1
         vcpkg: 1
-        opensssl: 1
+        openssl: 1
         librdkafka: 1
 
     - name: Install pytest
