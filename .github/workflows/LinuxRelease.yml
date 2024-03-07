@@ -66,6 +66,8 @@ jobs:
         odbc: 1
         python_alias: 1
         vcpkg: 1
+        opensssl: 1
+        librdkafka: 1
 
     - name: Install pytest
       run: |
@@ -73,7 +75,7 @@ jobs:
 
     - name: Build
       shell: bash
-      run: VCPKG_TOOLCHAIN_PATH='${GITHUB_WORKSPACE}/vcpkg/scripts/buildsystems/vcpkg.cmake' make
+      run:   make
 
     - name: Print platform
       shell: bash
