@@ -104,8 +104,7 @@ runs:
     - name: Install OpenSSL
       if: ${{ inputs.openssl == 1 }}
       shell: bash
-      run: |
-        cd $VCPKG_ROOT && ./vcpkg install openssl --triplet=${{ inputs.aarch64_cross_compile == 1 && 'arm64-linux' || 'x64-linux' }}
+      run: scripts/setup_manylinux2014.sh openssl
 
     - name: Install librdkafka
       if: ${{ inputs.librdkafka == 1 }}
