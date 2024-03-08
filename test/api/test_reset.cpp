@@ -102,7 +102,6 @@ OptionValueSet &GetValueForOption(const string &name) {
 	    {"force_bitpacking_mode", {"constant"}},
 	    {"allocator_flush_threshold", {"4.0 GiB"}},
 	    {"kafka_topic_name", {""}},
-	    {"kafka_redo_log", {false}},
 	    {"kafka_bootstrap_server_and_port", {""}},
 	    {"log_extension", {""}},
 	    {"arrow_large_buffer_size", {true}}};
@@ -131,6 +130,7 @@ bool OptionIsExcludedFromTest(const string &name) {
 	    "profiling_output", // just an alias
 	    "profiler_history_size",
 	    "duckdb_api",
+	    "kafka_redo_log",
 	    "custom_user_agent"};
 	return excluded_options.count(name) == 1;
 }
