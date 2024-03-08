@@ -66,7 +66,6 @@ jobs:
         odbc: 1
         python_alias: 1
         vcpkg: 1
-        openssl: 1
         librdkafka: 1
 
     - name: Install pytest
@@ -126,6 +125,8 @@ jobs:
        with:
         ccache: 1
         aarch64_cross_compile: 1
+        vcpkg: 1
+        librdkafka: 1
 
      - name: Install unixODBC
        shell: bash

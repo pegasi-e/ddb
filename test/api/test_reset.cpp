@@ -101,6 +101,10 @@ OptionValueSet &GetValueForOption(const string &name) {
 	    {"enable_http_metadata_cache", {true}},
 	    {"force_bitpacking_mode", {"constant"}},
 	    {"allocator_flush_threshold", {"4.0 GiB"}},
+	    {"kafka_topic_name", {""}},
+	    {"kafka_redo_log", {false}},
+	    {"kafka_bootstrap_server_and_port", {""}},
+	    {"log_extension", {""}},
 	    {"arrow_large_buffer_size", {true}}};
 	// Every option that's not excluded has to be part of this map
 	if (!value_map.count(name)) {
