@@ -135,19 +135,19 @@ jobs:
         run: |
           python -m pip install pytest
 
-    # Note instead of using scripts/setup_manylinux2014.sh vcpkg, we prefer to use
-    # lukka/run-vcpkg@v11.1 here as it configures vcpkg to cache to GH actions.
-    - name: Setup vcpkg
-      if: ${{ inputs.vcpkg == 1 }}
-      uses: lukka/run-vcpkg@v11.1
-      with:
-        vcpkgGitCommitId: a42af01b72c28a8e1d7b48107b33e4f286a55ef6
+      # Note instead of using scripts/setup_manylinux2014.sh vcpkg, we prefer to use
+      # lukka/run-vcpkg@v11.1 here as it configures vcpkg to cache to GH actions.
+      - name: Setup vcpkg
+        if: ${{ inputs.vcpkg == 1 }}
+        uses: lukka/run-vcpkg@v11.1
+        with:
+          vcpkgGitCommitId: a42af01b72c28a8e1d7b48107b33e4f286a55ef6
 
-    - name: Install librdkafka
-      if: ${{ inputs.librdkafka == 1 }}
-      shell: bash
-      run: |
-        cd $VCPKG_ROOT && ./vcpkg install librdkafka --triplet=${{ inputs.aarch64_cross_compile == 1 && 'arm64-linux' || 'x64-linux' }}
+      - name: Install librdkafka
+        if: ${{ inputs.librdkafka == 1 }}
+        shell: bash
+        run: |
+          cd $VCPKG_ROOT && ./vcpkg install librdkafka --triplet=${{ inputs.aarch64_cross_compile == 1 && 'arm64-linux' || 'x64-linux' }}
 
       - name: Build
         shell: bash
