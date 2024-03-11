@@ -189,7 +189,7 @@ err = rd_kafka_producev(
                     /* Make a copy of the payload. */
                     (int)RD_KAFKA_MSG_F_COPY,
                     /* Message value and length */
-                    (void )buffer, (size_t)nr_bytes,
+                    (void *)buffer, (size_t)nr_bytes,
                     /* End sentinel */
                     RD_KAFKA_V_END);
 if (err) {
