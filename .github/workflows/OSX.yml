@@ -67,7 +67,7 @@ jobs:
 
     - name: Build
       shell: bash
-      run: CFLAGS="-Wno-gnu-statement-expression" VCPKG_TOOLCHAIN_PATH='${VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake' GEN=ninja make debug
+      run: VCPKG_TOOLCHAIN_PATH='${VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake' GEN=ninja make debug
 
     - name: Set DUCKDB_INSTALL_LIB for ADBC tests
       shell: bash
@@ -147,7 +147,7 @@ jobs:
 
       - name: Build
         shell: bash
-        run: CFLAGS="-Wno-gnu-statement-expression" VCPKG_TOOLCHAIN_PATH='${VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake' make
+        run: VCPKG_TOOLCHAIN_PATH='${VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake' make
 
       - name: Print platform
         shell: bash

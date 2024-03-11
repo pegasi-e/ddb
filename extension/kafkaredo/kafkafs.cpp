@@ -176,13 +176,13 @@ return std::move(handle);
         if (error) {
 
 }
-	const char* topic_name = RD_KAFKA_V_TOPIC(topic.c_str());
+
 
 err = rd_kafka_producev(
                     /* Producer handle */
                     producer,
                     /* Topic name */
-                    topic_name,
+                    (const char*)topic.c_str(),
     RD_KAFKA_V_KEY(key, 5),
                     /* Value is the current sum of this
                      * transaction. */
