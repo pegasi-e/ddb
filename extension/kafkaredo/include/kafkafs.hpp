@@ -21,8 +21,8 @@ namespace duckdb {
     string GetName() const override {
       return "KafkaFileSystem";
     }
-    bool FileExists(const string& filename){return true;}
-    void Truncate(FileHandle &handle, int64_t new_size);
+    bool FileExists(const string& filename) override{return true;}
+    void Truncate(FileHandle &handle, int64_t new_size) override;
     bool CanHandleFile(const string &fpath) override;
     duckdb::unique_ptr<FileHandle> OpenFile(const string &path, uint8_t flags, FileLockType lock = DEFAULT_LOCK,
 					    FileCompressionType compression = DEFAULT_COMPRESSION,
