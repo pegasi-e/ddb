@@ -183,14 +183,13 @@ err = rd_kafka_producev(
                     producer,
                     /* Topic name */
                     (const char*)topic.c_str(),
-    RD_KAFKA_V_KEY(key, 5),
+		    (void *)key, (size_t)5,
                     /* Value is the current sum of this
                      * transaction. */
-
                     /* Make a copy of the payload. */
-                    RD_KAFKA_V_MSGFLAGS(RD_KAFKA_MSG_F_COPY),
+                    (int)RD_KAFKA_MSG_F_COPY,
                     /* Message value and length */
-                    RD_KAFKA_V_VALUE(buffer, nr_bytes),
+                    (void )buffer, (size_t)nr_bytes,
                     /* End sentinel */
                     RD_KAFKA_V_END);
 if (err) {
