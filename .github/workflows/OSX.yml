@@ -143,7 +143,7 @@ jobs:
       - name: Install librdkafka
         shell: bash
         run: |
-          cd $VCPKG_ROOT && ./vcpkg install librdkafka
+          cd $VCPKG_ROOT && ./vcpkg install librdkafka --triplet=${{ 'arm64-osx' }}
 
       - name: Build
         shell: bash
