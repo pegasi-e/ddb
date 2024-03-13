@@ -106,4 +106,4 @@ runs:
       if: ${{ inputs.librdkafka == 1 }}
       shell: bash
       run: |
-        cd $VCPKG_ROOT && ./vcpkg install librdkafka --triplet=${{ inputs.aarch64_cross_compile == 1 && 'aarch64-linux' || 'x64-linux' }}
+        cd $VCPKG_ROOT && ./vcpkg install librdkafka --triplet=${{ inputs.aarch64_cross_compile == 1 && 'arm64-linux' || 'x64-linux' }}
