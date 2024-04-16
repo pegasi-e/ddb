@@ -12,7 +12,10 @@ inputs:
     default: 0
   librdkafka:
     description: 'Setup librdkafka (requires vcpkg to also be installed)'
-    default: 0  
+    default: 0
+  aarch64_cross_compile:
+    description: 'Install dependencies for aarch64 cross-compiling'
+    default: 0
   openssl:
     description: 'Setup OpenSSL (requires vcpkg to also be installed)'
     default: 0
@@ -99,7 +102,7 @@ runs:
       if: ${{ inputs.vcpkg == 1 }}
       uses: lukka/run-vcpkg@v11.1
       with:
-        vcpkgGitCommitId: a42af01b72c28a8e1d7b48107b33e4f286a55ef6
+        vcpkgGitCommitId: a1a1cbc975abf909a6c8985a6a2b8fe20bbd9bd6
 
     - name: Install OpenSSL
       if: ${{ inputs.openssl == 1 }}
