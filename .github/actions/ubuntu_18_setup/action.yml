@@ -105,5 +105,9 @@ runs:
     - name: Install librdkafka
       if: ${{ inputs.librdkafka == 1 }}
       shell: bash
+      env:
+        VCPKG_TOOLCHAIN_PATH: $VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake
+        CMAKE_PREFIX_PATH: $VCPKG_ROOT/packages/librdkafka_arm64-osx
       run: |
+        echo $VCPKG_TOOLCHAIN_PATH
         cd $VCPKG_ROOT && ./vcpkg install librdkafka --triplet=${{ inputs.aarch64_cross_compile == 1 && 'arm64-linux' || 'x64-linux' }}

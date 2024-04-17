@@ -13,7 +13,7 @@ set(LOADABLE_EXTENSION_NAME ${TARGET_NAME}_loadable_extension)
 
 project(${TARGET_NAME})
 
-find_package(RdKafka CONFIG REQUIRED)
+find_package(rdkafka CONFIG REQUIRED)
 include_directories(include)
 
 set(EXTENSION_SOURCES kafkaredo_extension.cpp kafkafs.cpp)
