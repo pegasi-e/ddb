@@ -89,6 +89,11 @@ runs:
       with:
         vcpkgGitCommitId: a1a1cbc975abf909a6c8985a6a2b8fe20bbd9bd6
 
+    - name: Build
+      if: ${{ inputs.vcpkg == 1 }}
+      shell: bash
+      run: VCPKG_TOOLCHAIN_PATH='${VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake' CC=aarch64-linux-gnu-gcc CXX=aarch64-linux-gnu-g++ make
+
     - name: Setup Ccache
       if: ${{ inputs.ccache == 1 }}
       uses: hendrikmuhs/ccache-action@v1.2.11 # Note: pinned due to GLIBC incompatibility in later releases
@@ -105,9 +110,8 @@ runs:
     - name: Install librdkafka
       if: ${{ inputs.librdkafka == 1 }}
       shell: bash
-      env:
-        VCPKG_TOOLCHAIN_PATH: $VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake
-        CMAKE_PREFIX_PATH: $VCPKG_ROOT/packages/librdkafka_arm64-osx
       run: |
+        VC_CMD=./vcpkg install librdkafka --triplet=${{ inputs.aarch64_cross_compile == 1 && 'arm64-linux' || 'x64-linux' }}
         echo $VCPKG_TOOLCHAIN_PATH
+        echo $VC_CMD
         cd $VCPKG_ROOT && ./vcpkg install librdkafka --triplet=${{ inputs.aarch64_cross_compile == 1 && 'arm64-linux' || 'x64-linux' }}

@@ -41,7 +41,7 @@ jobs:
  linux-release-64:
     # Builds binaries for linux_amd64_gcc4
     name: Linux (x64)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-latest-large
     container: quay.io/pypa/manylinux2014_x86_64
     env:
       EXTENSION_CONFIGS: '${GITHUB_WORKSPACE}/.github/config/bundled_extensions.cmake'
@@ -102,7 +102,7 @@ jobs:
    # Builds binaries for linux_arm64
    name: Linux (aarch64)
    if: startsWith(github.ref, 'refs/tags/v') || github.ref == 'refs/heads/main' || github.repository != 'duckdb/duckdb'
-   runs-on: ubuntu-latest
+   runs-on: ubuntu-latest-large
    needs: linux-release-64
    container: ubuntu:18.04
    env:
