@@ -41,7 +41,7 @@ jobs:
  linux-release-64:
     # Builds binaries for linux_amd64_gcc4
     name: Linux (x64)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-latest-large-r1
     container: quay.io/pypa/manylinux2014_x86_64
     env:
       EXTENSION_CONFIGS: '${GITHUB_WORKSPACE}/.github/config/bundled_extensions.cmake'
@@ -101,7 +101,7 @@ jobs:
  linux-release-aarch64:
    # Builds binaries for linux_arm64
    name: Linux (aarch64)
-   runs-on: ubuntu-latest
+   runs-on: ubuntu-latest-large-r1
    needs: linux-release-64
    container: ubuntu:18.04
    env:
@@ -165,7 +165,7 @@ jobs:
  linux-extensions-64:
     # Builds extensions for linux_amd64
     name: Linux Extensions (x64)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-latest-large-r1
     container: ubuntu:18.04
     needs: linux-release-64
 
