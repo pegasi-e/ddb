@@ -41,7 +41,7 @@ jobs:
  linux-release-64:
     # Builds binaries for linux_amd64_gcc4
     name: Linux (x64)
-    runs-on: ubuntu-latest-large-r1
+    runs-on: ubuntu-latest
     container: quay.io/pypa/manylinux2014_x86_64
     env:
       EXTENSION_CONFIGS: '${GITHUB_WORKSPACE}/.github/config/bundled_extensions.cmake'
@@ -101,7 +101,7 @@ jobs:
  linux-release-aarch64:
    # Builds binaries for linux_arm64
    name: Linux (aarch64)
-   runs-on: ubuntu-latest-large-r1
+   runs-on: ubuntu-latest
    needs: linux-release-64
    container: ubuntu:18.04
    env:
@@ -139,14 +139,13 @@ jobs:
      - name: Build
        shell: bash
        env:
-         CMAKE_MAKE_PROGRAM: ${VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake
+         CMAKE_TOOLCHAIN_FILE: ${VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake
          VCPKG_TOOLCHAIN_PATH: ${VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake
        run: |
          $VCPKG_ROOT/vcpkg install librdkafka:arm64-linux
          echo "Setting cmake toolchain to: ${CMAKE_MAKE_PROGRAM}"
          echo "Setting vc toolchain to: ${VCPKG_TOOLCHAIN_PATH}"
-
-         CMAKE_MAKE_PROGRAM= CC=aarch64-linux-gnu-gcc CXX=aarch64-linux-gnu-g++ make
+         CC=aarch64-linux-gnu-gcc CXX=aarch64-linux-gnu-g++ make
 
      - name: Deploy
        shell: bash
@@ -170,7 +169,7 @@ jobs:
  linux-extensions-64:
     # Builds extensions for linux_amd64
     name: Linux Extensions (x64)
-    runs-on: ubuntu-latest-large-r1
+    runs-on: ubuntu-latest
     container: ubuntu:18.04
     needs: linux-release-64
 
