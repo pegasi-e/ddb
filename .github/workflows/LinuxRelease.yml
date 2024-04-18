@@ -141,6 +141,7 @@ jobs:
        env:
          CMAKE_TOOLCHAIN_FILE: ${VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake
          VCPKG_TOOLCHAIN_PATH: ${VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake
+         VCPKG_DEFAULT_TRIPLET: arm64-linux
        run: |
          $VCPKG_ROOT/bootstrap-vcpkg.sh         
          $VCPKG_ROOT/vcpkg install vcpkg-cmake:arm64-linux
