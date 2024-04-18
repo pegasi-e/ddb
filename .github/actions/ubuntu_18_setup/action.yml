@@ -4,9 +4,6 @@ inputs:
   openssl:
     description: 'OpenSSL'
     default: 0
-  librdkafka:
-    description: 'Setup librdkafka (requires vcpkg to also be installed)'
-    default: 0
   python:
     description: 'Python'
     default: 1
@@ -106,12 +103,3 @@ runs:
       shell: bash
       run: |
         cd $VCPKG_ROOT && ./vcpkg install openssl --triplet=${{ inputs.aarch64_cross_compile == 1 && 'aarch64-linux' || 'x64-linux' }}
-
-    - name: Install librdkafka
-      if: ${{ inputs.librdkafka == 1 }}
-      shell: bash
-      run: |
-        VC_CMD=./vcpkg install librdkafka --triplet=${{ inputs.aarch64_cross_compile == 1 && 'arm64-linux' || 'x64-linux' }}
-        echo $VCPKG_TOOLCHAIN_PATH
-        echo $VC_CMD
-        cd $VCPKG_ROOT && ./vcpkg install librdkafka --triplet=${{ inputs.aarch64_cross_compile == 1 && 'arm64-linux' || 'x64-linux' }}
