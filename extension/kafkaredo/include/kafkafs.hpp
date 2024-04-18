@@ -17,6 +17,7 @@ namespace duckdb {
   class KafkaFileSystem : public FileSystem {
     string bootstrap_server;
     string topic;
+	bool is_writer;
   public:
     string GetName() const override {
       return "KafkaFileSystem";

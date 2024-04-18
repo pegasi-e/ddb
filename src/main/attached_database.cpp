@@ -104,21 +104,15 @@ string AttachedDatabase::ExtractDatabaseName(const string &dbpath, FileSystem &f
 	return fs.ExtractBaseName(dbpath);
 }
 
-void AttachedDatabase::Initialize(bool in_recovery) {
+void AttachedDatabase::Initialize() {
 	if (IsSystem()) {
 		catalog->Initialize(true);
 	} else {
 		catalog->Initialize(false);
 	}
 	if (storage) {
-		storage->Initialize(in_recovery);
+		storage->Initialize();
 	}
-}
-
-void AttachedDatabase::ClearInRecovery() {
-  if (storage) {
-    storage->ClearInRecovery();
-  }
 }
   
 StorageManager &AttachedDatabase::GetStorageManager() {

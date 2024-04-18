@@ -368,6 +368,16 @@ struct ImmediateTransactionModeSetting {
 	static Value GetSetting(ClientContext &context);
 };
 
+struct KafkaWriter {
+	static constexpr const char *Name = "kafka_writer";
+	static constexpr const char *Description =
+	    "Indicates if the instance should write to the Kafka WAL file or not";
+	static constexpr const LogicalTypeId InputType = LogicalTypeId::BOOLEAN;
+	static void SetGlobal(DatabaseInstance *db, DBConfig &config, const Value &parameter);
+	static void ResetGlobal(DatabaseInstance *db, DBConfig &config);
+	static Value GetSetting(ClientContext &context);
+};
+
 struct KafkaTopicName {
 	static constexpr const char *Name = "kafka_topic_name";
 	static constexpr const char *Description =

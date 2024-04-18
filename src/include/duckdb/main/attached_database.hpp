@@ -43,8 +43,7 @@ public:
 	                 AccessMode access_mode);
 	~AttachedDatabase() override;
 
-	void Initialize(bool in_recovery = false);
-        void ClearInRecovery();
+	void Initialize();
 	Catalog &ParentCatalog() override;
 	StorageManager &GetStorageManager();
 	Catalog &GetCatalog();

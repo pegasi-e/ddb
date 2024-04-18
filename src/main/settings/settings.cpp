@@ -852,6 +852,19 @@ Value KafkaRedoLog::GetSetting(ClientContext &context) {
 	return Value::BOOLEAN(config.options.kafka_redo_log);
 }
 
+void KafkaWriter::SetGlobal(DatabaseInstance *db, DBConfig &config, const Value &input) {
+	config.options.kafka_writer = BooleanValue::Get(input);
+}
+
+void KafkaWriter::ResetGlobal(DatabaseInstance *db, DBConfig &config) {
+	config.options.kafka_writer = DBConfig().options.kafka_writer;
+}
+
+Value KafkaWriter::GetSetting(ClientContext &context) {
+	auto &config = DBConfig::GetConfig(context);
+	return Value::BOOLEAN(config.options.kafka_writer);
+}
+
 void KafkaBootstrapServerAndPort::SetGlobal(DatabaseInstance *db, DBConfig &config, const Value &input) {
         auto parameter = StringUtil::Lower(input.ToString());
 	config.options.kafka_bootstrap_server_and_port = parameter;

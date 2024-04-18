@@ -17,7 +17,7 @@
 namespace duckdb {
 
 StorageManager::StorageManager(AttachedDatabase &db, string path_p, bool read_only)
-  : db(db), path(std::move(path_p)), read_only(read_only), in_recovery(false) {
+  : db(db), path(std::move(path_p)), read_only(read_only) {
 	if (path.empty()) {
 		path = IN_MEMORY_PATH;
 	} else {
@@ -56,18 +56,9 @@ bool StorageManager::InMemory() {
 	D_ASSERT(!path.empty());
 	return path == IN_MEMORY_PATH;
 }
-
-bool StorageManager::InRecovery() {
-  return in_recovery;
-}
-
-void StorageManager::ClearInRecovery() {
-  in_recovery = false;
-}
   
-void StorageManager::Initialize(bool in_rec) {
+void StorageManager::Initialize() {
 	bool in_memory = InMemory();
-	in_recovery = in_rec;
 	if (in_memory && read_only) {
 		throw CatalogException("Cannot launch in-memory database in read-only mode!");
 	}
@@ -123,10 +114,12 @@ void SingleFileStorageManager::LoadDatabase() {
 	}
 
 	if (config.options.kafka_redo_log) {
-	  wal_path = "kafka://";
-	  wal_path += config.options.kafka_bootstrap_server_and_port;
-	  wal_path += "/";
-	  wal_path += config.options.kafka_topic_name;
+		wal_path = "kafka://";
+		wal_path += config.options.kafka_bootstrap_server_and_port;
+		wal_path += "/";
+		wal_path += config.options.kafka_topic_name;
+		wal_path += "/";
+		wal_path += config.options.kafka_writer ? "writer" : "reader";
 	}
 	
 	StorageManagerOptions options;
@@ -138,13 +131,13 @@ void SingleFileStorageManager::LoadDatabase() {
 		if (read_only) {
 			throw CatalogException("Cannot open database \"%s\" in read-only mode: database does not exist", path);
 		}
-		// check if the WAL exists
+		// check if the WAL exists - JO/MV - Revisit
 		if (!config.options.kafka_redo_log) {
-		if (fs.FileExists(wal_path)) {
-			// WAL file exists but database file does not
-			// remove the WAL
-			fs.RemoveFile(wal_path);
-		}
+			if (fs.FileExists(wal_path)) {
+				// WAL file exists but database file does not
+				// remove the WAL
+				fs.RemoveFile(wal_path);
+			}
 		}
 		// initialize the block manager while creating a new db file
 		auto sf_block_manager = make_uniq<SingleFileBlockManager>(db, path, options);
@@ -163,11 +156,8 @@ void SingleFileStorageManager::LoadDatabase() {
 		checkpointer.LoadFromStorage();
 		// check if the WAL file exists
 		if (fs.FileExists(wal_path)) {
-		  do {
-		    // replay the WAL
-		    bool in_recovery = InRecovery();
-		    truncate_wal = WriteAheadLog::Replay(db, wal_path, in_recovery);
-		  } while(InRecovery());
+			// replay the WAL
+			truncate_wal = WriteAheadLog::Replay(db, wal_path);
 		}
 	}
 	// initialize the WAL file

@@ -25,7 +25,7 @@
 
 namespace duckdb {
 
-  bool WriteAheadLog::Replay(AttachedDatabase &database, string &path, bool standby) {
+bool WriteAheadLog::Replay(AttachedDatabase &database, string &path) {
 	Connection con(database.GetDatabase());
 	auto initial_source = make_uniq<BufferedFileReader>(FileSystem::Get(database), path.c_str());
 	if (initial_source->Finished()) {
@@ -34,7 +34,6 @@ namespace duckdb {
 	}
 
 	con.BeginTransaction();
-	if (! standby) {
 	// first deserialize the WAL to look for a checkpoint flag
 	// if there is a checkpoint flag, we might have already flushed the contents of the WAL to disk
 	ReplayState checkpoint_state(database, *con.context);
@@ -78,7 +77,7 @@ namespace duckdb {
 			return true;
 		}
 	}
-	}
+
 	// we need to recover from the WAL: actually set up the replay state
 	BufferedFileReader reader(FileSystem::Get(database), path.c_str());
 	ReplayState state(database, *con.context);
@@ -110,7 +109,6 @@ namespace duckdb {
 		}
 	} catch (SerializationException &ex) { // LCOV_EXCL_START
 		// serialization error during WAL replay: rollback
-	  if (! standby)
 		con.Rollback();
 	} catch (std::exception &ex) {
 		// FIXME: this should report a proper warning in the connection

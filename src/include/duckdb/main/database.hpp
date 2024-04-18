@@ -58,9 +58,8 @@ public:
 	                                                    AccessMode access_mode);
 
 private:
-  void Initialize(const char *path, DBConfig *config, bool in_recovery);
-	void CreateMainDatabase(bool in_recovery);
-  void ClearInRecovery();
+	void Initialize(const char *path, DBConfig *config);
+	void CreateMainDatabase();
 	void Configure(DBConfig &config);
 
 private:
@@ -77,8 +76,8 @@ private:
 //! database-specific meta information.
 class DuckDB {
 public:
-  DUCKDB_API explicit DuckDB(const char *path = nullptr, DBConfig *config = nullptr, bool in_recovery = false);
-  DUCKDB_API explicit DuckDB(const string &path, DBConfig *config = nullptr, bool in_recovery = false);
+	DUCKDB_API explicit DuckDB(const char *path = nullptr, DBConfig *config = nullptr);
+	DUCKDB_API explicit DuckDB(const string &path, DBConfig *config = nullptr);
 	DUCKDB_API explicit DuckDB(DatabaseInstance &instance);
 
 	DUCKDB_API ~DuckDB();
@@ -105,7 +104,6 @@ public:
 	DUCKDB_API static idx_t StandardVectorSize();
 	DUCKDB_API static string Platform();
 	DUCKDB_API bool ExtensionIsLoaded(const std::string &name);
-  DUCKDB_API void ClearInRecovery();
 };
 
 } // namespace duckdb
