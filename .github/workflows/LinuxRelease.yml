@@ -136,10 +136,6 @@ jobs:
          CC=aarch64-linux-gnu-gcc ./scripts/install_unixodbc.sh --host aarch64-linux-gnu
          cp odbc_config build/unixodbc/build/bin/odbc_config
 
-     - name: Build
-       shell: bash
-       run: VCPKG_TOOLCHAIN_PATH='${VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake' CC=aarch64-linux-gnu-gcc CXX=aarch64-linux-gnu-g++ make
-
      - name: Install librdkafka
        shell: bash
        run: |
@@ -148,6 +144,10 @@ jobs:
          echo $VCPKG_TOOLCHAIN_PATH
          echo $VC_CMD
          cd $VCPKG_ROOT && ./vcpkg install librdkafka --triplet=${{ inputs.aarch64_cross_compile == 1 && 'arm64-linux' || 'x64-linux' }}
+
+     - name: Build
+       shell: bash
+       run: VCPKG_TOOLCHAIN_PATH='${VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake' CC=aarch64-linux-gnu-gcc CXX=aarch64-linux-gnu-g++ make
 
      - name: Deploy
        shell: bash
