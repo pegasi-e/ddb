@@ -139,10 +139,7 @@ jobs:
      - name: Install librdkafka
        shell: bash
        run: |
-         VC_CMD=./vcpkg install librdkafka --triplet=${{ inputs.aarch64_cross_compile == 1 && 'arm64-linux' || 'x64-linux' }}
          echo "rdkafka install"
-         echo $VCPKG_TOOLCHAIN_PATH
-         echo $VC_CMD
          cd $VCPKG_ROOT && ./vcpkg install librdkafka:arm64-linux
 
      - name: Build
