@@ -86,11 +86,6 @@ runs:
       with:
         vcpkgGitCommitId: a1a1cbc975abf909a6c8985a6a2b8fe20bbd9bd6
 
-    - name: Build
-      if: ${{ inputs.vcpkg == 1 }}
-      shell: bash
-      run: VCPKG_TOOLCHAIN_PATH='${VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake' CC=aarch64-linux-gnu-gcc CXX=aarch64-linux-gnu-g++ make
-
     - name: Setup Ccache
       if: ${{ inputs.ccache == 1 }}
       uses: hendrikmuhs/ccache-action@v1.2.11 # Note: pinned due to GLIBC incompatibility in later releases
@@ -102,4 +97,4 @@ runs:
       if: ${{ inputs.openssl == 1 }}
       shell: bash
       run: |
-        cd $VCPKG_ROOT && ./vcpkg install openssl --triplet=${{ inputs.aarch64_cross_compile == 1 && 'aarch64-linux' || 'x64-linux' }}
+        cd $VCPKG_ROOT && ./vcpkg install openssl --triplet=${{ inputs.aarch64_cross_compile == 1 && 'arm64-linux' || 'x64-linux' }}
