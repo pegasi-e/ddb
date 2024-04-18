@@ -97,6 +97,7 @@ struct DBConfigOptions {
 	//! Whether extensions should be loaded on start-up
 	bool load_extensions = true;
         bool kafka_redo_log = false;
+	bool kafka_writer = false;
         string kafka_bootstrap_server_and_port;
         string kafka_topic_name;
         string log_extension;
