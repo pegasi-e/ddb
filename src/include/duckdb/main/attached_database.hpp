@@ -44,6 +44,7 @@ public:
 	~AttachedDatabase() override;
 
 	void Initialize();
+
 	Catalog &ParentCatalog() override;
 	StorageManager &GetStorageManager();
 	Catalog &GetCatalog();
