@@ -34,7 +34,7 @@ bool WriteAheadLog::Replay(AttachedDatabase &database, string &path) {
 	}
 
 	con.BeginTransaction();
-	
+
 	// first deserialize the WAL to look for a checkpoint flag
 	// if there is a checkpoint flag, we might have already flushed the contents of the WAL to disk
 	ReplayState checkpoint_state(database, *con.context);

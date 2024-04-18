@@ -140,7 +140,8 @@ jobs:
        shell: bash
        run: |
         $VCPKG_ROOT/vcpkg install librdkafka:arm64-linux
-        VCPKG_TOOLCHAIN_PATH='${VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake' CC=aarch64-linux-gnu-gcc CXX=aarch64-linux-gnu-g++ make
+        echo "Setting toolchain to: ${VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake"
+        CC=aarch64-linux-gnu-gcc CXX=aarch64-linux-gnu-g++ make -DCMAKE_TOOLCHAIN_FILE="${VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake"
 
      - name: Deploy
        shell: bash
