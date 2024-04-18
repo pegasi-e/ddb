@@ -1,5 +1,8 @@
 cmake_minimum_required(VERSION 2.8.12)
 
+include(CMakePrintHelpers)
+cmake_print_variables(CMAKE_SYSTEM_PROCESSOR)
+
 # Set extension name here
 set(TARGET_NAME kafkaredo)
 
