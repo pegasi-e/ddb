@@ -12,10 +12,16 @@ cmake_print_variables(IS_ARM)
 cmake_print_variables(CMAKE_SYSTEM_PROCESSOR)
 
 string(REGEX MATCH "(arm64|aarch64)" IS_ARM "$ENV{CMAKE_SYSTEM_ARCH}")
+string(REGEX MATCH "(Linux|linux)" IS_Linux "$ENV{CMAKE_SYSTEM_NAME}")
 
 if (IS_ARM)
     message(STATUS "setting...")
+    cmake_print_variables(IS_Linux)
     set(CMAKE_SYSTEM_PROCESSOR "arm64")
+    if (IS_Linux)
+        set(VCPKG_DEFAULT_TRIPLET "arm64-linux")
+        cmake_print_variables(VCPKG_DEFAULT_TRIPLET)
+    endif ()
     set(CMAKE_CROSSCOMPILING 1)
 endif ()
 
