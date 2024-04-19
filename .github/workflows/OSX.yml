@@ -151,8 +151,8 @@ jobs:
         env:
           CMAKE_TOOLCHAIN_FILE: ${VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake
           VCPKG_TOOLCHAIN_PATH: ${VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake
-          CMAKE_OSX_ARCHITECTURES: x86_64;arm64
-          VCPKG_OSX_ARCHITECTURES: x86_64;arm64
+          CMAKE_OSX_ARCHITECTURES: 'x86_64;arm64'
+          VCPKG_OSX_ARCHITECTURES: 'x86_64;arm64'
           VCPKG_CMAKE_SYSTEM_NAME: Darwin
         run: |
           echo "vcp: ${VCPKG_OSX_ARCHITECTURES}"
