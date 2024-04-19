@@ -15,7 +15,7 @@ string(REGEX MATCH "(arm64|aarch64)" IS_ARM "$ENV{CMAKE_SYSTEM_ARCH}")
 
 if (IS_ARM)
     message(STATUS "setting...")
-    set(CMAKE_SYSTEM_PROCESSOR "x86_x64")
+    set(CMAKE_SYSTEM_PROCESSOR "arm64")
     set(CMAKE_CROSSCOMPILING 1)
 endif ()
 
