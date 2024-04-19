@@ -141,18 +141,9 @@ jobs:
        env:
          CMAKE_TOOLCHAIN_FILE: ${VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake
          VCPKG_TOOLCHAIN_PATH: ${VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake
-         VCPKG_DEFAULT_TRIPLET: arm64-linux
          VCPKG_HOST_TRIPLET: x64-linux
          VCPKG_TARGET_TRIPLET: arm64-linux
-         PROCESSOR_ARCHITECTURE: aarch64
-         CMAKE_SYSTEM_PROCESSOR: aarch64
-         CMAKE_SYSTEM_NAME: Linux
-         CMAKE_SYSTEM_ARCH: aarch64
-         CMAKE_CROSSCOMPILING: 1
        run: |
-         $VCPKG_ROOT/bootstrap-vcpkg.sh         
-         $VCPKG_ROOT/vcpkg install vcpkg-cmake:arm64-linux
-         $VCPKG_ROOT/vcpkg install vcpkg-cmake-config:arm64-linux
          $VCPKG_ROOT/vcpkg install librdkafka:arm64-linux
          echo "Setting cmake toolchain to: ${CMAKE_TOOLCHAIN_FILE}"
          echo "Setting vc toolchain to: ${VCPKG_TOOLCHAIN_PATH}"
