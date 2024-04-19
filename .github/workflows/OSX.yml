@@ -146,6 +146,12 @@ jobs:
           cd $VCPKG_ROOT && ./vcpkg install librdkafka --triplet=${{ 'arm64-osx' }}
           cd $VCPKG_ROOT && ./vcpkg install librdkafka --triplet=${{ 'x64-osx' }}
 
+      - name: Lipo librdkafka
+        shell: bash
+        run: |
+          cd ${VCPKG_ROOT}/installed
+          python3 ./scripts/lipo-dir-merge.py arm64-osx x64-osx uni-osx
+
       - name: Build
         shell: bash
         env:
@@ -153,7 +159,7 @@ jobs:
           VCPKG_TOOLCHAIN_PATH: ${VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake
           CMAKE_OSX_ARCHITECTURES: "x86_64;arm64"
           VCPKG_OSX_ARCHITECTURES: "x86_64;arm64"
-          VCPKG_TARGET_ARCHITECTURE: "x86_64;arm64"
+          VCPKG_TARGET_TRIPLET: uni-osx
           VCPKG_CMAKE_SYSTEM_NAME: Darwin
         run: |
           echo "vcp: ${VCPKG_OSX_ARCHITECTURES}"
