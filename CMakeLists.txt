@@ -90,6 +90,8 @@ if(${FORCE_COLORED_OUTPUT})
   endif()
 endif()
 
+include(CMakePrintHelpers)
+
 option("Enable address sanitizer." TRUE)
 
 set(M32_FLAG "")
@@ -106,6 +108,9 @@ if(IS_ARM)
 elseif(FORCE_32_BIT)
   set(OS_ARCH "i386")
 endif()
+
+cmake_print_variables(IS_ARM)
+cmake_print_variables(CMAKE_SYSTEM_PROCESSOR)
 
 if(APPLE)
   set(OS_NAME "osx")

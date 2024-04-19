@@ -1,5 +1,9 @@
 cmake_minimum_required(VERSION 2.8.12)
 
+# Set extension name here
+set(TARGET_NAME kafkaredo)
+project(${TARGET_NAME})
+
 set(OS_NAME "unknown")
 set(OS_ARCH "amd64")
 
@@ -7,9 +11,9 @@ include(CMakePrintHelpers)
 string(REGEX MATCH "(arm64|aarch64)" IS_ARM "${CMAKE_SYSTEM_PROCESSOR}")
 cmake_print_variables(IS_ARM)
 cmake_print_variables(CMAKE_SYSTEM_PROCESSOR)
+cmake_print_variables(KERNEL_ARCH)
 
-# Set extension name here
-set(TARGET_NAME kafkaredo)
+
 
 # DuckDB's extension distribution supports vcpkg. As such, dependencies can be added in ./vcpkg.json and then
 # used in cmake with find_package. Feel free to remove or replace with other dependencies.
@@ -19,7 +23,7 @@ set(TARGET_NAME kafkaredo)
 set(EXTENSION_NAME ${TARGET_NAME}_extension)
 set(LOADABLE_EXTENSION_NAME ${TARGET_NAME}_loadable_extension)
 
-project(${TARGET_NAME})
+
 
 find_package(RdKafka CONFIG REQUIRED)
 include_directories(include)
