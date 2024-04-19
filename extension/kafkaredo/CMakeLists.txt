@@ -3,9 +3,6 @@ cmake_minimum_required(VERSION 2.8.12)
 # Set extension name here
 set(TARGET_NAME kafkaredo)
 
-cmake_print_variables(CMAKE_SYSTEM_NAME)
-cmake_print_variables(CMAKE_SYSTEM_PROCESSOR)
-
 option(OSX_BUILD_UNIVERSAL "Build both architectures on OSX and create a single binary containing both." FALSE)
 if (OSX_BUILD_UNIVERSAL)
     if (NOT APPLE)
