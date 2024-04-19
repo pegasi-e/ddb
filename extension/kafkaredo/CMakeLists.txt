@@ -3,32 +3,32 @@ cmake_minimum_required(VERSION 2.8.12)
 # Set extension name here
 set(TARGET_NAME kafkaredo)
 
-set(OS_NAME "unknown")
-set(OS_ARCH "amd64")
-
-include(CMakePrintHelpers)
-cmake_print_variables(IS_ARM)
-cmake_print_variables(CMAKE_SYSTEM_PROCESSOR)
-
-string(REGEX MATCH "(arm64|aarch64)" IS_ARM "$ENV{CMAKE_SYSTEM_ARCH}")
-string(REGEX MATCH "(Linux|linux)" IS_Linux "$ENV{CMAKE_SYSTEM_NAME}")
-
-if (IS_ARM)
-    message(STATUS "setting...")
-    cmake_print_variables(IS_Linux)
-    set(CMAKE_SYSTEM_PROCESSOR "arm64")
-    set(VCPKG_TARGET_ARCHITECTURE arm64)
-    set(VCPKG_CRT_LINKAGE static)
-    set(VCPKG_LIBRARY_LINKAGE static)
-
-    if (IS_Linux)
-        set(VCPKG_CMAKE_SYSTEM_NAME Linux)
-        set(VCPKG_DEFAULT_TRIPLET "arm64-linux")
-        cmake_print_variables(VCPKG_DEFAULT_TRIPLET)
-    endif ()
-    set(CMAKE_CROSSCOMPILING 1)
-endif ()
-project(${TARGET_NAME})
+#set(OS_NAME "unknown")
+#set(OS_ARCH "amd64")
+#
+#include(CMakePrintHelpers)
+#cmake_print_variables(IS_ARM)
+#cmake_print_variables(CMAKE_SYSTEM_PROCESSOR)
+#
+#string(REGEX MATCH "(arm64|aarch64)" IS_ARM "$ENV{CMAKE_SYSTEM_ARCH}")
+#string(REGEX MATCH "(Linux|linux)" IS_Linux "$ENV{CMAKE_SYSTEM_NAME}")
+#
+#if (IS_ARM)
+#    message(STATUS "setting...")
+#    cmake_print_variables(IS_Linux)
+#    set(CMAKE_SYSTEM_PROCESSOR "arm64")
+#    set(VCPKG_TARGET_ARCHITECTURE arm64)
+#    set(VCPKG_CRT_LINKAGE static)
+#    set(VCPKG_LIBRARY_LINKAGE static)
+#
+#    if (IS_Linux)
+#        set(VCPKG_CMAKE_SYSTEM_NAME Linux)
+#        set(VCPKG_DEFAULT_TRIPLET "arm64-linux")
+#        cmake_print_variables(VCPKG_DEFAULT_TRIPLET)
+#    endif ()
+#    set(CMAKE_CROSSCOMPILING 1)
+#endif ()
+#project(${TARGET_NAME})
 
 cmake_print_variables(CMAKE_SYSTEM_NAME)
 cmake_print_variables(CMAKE_SYSTEM_PROCESSOR)
