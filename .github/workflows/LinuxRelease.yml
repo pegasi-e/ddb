@@ -141,21 +141,20 @@ jobs:
        env:
          CMAKE_TOOLCHAIN_FILE: ${VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake
          VCPKG_TOOLCHAIN_PATH: ${VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake
-         VCPKG_DEFAULT_TRIPLET: arm64-linux
+         VCPKG_DEFAULT_TRIPLET: aarch64-linux
          PROCESSOR_ARCHITECTURE: aarch64
          CMAKE_SYSTEM_PROCESSOR: aarch64
          CMAKE_SYSTEM_NAME: Linux
          CMAKE_SYSTEM_ARCH: aarch64
-         CMAKE_CC_COMPILER_TARGET: aarch64-linux-gnu-gcc
-         CMAKE_CXX_COMPILER_TARGET: aarch64-linux-gnu-g++
          CC: aarch64-linux-gnu-g++
          CXX: aarch64-linux-gnu-g++
+         USE_MERGED_VCPKG_MANIFEST: 1
+         CMAKE_CROSSCOMPILING: 1
        run: |
          $VCPKG_ROOT/bootstrap-vcpkg.sh         
-         $VCPKG_ROOT/vcpkg install vcpkg-cmake:arm64-linux
-         $VCPKG_ROOT/vcpkg install vcpkg-cmake-config:arm64-linux
-         $VCPKG_ROOT/vcpkg install librdkafka:arm64-linux
-         $VCPKG_ROOT/vcpkg install librdkafka:x64-linux
+         $VCPKG_ROOT/vcpkg install vcpkg-cmake:aarch64-linux
+         $VCPKG_ROOT/vcpkg install vcpkg-cmake-config:aarch64-linux
+         $VCPKG_ROOT/vcpkg install librdkafka:aarch64-linux
          echo "Setting cmake toolchain to: ${CMAKE_TOOLCHAIN_FILE}"
          echo "Setting vc toolchain to: ${VCPKG_TOOLCHAIN_PATH}"
          echo "listing packages"
@@ -184,42 +183,42 @@ jobs:
 
  # Linux extensions for builds that use C++11 ABI, currently these are all linux builds based on ubuntu >= 18 (e.g. NodeJS)
  # note that the linux-release-64 is based on the manylinux-based extensions, which are built in .github/workflows/Python.yml
- linux-extensions-64:
-    # Builds extensions for linux_amd64
-    name: Linux Extensions (x64)
-    runs-on: ubuntu-latest
-    container: ubuntu:18.04
-    needs: linux-release-64
-
-    steps:
-    - uses: actions/checkout@v3
-      with:
-        fetch-depth: 0
-
-    - uses: ./.github/actions/ubuntu_18_setup
-      with:
-        vcpkg: 1
-        openssl: 1
-        ccache: 1
-
-    - uses: ./.github/actions/build_extensions
-      with:
-        vcpkg_target_triplet: x64-linux
-        post_install: rm build/release/src/libduckdb*
-        deploy_as: linux_amd64
-        treat_warn_as_error: 0
-        run_autoload_tests: ${{ startsWith(github.ref, 'refs/tags/v') && 0 || 1 }}
-        run_tests: ${{ startsWith(github.ref, 'refs/tags/v') && 0 || 1 }}
-        s3_id: ${{ secrets.S3_ID }}
-        s3_key: ${{ secrets.S3_KEY }}
-        signing_pk: ${{ secrets.DUCKDB_EXTENSION_SIGNING_PK }}
-        ninja: 1
-
-    - uses: actions/upload-artifact@v3
-      with:
-        name: linux-extensions-64
-        path: |
-          build/release/extension/*/*.duckdb_extension
+# linux-extensions-64:
+#    # Builds extensions for linux_amd64
+#    name: Linux Extensions (x64)
+#    runs-on: ubuntu-latest
+#    container: ubuntu:18.04
+#    needs: linux-release-64
+#
+#    steps:
+#    - uses: actions/checkout@v3
+#      with:
+#        fetch-depth: 0
+#
+#    - uses: ./.github/actions/ubuntu_18_setup
+#      with:
+#        vcpkg: 1
+#        openssl: 1
+#        ccache: 1
+#
+#    - uses: ./.github/actions/build_extensions
+#      with:
+#        vcpkg_target_triplet: x64-linux
+#        post_install: rm build/release/src/libduckdb*
+#        deploy_as: linux_amd64
+#        treat_warn_as_error: 0
+#        run_autoload_tests: ${{ startsWith(github.ref, 'refs/tags/v') && 0 || 1 }}
+#        run_tests: ${{ startsWith(github.ref, 'refs/tags/v') && 0 || 1 }}
+#        s3_id: ${{ secrets.S3_ID }}
+#        s3_key: ${{ secrets.S3_KEY }}
+#        signing_pk: ${{ secrets.DUCKDB_EXTENSION_SIGNING_PK }}
+#        ninja: 1
+#
+#    - uses: actions/upload-artifact@v3
+#      with:
+#        name: linux-extensions-64
+#        path: |
+#          build/release/extension/*/*.duckdb_extension
 
  linux-extensions-64-aarch64:
     # Builds extensions for linux_arm64

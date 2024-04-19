@@ -8,12 +8,19 @@ set(OS_NAME "unknown")
 set(OS_ARCH "amd64")
 
 include(CMakePrintHelpers)
-string(REGEX MATCH "(arm64|aarch64)" IS_ARM "${CMAKE_SYSTEM_PROCESSOR}")
 cmake_print_variables(IS_ARM)
 cmake_print_variables(CMAKE_SYSTEM_PROCESSOR)
-cmake_print_variables(KERNEL_ARCH)
 
+string(REGEX MATCH "(arm64|aarch64)" IS_ARM $ENV{CMAKE_SYSTEM_ARCH})
 
+if (IS_ARM)
+    message(STATUS "setting...")
+    set(CMAKE_SYSTEM_PROCESSOR "x86_x64")
+    set(CMAKE_CROSSCOMPILING 1)
+endif ()
+
+cmake_print_variables(CMAKE_SYSTEM_NAME)
+cmake_print_variables(CMAKE_SYSTEM_PROCESSOR)
 
 # DuckDB's extension distribution supports vcpkg. As such, dependencies can be added in ./vcpkg.json and then
 # used in cmake with find_package. Feel free to remove or replace with other dependencies.
