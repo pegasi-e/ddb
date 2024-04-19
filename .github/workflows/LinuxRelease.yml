@@ -142,6 +142,9 @@ jobs:
          CMAKE_TOOLCHAIN_FILE: ${VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake
          VCPKG_TOOLCHAIN_PATH: ${VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake
          VCPKG_DEFAULT_TRIPLET: arm64-linux
+         PROCESSOR_ARCHITECTURE: arm64
+         CMAKE_SYSTEM_PROCESSOR: arm64
+         CMAKE_SYSTEM_NAME: Linux
        run: |
          $VCPKG_ROOT/bootstrap-vcpkg.sh         
          $VCPKG_ROOT/vcpkg install vcpkg-cmake:arm64-linux
@@ -155,7 +158,7 @@ jobs:
          echo "listing packages"
          vcpkg list
          echo "starting build"
-         CPACK_DEBIAN_PACKAGE_ARCHITECTURE=arm64 CMAKE_SYSTEM_NAME=Linux CMAKE_SYSTEM_PROCESSOR=aarch64 CC=aarch64-linux-gnu-gcc CXX=aarch64-linux-gnu-g++ make
+         CPACK_DEBIAN_PACKAGE_ARCHITECTURE=arm64 CMAKE_SYSTEM_NAME=Linux CMAKE_SYSTEM_PROCESSOR=arm64 CC=aarch64-linux-gnu-gcc CXX=aarch64-linux-gnu-g++ make
 
      - name: Deploy
        shell: bash

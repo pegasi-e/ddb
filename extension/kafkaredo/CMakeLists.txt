@@ -1,6 +1,11 @@
 cmake_minimum_required(VERSION 2.8.12)
 
+set(OS_NAME "unknown")
+set(OS_ARCH "amd64")
+
 include(CMakePrintHelpers)
+string(REGEX MATCH "(arm64|aarch64)" IS_ARM "${CMAKE_SYSTEM_PROCESSOR}")
+cmake_print_variables(IS_ARM)
 cmake_print_variables(CMAKE_SYSTEM_PROCESSOR)
 
 # Set extension name here
