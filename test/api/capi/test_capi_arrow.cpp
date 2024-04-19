@@ -104,6 +104,7 @@ TEST_CASE("Convert DuckDB Chunk column to Arrow Array in C API", "[capi][arrow]"
 	for (auto i = 0; i < count; i++) {
 		duckdb_destroy_data_chunk(&chunks[i]);
 	}
+	delete s_arrow_array;
 }
 
 TEST_CASE("Test arrow in C API", "[capi][arrow]") {
