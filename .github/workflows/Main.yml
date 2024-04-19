@@ -66,10 +66,6 @@ jobs:
       with:
         vcpkgGitCommitId: a1a1cbc975abf909a6c8985a6a2b8fe20bbd9bd6
 
-    - name: Set Toolchain
-      shell: bash
-      run: VCPKG_TOOLCHAIN_PATH='${VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake' make
-
     - name: Install librdkafka
       shell: bash
       run: |
@@ -83,7 +79,7 @@ jobs:
 
     - name: Build
       shell: bash
-      run:  make debug
+      run:  VCPKG_TOOLCHAIN_PATH='${VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake' make debug
 
     - name: Set DUCKDB_INSTALL_LIB for ADBC tests
       shell: bash
