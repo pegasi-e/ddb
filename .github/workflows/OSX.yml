@@ -154,7 +154,10 @@ jobs:
           CMAKE_OSX_ARCHITECTURES: x86_64;arm64
           VCPKG_OSX_ARCHITECTURES: x86_64;arm64
           VCPKG_CMAKE_SYSTEM_NAME: Darwin
-        run: make
+        run: |
+          echo "vcp: ${VCPKG_OSX_ARCHITECTURES}"
+          echo "cm: ${CMAKE_OSX_ARCHITECTURES}"
+          make
 
       - name: Print platform
         shell: bash
