@@ -146,9 +146,6 @@ jobs:
          CMAKE_SYSTEM_PROCESSOR: aarch64
          CMAKE_SYSTEM_NAME: Linux
          CMAKE_SYSTEM_ARCH: aarch64
-         CC: aarch64-linux-gnu-g++
-         CXX: aarch64-linux-gnu-g++
-         USE_MERGED_VCPKG_MANIFEST: 1
          CMAKE_CROSSCOMPILING: 1
        run: |
          $VCPKG_ROOT/bootstrap-vcpkg.sh         
