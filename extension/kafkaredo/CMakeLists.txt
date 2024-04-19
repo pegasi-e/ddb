@@ -2,7 +2,6 @@ cmake_minimum_required(VERSION 2.8.12)
 
 # Set extension name here
 set(TARGET_NAME kafkaredo)
-project(${TARGET_NAME})
 
 set(OS_NAME "unknown")
 set(OS_ARCH "amd64")
@@ -29,6 +28,7 @@ if (IS_ARM)
     endif ()
     set(CMAKE_CROSSCOMPILING 1)
 endif ()
+project(${TARGET_NAME})
 
 cmake_print_variables(CMAKE_SYSTEM_NAME)
 cmake_print_variables(CMAKE_SYSTEM_PROCESSOR)
