@@ -152,9 +152,9 @@ jobs:
          CMAKE_CROSSCOMPILING: 1
        run: |
          $VCPKG_ROOT/bootstrap-vcpkg.sh         
-         $VCPKG_ROOT/vcpkg install vcpkg-cmake:aarch64-linux
-         $VCPKG_ROOT/vcpkg install vcpkg-cmake-config:aarch64-linux
-         $VCPKG_ROOT/vcpkg install librdkafka:aarch64-linux
+         $VCPKG_ROOT/vcpkg install vcpkg-cmake:arm64-linux
+         $VCPKG_ROOT/vcpkg install vcpkg-cmake-config:arm64-linux
+         $VCPKG_ROOT/vcpkg install librdkafka:arm64-linux
          echo "Setting cmake toolchain to: ${CMAKE_TOOLCHAIN_FILE}"
          echo "Setting vc toolchain to: ${VCPKG_TOOLCHAIN_PATH}"
          echo "listing packages"
