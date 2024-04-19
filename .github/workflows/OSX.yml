@@ -150,7 +150,8 @@ jobs:
         shell: bash
         run: |
           cd ${VCPKG_ROOT}/installed
-          python3 ./scripts/lipo-dir-merge.py arm64-osx x64-osx uni-osx
+          python3  ${GITHUB_WORKSPACE}/scripts/lipo-dir-merge.py arm64-osx x64-osx uni-osx
+          cd ${GITHUB_WORKSPACE}
 
       - name: Build
         shell: bash
