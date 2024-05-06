@@ -90,7 +90,7 @@ jobs:
       shell: bash
       run: |
         echo $VCPKG_ROOT
-        ls $VCPKG_ROOT
+        ls $VCPKG_ROOT/scripts/buildsystems/
 
     - name: Build
       shell: bash
