@@ -192,7 +192,8 @@ public:
 
 	//! Returns true if execution of the current query is finished
 	DUCKDB_API bool ExecutionIsFinished();
-
+        DUCKDB_API uint64_t GetSnapshotId();
+        DUCKDB_API unique_ptr<QueryResult> CreateSnapshot();
 private:
 	//! Parse statements and resolve pragmas from a query
 	bool ParseStatements(ClientContextLock &lock, const string &query, vector<unique_ptr<SQLStatement>> &result,

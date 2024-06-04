@@ -49,6 +49,8 @@ public:
 
 	void MoveFile(const string &source, const string &target) override;
 
+        void CopyFile(const string &source, const string &target) override;
+
 	bool FileExists(const string &filename) override;
 
 	bool IsPipe(const string &filename) override;

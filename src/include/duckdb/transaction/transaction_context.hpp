@@ -41,7 +41,8 @@ public:
 	void Commit();
 	void Rollback();
 	void ClearTransaction();
-
+        string Snapshot();
+        uint64_t GetSnapshotId();
 	void SetAutoCommit(bool value);
 	bool IsAutoCommit() {
 		return auto_commit;

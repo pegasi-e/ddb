@@ -239,6 +239,20 @@ bool SingleFileStorageManager::IsCheckpointClean(MetaBlockPointer checkpoint_id)
 	return block_manager->IsRootBlock(checkpoint_id);
 }
 
+uint64_t SingleFileStorageManager::GetSnapshotId() {
+  return block_manager->GetSnapshotId();
+}
+
+string SingleFileStorageManager::Snapshot() {
+  uint64_t sid = block_manager->GetSnapshotId();
+  string ret = path;
+  ret += ".";
+  ret += to_string(sid);
+  auto &fs = FileSystem::Get(db);
+  fs.CopyFile(path, ret);
+  return ret;
+}
+
 void SingleFileStorageManager::CreateCheckpoint(bool delete_wal, bool force_checkpoint) {
 	if (InMemory() || read_only || !wal) {
 		return;

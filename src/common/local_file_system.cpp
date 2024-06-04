@@ -465,6 +465,10 @@ void LocalFileSystem::MoveFile(const string &source, const string &target) {
 	}
 }
 
+
+  void LocalFileSystem::CopyFile(const string &source, const string &target) {
+
+  }
 std::string LocalFileSystem::GetLastErrorAsString() {
 	return string();
 }
@@ -789,6 +793,9 @@ void LocalFileSystem::MoveFile(const string &source, const string &target) {
 	}
 }
 
+  void LocalFileSystem::CopyFile(const string &source, const string &target) {
+
+  }
 FileType LocalFileSystem::GetFileType(FileHandle &handle) {
 	auto path = handle.Cast<WindowsFileHandle>().path;
 	// pipes in windows are just files in '\\.\pipe\' folder

@@ -39,6 +39,26 @@ void TransactionContext::BeginTransaction() {
 	}
 }
 
+string TransactionContext::Snapshot() {
+  if (!current_transaction) {
+    throw TransactionException("failed to commit: no transaction active");
+  }
+  auto &db_manager = DatabaseManager::Get(context);
+  auto db = db_manager.GetDatabase(context, DatabaseManager::GetDefaultDatabase(context));
+  return current_transaction->Snapshot(db);
+}
+
+uint64_t TransactionContext::GetSnapshotId() {
+  if (!current_transaction) {
+    throw TransactionException("failed to commit: no transaction active");
+  }
+
+  auto &db_manager = DatabaseManager::Get(context);
+  auto db = db_manager.GetDatabase(context, DatabaseManager::GetDefaultDatabase(context));
+
+  return current_transaction->GetSnapshotId(db);
+}
+
 void TransactionContext::Commit() {
 	if (!current_transaction) {
 		throw TransactionException("failed to commit: no transaction active");

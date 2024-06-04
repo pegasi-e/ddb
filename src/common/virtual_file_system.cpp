@@ -97,6 +97,10 @@ void VirtualFileSystem::MoveFile(const string &source, const string &target) {
 	FindFileSystem(source).MoveFile(source, target);
 }
 
+void VirtualFileSystem::CopyFile(const string &source, const string &target) {
+	FindFileSystem(source).MoveFile(source, target);
+}
+
 bool VirtualFileSystem::FileExists(const string &filename) {
 	return FindFileSystem(filename).FileExists(filename);
 }

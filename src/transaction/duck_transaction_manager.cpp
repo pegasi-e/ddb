@@ -91,6 +91,63 @@ Transaction &DuckTransactionManager::StartTransaction(ClientContext &context) {
 	return transaction_ref;
 }
 
+string DuckTransactionManager::Snapshot(ClientContext &context) {
+        auto &storage_manager = db.GetStorageManager();
+	if (storage_manager.InMemory()) {
+		return "";
+	}
+
+	// first check if no other thread is checkpointing right now
+	auto current = &DuckTransaction::Get(context, db);
+	auto lock = unique_lock<mutex>(transaction_lock);
+	if (thread_is_checkpointing) {
+		throw TransactionException("Cannot CHECKPOINT: another thread is checkpointing right now");
+	}
+	CheckpointLock checkpoint_lock(*this);
+	checkpoint_lock.Lock();
+	if (current->ChangesMade()) {
+		throw TransactionException("Cannot CHECKPOINT: the current transaction has transaction local changes");
+	}
+
+	lock.unlock();
+
+	// lock all the clients AND the connection manager now
+	// this ensures no new queries can be started, and no new connections to the database can be made
+	// to avoid deadlock we release the transaction lock while locking the clients
+	auto &connection_manager = ConnectionManager::Get(context);
+	vector<ClientLockWrapper> client_locks;
+	connection_manager.LockClients(client_locks, context);
+
+	lock.lock();
+	if (!CanCheckpoint(current)) {
+	  for (size_t i = 0; i < active_transactions.size(); i++) {
+	    auto &transaction = active_transactions[i];
+	    // rollback the transaction
+	    transaction->Rollback();
+	    auto transaction_context = transaction->context.lock();
+
+	    // remove the transaction id from the list of active transactions
+	    // potentially resulting in garbage collection
+	    RemoveTransaction(*transaction);
+	    if (transaction_context) {
+	      // invalidate the active transaction for this connection
+	      auto &meta_transaction = MetaTransaction::Get(*transaction_context);
+	      meta_transaction.RemoveTransaction(db);
+	      ValidChecker::Get(meta_transaction).Invalidate("Invalidated due to FORCE CHECKPOINT");
+	    }
+	    i--;
+	  }
+	  D_ASSERT(CanCheckpoint(nullptr));
+	}
+	
+	return storage_manager.Snapshot();
+}
+
+uint64_t DuckTransactionManager::GetSnapshotId(ClientContext &context) {
+  auto &storage_manager = db.GetStorageManager();
+  return storage_manager.GetSnapshotId();
+}
+
 void DuckTransactionManager::Checkpoint(ClientContext &context, bool force) {
 	auto &storage_manager = db.GetStorageManager();
 	if (storage_manager.InMemory()) {

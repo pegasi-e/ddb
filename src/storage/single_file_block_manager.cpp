@@ -449,6 +449,10 @@ protected:
 	}
 };
 
+uint64_t SingleFileBlockManager::GetSnapshotId() {
+  return iteration_count;
+}
+  
 void SingleFileBlockManager::WriteHeader(DatabaseHeader header) {
 	// set the iteration count
 	header.iteration = ++iteration_count;

@@ -68,7 +68,7 @@ public:
 	idx_t TotalBlocks() override;
 	//! Returns the number of free blocks
 	idx_t FreeBlocks() override;
-
+        uint64_t GetSnapshotId() override;
 private:
 	//! Load the free list from the file
 	void LoadFreeList();

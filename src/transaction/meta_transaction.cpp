@@ -57,6 +57,16 @@ Transaction &Transaction::Get(ClientContext &context, Catalog &catalog) {
 	return Transaction::Get(context, catalog.GetAttached());
 }
 
+string MetaTransaction::Snapshot(optional_ptr<AttachedDatabase> db) {
+  auto &transaction_manager = db->GetTransactionManager();
+  return transaction_manager.Snapshot(context);
+}
+
+uint64_t MetaTransaction::GetSnapshotId(optional_ptr<AttachedDatabase> db) {
+  auto &transaction_manager = db->GetTransactionManager();
+  return transaction_manager.GetSnapshotId(context);
+}
+  
 string MetaTransaction::Commit() {
 	string error;
 	// commit transactions in reverse order
