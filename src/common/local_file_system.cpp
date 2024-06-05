@@ -14,6 +14,10 @@
 #include <cstdio>
 #include <sys/stat.h>
 
+//#ifdef MAC
+#include <sys/clonefile.h>
+//#endif
+
 #ifndef _WIN32
 #include <dirent.h>
 #include <fcntl.h>
@@ -465,10 +469,6 @@ void LocalFileSystem::MoveFile(const string &source, const string &target) {
 	}
 }
 
-
-  void LocalFileSystem::CopyFile(const string &source, const string &target) {
-
-  }
 std::string LocalFileSystem::GetLastErrorAsString() {
 	return string();
 }
@@ -793,9 +793,6 @@ void LocalFileSystem::MoveFile(const string &source, const string &target) {
 	}
 }
 
-  void LocalFileSystem::CopyFile(const string &source, const string &target) {
-
-  }
 FileType LocalFileSystem::GetFileType(FileHandle &handle) {
 	auto path = handle.Cast<WindowsFileHandle>().path;
 	// pipes in windows are just files in '\\.\pipe\' folder
@@ -1046,5 +1043,15 @@ vector<string> LocalFileSystem::Glob(const string &path, FileOpener *opener) {
 unique_ptr<FileSystem> FileSystem::CreateLocal() {
 	return make_uniq<LocalFileSystem>();
 }
+
+#ifdef MAC
+void LocalFileSystem::CopyFile(const string &source, const string &target) {
+
+}
+#else
+void LocalFileSystem::CopyFile(const string &source, const string &target) {
+  clonefile(source.c_str(), target.c_str(), 0);
+}
+#endif
 
 } // namespace duckdb

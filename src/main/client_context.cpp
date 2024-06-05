@@ -1198,7 +1198,9 @@ unique_ptr<QueryResult> ClientContext::CreateSnapshot() {
   RunFunctionInTransaction([&]() {
     snapshot_file = transaction.Snapshot();
   });
-  return result;
+  //return result;
+  string err_str = "Success";
+  return make_uniq<MaterializedQueryResult>(PreservedError(err_str));
 }
   
 } // namespace duckdb

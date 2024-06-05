@@ -139,7 +139,8 @@ string DuckTransactionManager::Snapshot(ClientContext &context) {
 	  }
 	  D_ASSERT(CanCheckpoint(nullptr));
 	}
-	
+
+	storage_manager.CreateCheckpoint();
 	return storage_manager.Snapshot();
 }
 
