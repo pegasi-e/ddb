@@ -4,6 +4,7 @@
 #include "duckdb/common/arrow/arrow_converter.hpp"
 #include "duckdb/common/arrow/arrow_appender.hpp"
 #include "duckdb/main/prepared_statement_data.hpp"
+#include "duckdb/common/types.hpp"
 
 using duckdb::ArrowConverter;
 using duckdb::ArrowAppender;
