@@ -38,6 +38,7 @@ public:
 
 	void GetFileFlags(uint8_t &flags, FileLockType &lock, bool create_new);
 	void CreateNewDatabase();
+        unique_ptr<FileHandle> CloneEmptyDatabase();
 	void LoadExistingDatabase();
 
 	//! Creates a new Block using the specified block_id and returns a pointer
@@ -68,7 +69,8 @@ public:
 	idx_t TotalBlocks() override;
 	//! Returns the number of free blocks
 	idx_t FreeBlocks() override;
-        uint64_t GetSnapshotId() override;
+        uint64_t GetSnapshotId();
+        unique_ptr<FileHandle>& GetFileHandle();
 private:
 	//! Load the free list from the file
 	void LoadFreeList();
@@ -80,7 +82,6 @@ private:
 
 	//! Return the blocks to which we will write the free list and modified blocks
 	vector<MetadataHandle> GetFreeListBlocks();
-
 private:
 	AttachedDatabase &db;
 	//! The active DatabaseHeader, either 0 (h1) or 1 (h2)

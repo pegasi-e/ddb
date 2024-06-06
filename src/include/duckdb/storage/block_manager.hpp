@@ -59,7 +59,6 @@ public:
 	}
 	//! Write the header; should be the final step of a checkpoint
 	virtual void WriteHeader(DatabaseHeader header) = 0;
-        virtual uint64_t GetSnapshotId() = 0;
 	//! Returns the number of total blocks
 	virtual idx_t TotalBlocks() = 0;
 	//! Returns the number of free blocks
@@ -76,7 +75,6 @@ public:
 	void UnregisterBlock(block_id_t block_id, bool can_destroy);
 
 	MetadataManager &GetMetadataManager();
-
 private:
 	//! The lock for the set of blocks
 	mutex blocks_lock;

@@ -49,7 +49,7 @@ public:
 
 	void MoveFile(const string &source, const string &target) override;
 
-        void CopyFile(const string &source, const string &target) override;
+        void CopyFile(const string &source, const string &target, unique_ptr<FileHandle>& src_handle, unique_ptr<FileHandle>& dst_handle) override;
 
 	bool FileExists(const string &filename) override;
 

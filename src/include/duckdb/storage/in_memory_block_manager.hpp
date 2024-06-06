@@ -59,9 +59,6 @@ public:
 	idx_t FreeBlocks() override {
 		throw InternalException("Cannot perform IO in in-memory database - FreeBlocks!");
 	}
-        uint64_t GetSnapshotId() override {
-	  throw InternalException("Cannot perform IO in in-memory database - FreeBlocks!");
-	}
 	// LCOV_EXCL_STOP
 };
 } // namespace duckdb

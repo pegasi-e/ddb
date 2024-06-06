@@ -293,6 +293,20 @@ block_id_t SingleFileBlockManager::GetFreeBlockId() {
 	return block;
 }
 
+unique_ptr<FileHandle>& SingleFileBlockManager::GetFileHandle() {
+  return handle;
+}
+
+unique_ptr<FileHandle> SingleFileBlockManager::CloneEmptyDatabase() {
+  uint8_t flags;
+  FileLockType lock;
+  GetFileFlags(flags, lock, true);
+
+  // open the RDBMS handle
+  auto &fs = FileSystem::Get(db);
+  return fs.OpenFile(path, flags, lock);
+}
+  
 void SingleFileBlockManager::MarkBlockAsFree(block_id_t block_id) {
 	lock_guard<mutex> lock(block_lock);
 	D_ASSERT(block_id >= 0);

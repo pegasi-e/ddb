@@ -164,7 +164,7 @@ public:
 	//! Move a file from source path to the target, StorageManager relies on this being an atomic action for ACID
 	//! properties
 	DUCKDB_API virtual void MoveFile(const string &source, const string &target);
-  DUCKDB_API virtual void CopyFile(const string &source, const string &target);
+  DUCKDB_API virtual void CopyFile(const string &source, const string &target, unique_ptr<FileHandle>& src_handle, unique_ptr<FileHandle>& dst_handle);
 	//! Check if a file exists
 	DUCKDB_API virtual bool FileExists(const string &filename);
 	//! Check if path is pipe
