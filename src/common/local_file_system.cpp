@@ -1064,6 +1064,10 @@ void LocalFileSystem::CopyFile(const string &source, const string &target, uniqu
     int src_fd = src_handle->Cast<UnixFileHandle>().fd;
     ioctl(dst_fd, FICLONE, src_fd);
 }
+#else
+ void LocalFileSystem::CopyFile(const string &source, const string &target, unique_ptr<FileHandle>& src_handle, unique_ptr<FileHandle>& dst_handle) {
+
+} 
 #endif
 
 } // namespace duckdb
