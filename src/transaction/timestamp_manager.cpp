@@ -23,8 +23,12 @@ mutex TimestampManager::timestamp_lock;
  * implementation of clock_gettime(CLOCK_MONOTONIC, tv) from unistd.h for Windows
  */
 
-#define WIN32_LEAN_AND_MEAN
+#ifndef WIN32_LEAN_AND_MEAN
+	#define WIN32_LEAN_AND_MEAN
+#endif
 #include <Windows.h>
+#undef max
+#undef min
 #define MS_PER_SEC 1000ULL // MS = milliseconds
 #define US_PER_MS 1000ULL  // US = microseconds
 #define HNS_PER_US 10ULL   // HNS = hundred-nanoseconds (e.g., 1 hns = 100 ns)
