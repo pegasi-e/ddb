@@ -35,7 +35,7 @@ mutex TimestampManager::timestamp_lock;
 #define NS_PER_SEC (MS_PER_SEC * US_PER_MS * NS_PER_US)
 
 // https://stackoverflow.com/questions/5404277/porting-clock-gettime-to-windows
-void ClockGetTimeMonotonic(struct timespec *tv)
+void TimestampManager::ClockGetTimeMonotonic(struct timespec *tv)
 {
 	static LARGE_INTEGER ticksPerSec;
 	LARGE_INTEGER ticks;
@@ -58,7 +58,7 @@ void ClockGetTimeMonotonic(struct timespec *tv)
 }
 #else
 
-void ClockGetTimeMonotonic(struct timespec *tv) {
+void TimestampManager::ClockGetTimeMonotonic(struct timespec *tv) {
 	clock_gettime(CLOCK_MONOTONIC, tv);
 }
 
@@ -67,7 +67,7 @@ void ClockGetTimeMonotonic(struct timespec *tv) {
 transaction_t TimestampManager::GetHLCTimestamp() {
 	struct timespec ts;
 	lock_guard<mutex> lock(timestamp_lock);
-	ClockGetTimeMonotonic(&ts);
+	TimestampManager::ClockGetTimeMonotonic(&ts);
 	uint64_t ns = ((uint64_t) ts.tv_sec * BILLION) + (uint64_t) ts.tv_nsec;
 	uint64_t pt = ns & PHYSICAL_TIME_MASK;
 	uint32_t rb = ns & PHYSICAL_TIME_ROUNDUP_BIT;
@@ -92,7 +92,7 @@ transaction_t TimestampManager::GetHLCTimestamp() {
 void TimestampManager::SetHLCTimestamp(transaction_t message_ts) {
 	struct timespec ts;
 	lock_guard<mutex> lock(timestamp_lock);
-	ClockGetTimeMonotonic(&ts);
+	TimestampManager::ClockGetTimeMonotonic(&ts);
 	uint64_t ns = ((uint64_t) ts.tv_sec * BILLION) + (uint64_t) ts.tv_nsec;
 	uint64_t pt = ns & PHYSICAL_TIME_MASK;
 	uint32_t rb = ns & PHYSICAL_TIME_ROUNDUP_BIT;
