@@ -55,6 +55,7 @@ TEST_CASE("Convert DuckDB Chunks to Arrow Array in C API", "[cToArrow]") {
 	for (auto i = 0UL; i < count; i++) {
 		duckdb_destroy_data_chunk(&chunks[i]);
 	}
+	delete [] chunks;
 	duckdb_destroy_result(&result); // segmentation failure happens here
 	duckdb_disconnect(&con);
 	duckdb_close(&db);
