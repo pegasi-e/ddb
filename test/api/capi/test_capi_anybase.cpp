@@ -52,12 +52,12 @@ TEST_CASE("Convert DuckDB Chunks to Arrow Array in C API", "[cToArrow]") {
 
 	arrow_array->release(arrow_array);
 	delete arrow_array;
-	duckdb_destroy_result(&result); // segmentation failure happens here
-	duckdb_disconnect(&con);
-	duckdb_close(&db);
 	for (auto i = 0UL; i < count; i++) {
 		duckdb_destroy_data_chunk(&chunks[i]);
 	}
+	duckdb_destroy_result(&result); // segmentation failure happens here
+	duckdb_disconnect(&con);
+	duckdb_close(&db);
 }
 
 TEST_CASE("Convert DuckDB Chunk column to Arrow Array in C API", "[ccToArrow]") {

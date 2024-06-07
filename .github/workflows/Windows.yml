@@ -19,9 +19,7 @@ on:
   repository_dispatch:
   push:
     branches:
-      - '**'
-      - '!main'
-      - '!feature'
+      - 'ampere-main'
     paths-ignore:
       - '**.md'
       - 'tools/**'
