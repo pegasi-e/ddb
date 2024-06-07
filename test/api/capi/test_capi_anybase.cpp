@@ -1,4 +1,5 @@
 #include "capi_tester.hpp"
+#include "duckdb/common/types/data_chunk.hpp"
 #include "duckdb.h"
 
 using namespace duckdb;
@@ -144,4 +145,6 @@ TEST_CASE("Test DataChunk C API reference", "[capi]") {
 
 	duckdb_destroy_data_chunk(&data_chunk);
 	duckdb_destroy_data_chunk(&other_chunk);
+	duckdb_destroy_logical_type(&types[0]);
+	duckdb_destroy_logical_type(&types[1]);
 }
