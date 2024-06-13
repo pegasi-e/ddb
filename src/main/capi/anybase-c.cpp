@@ -16,7 +16,7 @@ using duckdb::LogicalType;
 uint64_t duckdb_get_hlc_timestamp() {
 	return duckdb::TimestampManager::GetHLCTimestamp();
 }
-
+//test
 void duckdb_set_hlc_timestamp(uint64_t ts) {
 	duckdb::TimestampManager::SetHLCTimestamp(ts);
 }
