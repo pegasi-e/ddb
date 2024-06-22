@@ -653,6 +653,10 @@ TEST_CASE("Test merger statements in C API", "[capi]") {
 
 	status = duckdb_appender_close(merger);
 	REQUIRE(status == DuckDBSuccess);
+
+	status = duckdb_appender_destroy(&merger);
+	REQUIRE(status == DuckDBSuccess);
+	
 	result = tester.Query("SELECT * FROM test");
 	REQUIRE_NO_FAIL(*result);
 	REQUIRE(result->Fetch<int32_t>(0, 0) == 42);
@@ -684,6 +688,9 @@ TEST_CASE("Test merger statements in C API", "[capi]") {
 	REQUIRE(status == DuckDBSuccess);
 
 	status = duckdb_appender_close(merger1);
+	REQUIRE(status == DuckDBSuccess);
+
+	status = duckdb_appender_destroy(&merger1);
 	REQUIRE(status == DuckDBSuccess);
 	result = tester.Query("SELECT * FROM test");
 	REQUIRE_NO_FAIL(*result);
