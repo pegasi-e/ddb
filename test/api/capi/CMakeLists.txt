@@ -1,6 +1,7 @@
 add_library_unity(
 test_sql_capi
 OBJECT
+test_upsert.cpp
 test_capi_anybase.cpp
 capi_table_functions.cpp
 test_capi.cpp

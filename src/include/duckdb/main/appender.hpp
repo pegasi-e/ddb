@@ -19,6 +19,9 @@ class ClientContext;
 class DuckDB;
 class TableCatalogEntry;
 class Connection;
+class DataTable;
+class BoundConstraint;
+enum class VerifyExistenceType : uint8_t;
 
 enum class AppenderType : uint8_t {
 	LOGICAL, // Cast input -> LogicalType
@@ -136,6 +139,7 @@ public:
 
 protected:
 	void FlushInternal(ColumnDataCollection &collection) override;
+	idx_t OnConflictHandling(TableCatalogEntry &table, ClientContext &context, DataChunk &insert_chunk, DataTable &data_table, const vector<unique_ptr<BoundConstraint>> &bound_constraints);
 };
 
 template <>
