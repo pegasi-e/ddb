@@ -492,35 +492,83 @@ idx_t RowGroupCollection::Delete(TransactionData transaction, DataTable &table, 
 //===--------------------------------------------------------------------===//
 void RowGroupCollection::Update(TransactionData transaction, row_t *ids, const vector<PhysicalIndex> &column_ids,
                                 DataChunk &updates) {
-	idx_t pos = 0;
-	do {
-		idx_t start = pos;
-		auto row_group = row_groups->GetSegment(UnsafeNumericCast<idx_t>(ids[pos]));
-		row_t base_id =
-		    UnsafeNumericCast<row_t>(row_group->start + ((UnsafeNumericCast<idx_t>(ids[pos]) - row_group->start) /
-		                                                 STANDARD_VECTOR_SIZE * STANDARD_VECTOR_SIZE));
-		auto max_id = MinValue<row_t>(base_id + STANDARD_VECTOR_SIZE,
-		                              UnsafeNumericCast<row_t>(row_group->start + row_group->count));
-		for (pos++; pos < updates.size(); pos++) {
-			D_ASSERT(ids[pos] >= 0);
-			// check if this id still belongs to this vector in this row group
-			if (ids[pos] < base_id) {
-				// id is before vector start -> it does not
-				break;
-			}
-			if (ids[pos] >= max_id) {
-				// id is after the maximum id in this vector -> it does not
-				break;
-			}
+
+	struct HashFunction
+	{
+		size_t operator()(const std::tuple<idx_t, idx_t>&x) const
+		{
+			return std::get<0>(x) ^ std::get<1>(x);
 		}
-		row_group->Update(transaction, updates, ids, start, pos - start, column_ids);
+	};
+
+	unordered_set<std::tuple<idx_t, idx_t>, HashFunction> keys;
+	map<std::tuple<idx_t, idx_t>, vector<row_t>> row_group_indexes;
+
+	for (auto i = 0; i < updates.size(); i++) {
+		auto row_group = row_groups->GetSegment(UnsafeNumericCast<idx_t>(ids[i]));
+		auto rg_index = row_group->index;
+		auto c_index = ((idx_t)ids[i] - row_group->start) / STANDARD_VECTOR_SIZE;
+		auto key = std::make_tuple(rg_index, c_index);
+		row_group_indexes[key].push_back(ids[i]);
+		keys.insert(key);
+	}
+
+	for (auto key : keys) {
+		auto rg_index = std::get<0>(key);
+		auto c_index = std::get<1>(key);
+		auto u_ids = row_group_indexes[key];
+		auto row_group = row_groups->GetSegmentByIndex(rg_index);
+		//When you left off c-index is not right, needs to be the actual offset
+		row_group->Update(transaction, updates, &u_ids[0], 0, u_ids.size(), column_ids);
 
 		auto l = stats.GetLock();
 		for (idx_t i = 0; i < column_ids.size(); i++) {
 			auto column_id = column_ids[i];
 			stats.MergeStats(*l, column_id.index, *row_group->GetStatistics(column_id.index));
 		}
-	} while (pos < updates.size());
+	}
+
+
+
+
+//	idx_t pos = 0;
+//	do {
+//		idx_t start = pos;
+//		auto row_group = row_groups->GetSegment(UnsafeNumericCast<idx_t>(ids[pos]));
+//		row_t base_id =
+//		    UnsafeNumericCast<row_t>(row_group->start + ((UnsafeNumericCast<idx_t>(ids[pos]) - row_group->start) /
+//		                                                 STANDARD_VECTOR_SIZE * STANDARD_VECTOR_SIZE));
+//		auto max_id = MinValue<row_t>(base_id + STANDARD_VECTOR_SIZE,
+//		                              UnsafeNumericCast<row_t>(row_group->start + row_group->count));
+//		for (pos++; pos < updates.size(); pos++) {
+//			D_ASSERT(ids[pos] >= 0);
+//			// check if this id still belongs to this vector in this row group
+//			if (ids[pos] < base_id) {
+//				// id is before vector start -> it does not
+//				break;
+//			}
+//			if (ids[pos] >= max_id) {
+//				// id is after the maximum id in this vector -> it does not
+//				break;
+//			}
+//		}
+//
+////		pos = updates.size() - pos > (idx_t) max_id ? pos + (idx_t) max_id - 1 : updates.size();
+//
+//		Printer::Print("index: " + std::to_string(start));
+//		auto id = row_groups->GetSegmentIndex(start);
+//		Printer::Print("asked rg:" + std::to_string(id));
+//		Printer::Print("rg index:" + std::to_string(row_group->index));
+//		Printer::Print(std::to_string((unsigned long long)(void**)row_group));
+//		row_group->Update(transaction, updates, ids, start, pos - start, column_ids);
+//
+//		auto l = stats.GetLock();
+//		for (idx_t i = 0; i < column_ids.size(); i++) {
+//			auto column_id = column_ids[i];
+//			stats.MergeStats(*l, column_id.index, *row_group->GetStatistics(column_id.index));
+//		}
+//	} while (pos < updates.size());
+	Printer::Print("done");
 }
 
 void RowGroupCollection::RemoveFromIndexes(TableIndexList &indexes, Vector &row_identifiers, idx_t count) {

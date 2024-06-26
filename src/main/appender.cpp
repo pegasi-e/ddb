@@ -381,6 +381,10 @@ void InternalAppender::FlushInternal(ColumnDataCollection &collection) {
 	table.GetStorage().LocalAppend(table, context, collection, bound_constraints);
 }
 
+void Merger::FlushInternal(ColumnDataCollection &collection) {
+	context->Merge(*description, collection);
+}
+
 void BaseAppender::Close() {
 	if (column == 0 || column == types.size()) {
 		Flush();
@@ -399,8 +403,6 @@ Merger::~Merger() {
 	Destructor();
 }
 
-void Merger::FlushInternal(ColumnDataCollection &collection) {
-	context->Merge(*description, collection);
-}
+
 
 } // namespace duckdb
