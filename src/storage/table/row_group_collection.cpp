@@ -492,6 +492,35 @@ idx_t RowGroupCollection::Delete(TransactionData transaction, DataTable &table, 
 //===--------------------------------------------------------------------===//
 void RowGroupCollection::Update(TransactionData transaction, row_t *ids, const vector<PhysicalIndex> &column_ids,
                                 DataChunk &updates) {
+//	idx_t pos = 0;
+//	do {
+//		idx_t start = pos;
+//		auto row_group = row_groups->GetSegment(UnsafeNumericCast<idx_t>(ids[pos]));
+//		row_t base_id =
+//		    UnsafeNumericCast<row_t>(row_group->start + ((UnsafeNumericCast<idx_t>(ids[pos]) - row_group->start) /
+//		                                                 STANDARD_VECTOR_SIZE * STANDARD_VECTOR_SIZE));
+//		auto max_id = MinValue<row_t>(base_id + STANDARD_VECTOR_SIZE,
+//		                              UnsafeNumericCast<row_t>(row_group->start + row_group->count));
+//		for (pos++; pos < updates.size(); pos++) {
+//			D_ASSERT(ids[pos] >= 0);
+//			// check if this id still belongs to this vector in this row group
+//			if (ids[pos] < base_id) {
+//				// id is before vector start -> it does not
+//				break;
+//			}
+//			if (ids[pos] >= max_id) {
+//				// id is after the maximum id in this vector -> it does not
+//				break;
+//			}
+//		}
+//		row_group->Update(transaction, updates, ids, start, pos - start, column_ids);
+//
+//		auto l = stats.GetLock();
+//		for (idx_t i = 0; i < column_ids.size(); i++) {
+//			auto column_id = column_ids[i];
+//			stats.MergeStats(*l, column_id.index, *row_group->GetStatistics(column_id.index));
+//		}
+//	} while (pos < updates.size());
 
 	struct OrderedUpdate {
 		explicit OrderedUpdate(DataChunk &updates) {
@@ -521,9 +550,8 @@ void RowGroupCollection::Update(TransactionData transaction, row_t *ids, const v
 		auto ordered_update = ordered_updates[key];
 
 		ordered_update->ids.push_back(ids[i]);
-		for (idx_t c = 0; c < updates.ColumnCount(); c++) {
-			ordered_update->data_chunk->SetValue(c, ordered_update->ids.size() - 1, updates.GetValue(c, i));
-		}
+		updates.Slice(i, 1);
+		ordered_update->data_chunk->Reference(updates);
 	}
 
 	for (auto kvp : ordered_updates) {
@@ -539,7 +567,7 @@ void RowGroupCollection::Update(TransactionData transaction, row_t *ids, const v
 			stats.MergeStats(*l, column_id.index, *row_group->GetStatistics(column_id.index));
 		}
 
-		delete ordered_update;
+		delete ordered_updates[kvp.first];
 		ordered_updates[kvp.first] = nullptr;
 	}
 }
