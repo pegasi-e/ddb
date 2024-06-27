@@ -252,25 +252,25 @@ duckdb_state duckdb_append_data_chunk(duckdb_appender appender, duckdb_data_chun
 	return duckdb_appender_run_function(appender, [&](Appender &appender) { appender.AppendDataChunk(*data_chunk); });
 }
 
-duckdb_state duckdb_merge_data_chunk(duckdb_connection connection, const char *schema, const char *table, duckdb_data_chunk chunk) {
-  Connection *conn = reinterpret_cast<Connection *>(connection);
-
-  if (!connection || !table) {
-    return DuckDBError;
-  }
-  if (schema == nullptr) {
-    schema = DEFAULT_SCHEMA;
-  }
-
-  try {
-    auto table_info = conn->TableInfo(table);
-    auto data_chunk = (duckdb::DataChunk *)chunk;
-    conn->Merge(*table_info, *data_chunk);
-  } catch (std::exception &ex) {
-    ErrorData error(ex);
-    return DuckDBError;
-  } catch (...) { // LCOV_EXCL_START
-    return DuckDBError;
-  } // LCOV_EXCL_STOP
-  return DuckDBSuccess;
-}
+//duckdb_state duckdb_merge_data_chunk(duckdb_connection connection, const char *schema, const char *table, duckdb_data_chunk chunk) {
+//	Connection *conn = reinterpret_cast<Connection *>(connection);
+//
+//	if (!connection || !table) {
+//		return DuckDBError;
+//	}
+//	if (schema == nullptr) {
+//		schema = DEFAULT_SCHEMA;
+//	}
+//
+//	try {
+//		auto table_info = conn->TableInfo(table);
+//		auto data_chunk = (duckdb::DataChunk *)chunk;
+//		conn->Merge(*table_info, *data_chunk);
+//	} catch (std::exception &ex) {
+//		ErrorData error(ex);
+//		return DuckDBError;
+//	} catch (...) { // LCOV_EXCL_START
+//		return DuckDBError;
+//	} // LCOV_EXCL_STOP
+//	return DuckDBSuccess;
+//}

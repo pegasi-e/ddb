@@ -894,81 +894,79 @@ static idx_t PerformOnConflictAction(ClientContext &context, DataChunk &chunk, T
   
 template <bool GLOBAL>
 static idx_t HandleInsertConflicts(TableCatalogEntry &table, ClientContext &context, DataChunk &insert_chunk,  DataTable &data_table, const vector<unique_ptr<BoundConstraint>> &bound_constraints) {
-  vector<PhysicalIndex> set_columns;
-  // The column ids to apply the ON CONFLICT on
-  unordered_set<column_t> conflict_target;
-  data_table.GetDataTableInfo()->GetIndexes().Scan([&](Index &index) {
-    if (index.IsPrimary()) {
-      conflict_target = index.GetColumnIdSet();
-      return true;
-    }
-    return false;
-  });
+	vector<PhysicalIndex> set_columns;
+	// The column ids to apply the ON CONFLICT on
+	unordered_set<column_t> conflict_target;
+	data_table.GetDataTableInfo()->GetIndexes().Scan([&](Index &index) {
+		if (index.IsPrimary()) {
+			conflict_target = index.GetColumnIdSet();
+			return true;
+		}
+		return false;
+	});
 
-  for (idx_t i = 0; i < data_table.Columns().size(); i++) {
-    auto &col = data_table.Columns()[i];
-    column_t oid = col.Oid();
-    if (conflict_target.find(oid) == conflict_target.end()) {
-      set_columns.push_back(col.Physical());
-    }
-  }
+	for (idx_t i = 0; i < data_table.Columns().size(); i++) {
+		auto &col = data_table.Columns()[i];
+		column_t oid = col.Oid();
+		if (conflict_target.find(oid) == conflict_target.end()) {
+			set_columns.push_back(col.Physical());
+		}
+	}
 
-  auto &local_storage = LocalStorage::Get(context, data_table.db);
+  	auto &local_storage = LocalStorage::Get(context, data_table.db);
 
-  // We either want to do nothing, or perform an update when conflicts arise
-  ConflictInfo conflict_info(conflict_target);
-  ConflictManager conflict_manager(VerifyExistenceType::APPEND, insert_chunk.size(), &conflict_info);
-  if (GLOBAL) {
-    auto constraint_state = data_table.InitializeConstraintState(table, bound_constraints);
-    data_table.VerifyAppendConstraints(*constraint_state, context, insert_chunk, &conflict_manager);
-  } else {
-    DataTable::VerifyUniqueIndexes(local_storage.GetIndexes(data_table), context, insert_chunk,
-				   &conflict_manager);
-  }
-  conflict_manager.Finalize();
-  if (conflict_manager.ConflictCount() == 0) {
-    // No conflicts found, 0 updates performed
-    return 0;
-  }
-  auto &conflicts = conflict_manager.Conflicts();
-  auto &row_ids = conflict_manager.RowIds();
+	// We either want to do nothing, or perform an update when conflicts arise
+	ConflictInfo conflict_info(conflict_target);
+	ConflictManager conflict_manager(VerifyExistenceType::APPEND, insert_chunk.size(), &conflict_info);
+	if (GLOBAL) {
+		auto constraint_state = data_table.InitializeConstraintState(table, bound_constraints);
+		data_table.VerifyAppendConstraints(*constraint_state, context, insert_chunk, &conflict_manager);
+	} else {
+		DataTable::VerifyUniqueIndexes(local_storage.GetIndexes(data_table), context, insert_chunk, &conflict_manager);
+	}
+	conflict_manager.Finalize();
+	if (conflict_manager.ConflictCount() == 0) {
+		// No conflicts found, 0 updates performed
+		return 0;
+	}
 
-  DataChunk conflict_chunk; // contains only the conflicting values
-  DataChunk scan_chunk;     // contains the original values, that caused the conflict
-  DataChunk combined_chunk; // contains conflict_chunk + scan_chunk (wide)
+	auto &conflicts = conflict_manager.Conflicts();
+	auto &row_ids = conflict_manager.RowIds();
 
-  // Filter out everything but the conflicting rows
-  conflict_chunk.Initialize(context, insert_chunk.GetTypes());
-  conflict_chunk.Reference(insert_chunk);
-  conflict_chunk.Slice(conflicts.Selection(), conflicts.Count());
-  conflict_chunk.SetCardinality(conflicts.Count());
+	DataChunk conflict_chunk; // contains only the conflicting values
+	DataChunk scan_chunk;     // contains the original values, that caused the conflict
+	DataChunk combined_chunk; // contains conflict_chunk + scan_chunk (wide)
 
-  // Splice the Input chunk and the fetched chunk together
-  CombineExistingAndInsertTuples(combined_chunk, scan_chunk, conflict_chunk, context);
+	// Filter out everything but the conflicting rows
+	conflict_chunk.Initialize(context, insert_chunk.GetTypes());
+	conflict_chunk.Reference(insert_chunk);
+	conflict_chunk.Slice(conflicts.Selection(), conflicts.Count());
+	conflict_chunk.SetCardinality(conflicts.Count());
 
-  RegisterUpdatedRows<GLOBAL>(row_ids, combined_chunk.size());
+	// Splice the Input chunk and the fetched chunk together
+	CombineExistingAndInsertTuples(combined_chunk, scan_chunk, conflict_chunk, context);
+	RegisterUpdatedRows<GLOBAL>(row_ids, combined_chunk.size());
+	idx_t updated_tuples = PerformOnConflictAction<GLOBAL>(context, combined_chunk, table, row_ids, set_columns, bound_constraints);
 
-  idx_t updated_tuples = PerformOnConflictAction<GLOBAL>(context, combined_chunk, table, row_ids, set_columns, bound_constraints);
+	// Remove the conflicting tuples from the insert chunk
+	SelectionVector sel_vec(insert_chunk.size());
+	idx_t new_size = SelectionVector::Inverted(conflicts.Selection(), sel_vec, conflicts.Count(), insert_chunk.size());
+	insert_chunk.Slice(sel_vec, new_size);
+	insert_chunk.SetCardinality(new_size);
 
-  // Remove the conflicting tuples from the insert chunk
-  SelectionVector sel_vec(insert_chunk.size());
-  idx_t new_size =
-    SelectionVector::Inverted(conflicts.Selection(), sel_vec, conflicts.Count(), insert_chunk.size());
-  insert_chunk.Slice(sel_vec, new_size);
-  insert_chunk.SetCardinality(new_size);
-  return updated_tuples;
+	return updated_tuples;
 }
 
 static idx_t OnConflictHandling(TableCatalogEntry &table, ClientContext &context,
 				DataChunk& chunk, const vector<unique_ptr<BoundConstraint>> &bound_constraints) {
-  auto &data_table = table.GetStorage();
-  idx_t updated_tuples = 0;
+	auto &data_table = table.GetStorage();
+	idx_t updated_tuples = 0;
 
-  updated_tuples += HandleInsertConflicts<true>(table, context, chunk, data_table, bound_constraints);
-  // Also check the transaction-local storage+ART so we can detect conflicts within this transaction
-  updated_tuples += HandleInsertConflicts<false>(table, context, chunk, data_table, bound_constraints);
+	updated_tuples += HandleInsertConflicts<true>(table, context, chunk, data_table, bound_constraints);
+	// Also check the transaction-local storage+ART so we can detect conflicts within this transaction
+	updated_tuples += HandleInsertConflicts<false>(table, context, chunk, data_table, bound_constraints);
 
-  return updated_tuples;
+	return updated_tuples;
 }
 
 static void ResolveDefaults(const TableCatalogEntry &table, DataChunk &chunk,
@@ -977,41 +975,41 @@ static void ResolveDefaults(const TableCatalogEntry &table, DataChunk &chunk,
 
 	result.Reset();
 	result.SetCardinality(chunk);
-	
+
 	// no columns specified, just append directly
 	for (idx_t i = 0; i < result.ColumnCount(); i++) {
-	  D_ASSERT(result.data[i].GetType() == chunk.data[i].GetType());
-	  result.data[i].Reference(chunk.data[i]);
+		D_ASSERT(result.data[i].GetType() == chunk.data[i].GetType());
+		result.data[i].Reference(chunk.data[i]);
 	}
 }
 
   
 void DataTable::LocalMerge(TableCatalogEntry &table, ClientContext &context, DataChunk &chunk, const vector<unique_ptr<BoundConstraint>> &bound_constraints) {
-  LocalAppendState append_state;
-  auto &storage = table.GetStorage();
+	LocalAppendState append_state;
+	auto &storage = table.GetStorage();
 
-  storage.InitializeLocalAppend(append_state, table, context, bound_constraints);
-  DataChunk insert_chunk;
-  insert_chunk.Initialize(context, chunk.GetTypes());
-  ResolveDefaults(table, chunk, insert_chunk);
-  OnConflictHandling(table, context, insert_chunk, bound_constraints);
-  storage.LocalAppend(append_state, table, context, insert_chunk, true);
-  storage.FinalizeLocalAppend(append_state);
+	storage.InitializeLocalAppend(append_state, table, context, bound_constraints);
+	DataChunk insert_chunk;
+	insert_chunk.Initialize(context, chunk.GetTypes());
+	ResolveDefaults(table, chunk, insert_chunk);
+	OnConflictHandling(table, context, insert_chunk, bound_constraints);
+	storage.LocalAppend(append_state, table, context, insert_chunk, true);
+	storage.FinalizeLocalAppend(append_state);
 }
 
 void DataTable::LocalMerge(TableCatalogEntry &table, ClientContext &context, ColumnDataCollection &collection, const vector<unique_ptr<BoundConstraint>> &bound_constraints) {
-  LocalAppendState append_state;
-  auto &storage = table.GetStorage();
-  storage.InitializeLocalAppend(append_state, table, context, bound_constraints);
+	LocalAppendState append_state;
+	auto &storage = table.GetStorage();
+	storage.InitializeLocalAppend(append_state, table, context, bound_constraints);
 
-  for (auto &chunk : collection.Chunks()) {
-    DataChunk insert_chunk;
-    insert_chunk.Initialize(context, chunk.GetTypes());
-    ResolveDefaults(table, chunk, insert_chunk);
-    OnConflictHandling(table, context, insert_chunk, bound_constraints);
-    storage.LocalAppend(append_state, table, context, insert_chunk, true);
-  }
-  storage.FinalizeLocalAppend(append_state);
+	for (auto &chunk : collection.Chunks()) {
+		DataChunk insert_chunk;
+		insert_chunk.Initialize(context, chunk.GetTypes());
+		ResolveDefaults(table, chunk, insert_chunk);
+		OnConflictHandling(table, context, insert_chunk, bound_constraints);
+		storage.LocalAppend(append_state, table, context, insert_chunk, true);
+	}
+	storage.FinalizeLocalAppend(append_state);
 }
   
   
