@@ -550,8 +550,21 @@ void RowGroupCollection::Update(TransactionData transaction, row_t *ids, const v
 		auto ordered_update = ordered_updates[key];
 
 		ordered_update->ids.push_back(ids[i]);
-		updates.Slice(i, 1);
-		ordered_update->data_chunk->Reference(updates);
+//		SelectionVector sel(1);
+//		sel.set_index(0, i);
+//		ordered_update->data_chunk->Slice(updates, sel, 1);
+//		ordered_update->data_chunk->Slice( sel, 1);
+//		updates.Slice(*ordered_update->data_chunk, sel, 1, i);
+//		updates.Slice(sel, 1);
+//		updates.Split(*ordered_update->data_chunk, 1);
+//		Printer::Print("");
+//		ordered_update->data_chunk->Reference(updates);
+
+		for (idx_t c = 0; c < updates.ColumnCount(); c++) {
+			// TODO: Eliminate this copy!
+			ordered_update->data_chunk->SetValue(c, ordered_update->ids.size() - 1, updates.GetValue(c, i));
+//			ordered_update->data_chunk->Reference(updates);
+		}
 	}
 
 	for (auto kvp : ordered_updates) {
