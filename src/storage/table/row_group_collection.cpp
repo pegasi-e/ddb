@@ -522,67 +522,149 @@ void RowGroupCollection::Update(TransactionData transaction, row_t *ids, const v
 //		}
 //	} while (pos < updates.size());
 
-	struct OrderedUpdate {
-		explicit OrderedUpdate(DataChunk &updates) {
-			data_chunk = new duckdb::DataChunk();
-		    data_chunk->Initialize(duckdb::Allocator::DefaultAllocator(), updates.GetTypes(), updates.size());
-		}
+//	struct OrderedUpdate {
+//		explicit OrderedUpdate(DataChunk &updates) {
+//			data_chunk = new duckdb::DataChunk();
+//		    data_chunk->Initialize(duckdb::Allocator::DefaultAllocator(), updates.GetTypes(), updates.size());
+//		}
+//
+//		~OrderedUpdate() {
+//			delete data_chunk;
+//		}
+//
+//		vector<row_t> ids;
+//		duckdb::DataChunk *data_chunk;
+//	};
+//
+//	map<std::tuple<idx_t, idx_t>, OrderedUpdate *> ordered_updates;
+//	for (idx_t i = 0; i < updates.size(); i++) {
+//		auto row_group = row_groups->GetSegment(UnsafeNumericCast<idx_t>(ids[i]));
+//		auto rg_index = row_group->index;
+//		auto c_index = ((idx_t)ids[i] - row_group->start) / STANDARD_VECTOR_SIZE;
+//		auto key = std::make_tuple(rg_index, c_index);
+//
+//		if (ordered_updates.find(key) == ordered_updates.end()) {
+//			ordered_updates[key] = new OrderedUpdate(updates);
+//		}
+//
+//		auto ordered_update = ordered_updates[key];
+//
+//		ordered_update->ids.push_back(ids[i]);
+////		SelectionVector sel(1);
+////		sel.set_index(0, i);
+////		ordered_update->data_chunk->Slice(updates, sel, 1);
+////		ordered_update->data_chunk->Slice( sel, 1);
+////		updates.Slice(*ordered_update->data_chunk, sel, 1, i);
+////		updates.Slice(sel, 1);
+////		updates.Split(*ordered_update->data_chunk, 1);
+////		Printer::Print("");
+////		ordered_update->data_chunk->Reference(updates);
+//
+//		for (idx_t c = 0; c < updates.ColumnCount(); c++) {
+//			// TODO: Eliminate this copy!
+//			ordered_update->data_chunk->SetValue(c, ordered_update->ids.size() - 1, updates.GetValue(c, i));
+////			ordered_update->data_chunk->Reference(updates);
+//		}
+//	}
+//
+//	for (auto kvp : ordered_updates) {
+//		auto ordered_update = kvp.second;
+//		auto update_ids = ordered_update->ids;
+//
+//		auto row_group = row_groups->GetSegment(UnsafeNumericCast<idx_t>(update_ids[0]));
+//		row_group->Update(transaction, *ordered_update->data_chunk, &update_ids[0], 0, update_ids.size(), column_ids);
+//
+//		auto l = stats.GetLock();
+//		for (idx_t i = 0; i < column_ids.size(); i++) {
+//			auto column_id = column_ids[i];
+//			stats.MergeStats(*l, column_id.index, *row_group->GetStatistics(column_id.index));
+//		}
+//
+//		delete ordered_updates[kvp.first];
+//		ordered_updates[kvp.first] = nullptr;
+//	}
 
-		~OrderedUpdate() {
-			delete data_chunk;
-		}
-
-		vector<row_t> ids;
-		duckdb::DataChunk *data_chunk;
-	};
-
-	map<std::tuple<idx_t, idx_t>, OrderedUpdate *> ordered_updates;
-	for (idx_t i = 0; i < updates.size(); i++) {
-		auto row_group = row_groups->GetSegment(UnsafeNumericCast<idx_t>(ids[i]));
-		auto rg_index = row_group->index;
-		auto c_index = ((idx_t)ids[i] - row_group->start) / STANDARD_VECTOR_SIZE;
-		auto key = std::make_tuple(rg_index, c_index);
-
-		if (ordered_updates.find(key) == ordered_updates.end()) {
-			ordered_updates[key] = new OrderedUpdate(updates);
-		}
-
-		auto ordered_update = ordered_updates[key];
-
-		ordered_update->ids.push_back(ids[i]);
-//		SelectionVector sel(1);
-//		sel.set_index(0, i);
-//		ordered_update->data_chunk->Slice(updates, sel, 1);
-//		ordered_update->data_chunk->Slice( sel, 1);
-//		updates.Slice(*ordered_update->data_chunk, sel, 1, i);
-//		updates.Slice(sel, 1);
-//		updates.Split(*ordered_update->data_chunk, 1);
-//		Printer::Print("");
-//		ordered_update->data_chunk->Reference(updates);
-
-		for (idx_t c = 0; c < updates.ColumnCount(); c++) {
-			// TODO: Eliminate this copy!
-			ordered_update->data_chunk->SetValue(c, ordered_update->ids.size() - 1, updates.GetValue(c, i));
-//			ordered_update->data_chunk->Reference(updates);
-		}
+struct OrderedUpdate {
+	explicit OrderedUpdate(DataChunk &updates) {
+		sel = SelectionVector(updates.size() + 1);
+		//			data_chunk = new duckdb::DataChunk();
+		//		    data_chunk->Initialize(duckdb::Allocator::DefaultAllocator(), updates.GetTypes(), updates.size());
 	}
 
-	for (auto kvp : ordered_updates) {
-		auto ordered_update = kvp.second;
-		auto update_ids = ordered_update->ids;
-
-		auto row_group = row_groups->GetSegment(UnsafeNumericCast<idx_t>(update_ids[0]));
-		row_group->Update(transaction, *ordered_update->data_chunk, &update_ids[0], 0, update_ids.size(), column_ids);
-
-		auto l = stats.GetLock();
-		for (idx_t i = 0; i < column_ids.size(); i++) {
-			auto column_id = column_ids[i];
-			stats.MergeStats(*l, column_id.index, *row_group->GetStatistics(column_id.index));
-		}
-
-		delete ordered_updates[kvp.first];
-		ordered_updates[kvp.first] = nullptr;
+	~OrderedUpdate() {
+		//			delete data_chunk;
 	}
+
+	SelectionVector sel;
+	vector<row_t> ids;
+	duckdb::DataChunk *data_chunk;
+};
+
+map<std::tuple<idx_t, idx_t>, OrderedUpdate *> ordered_updates;
+for (idx_t i = 0; i < updates.size(); i++) {
+	auto row_group = row_groups->GetSegment(UnsafeNumericCast<idx_t>(ids[i]));
+	auto rg_index = row_group->index;
+	auto c_index = ((idx_t)ids[i] - row_group->start) / STANDARD_VECTOR_SIZE;
+	auto key = std::make_tuple(rg_index, c_index);
+
+	if (ordered_updates.find(key) == ordered_updates.end()) {
+		ordered_updates[key] = new OrderedUpdate(updates);
+	}
+
+	auto ordered_update = ordered_updates[key];
+
+	ordered_update->ids.push_back(ids[i]);
+	ordered_update->sel.set_index(ordered_update->ids.size() - 1, i);
+	//		SelectionVector sel(1);
+	//		sel.set_index(0, i);
+	//		ordered_update->data_chunk->Slice(updates, sel, 1);
+	//		ordered_update->data_chunk->Slice( sel, 1);
+	//		updates.Slice(*ordered_update->data_chunk, sel, 1, i);
+	//		updates.Slice(sel, 1);
+	//		updates.Split(*ordered_update->data_chunk, 1);
+	//		Printer::Print("");
+	//		ordered_update->data_chunk->Reference(updates);
+	//
+	//		for (idx_t c = 0; c < updates.ColumnCount(); c++) {
+	//			// TODO: Eliminate this copy!
+	//			ordered_update->data_chunk->SetValue(c, ordered_update->ids.size() - 1, updates.GetValue(c, i));
+	////			ordered_update->data_chunk->Reference(updates);
+	//		}
+}
+
+duckdb::DataChunk data_chunk;
+data_chunk.Initialize(duckdb::Allocator::DefaultAllocator(), updates.GetTypes(), updates.size());
+
+for (auto kvp : ordered_updates) {
+	auto ordered_update = kvp.second;
+	auto update_ids = ordered_update->ids;
+
+	data_chunk.Reference(updates);
+	//		SelectionVector sel(update_ids.size() + 1);
+	//		for (idx_t i = 0; i < update_ids.size(); i++) {
+	//			//		auto row_group = row_groups->GetSegment(UnsafeNumericCast<idx_t>(ids[i]));
+	//			sel.set_index(i, UnsafeNumericCast<idx_t>(update_ids[i]));
+	//		}
+
+	for (idx_t i = 0; i < updates.ColumnCount(); i++) {
+		//TODO: look up column id
+		data_chunk.data[i].Slice(ordered_update->sel, update_ids.size());
+	}
+
+	//		auto v = data_chunk.GetValue(1, 0).ToSQLString();
+
+	auto row_group = row_groups->GetSegment(UnsafeNumericCast<idx_t>(update_ids[0]));
+	row_group->Update(transaction, data_chunk, &update_ids[0], 0, update_ids.size(), column_ids);
+
+	auto l = stats.GetLock();
+	for (idx_t i = 0; i < column_ids.size(); i++) {
+		auto column_id = column_ids[i];
+		stats.MergeStats(*l, column_id.index, *row_group->GetStatistics(column_id.index));
+	}
+
+	delete ordered_updates[kvp.first];
+	ordered_updates[kvp.first] = nullptr;
+}
 }
 
 void RowGroupCollection::RemoveFromIndexes(TableIndexList &indexes, Vector &row_identifiers, idx_t count) {
