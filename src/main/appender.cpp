@@ -381,10 +381,28 @@ void InternalAppender::FlushInternal(ColumnDataCollection &collection) {
 	table.GetStorage().LocalAppend(table, context, collection, bound_constraints);
 }
 
+void Merger::FlushInternal(ColumnDataCollection &collection) {
+	context->Merge(*description, collection);
+}
+
 void BaseAppender::Close() {
 	if (column == 0 || column == types.size()) {
 		Flush();
 	}
 }
+
+Merger::Merger(Connection &con, const string &schema_name, const string &table_name)
+  : Appender(con, schema_name, table_name) {
+
+}
+
+Merger::Merger(Connection &con, const string &table_name) : Appender(con, DEFAULT_SCHEMA, table_name) {
+}
+
+Merger::~Merger() {
+	Destructor();
+}
+
+
 
 } // namespace duckdb
