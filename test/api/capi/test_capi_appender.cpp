@@ -1,5 +1,8 @@
 #include "capi_tester.hpp"
 #include "duckdb.h"
+#include <random>
+#include <algorithm>
+#include <sys/time.h>
 
 using namespace duckdb;
 using namespace std;
@@ -697,4 +700,108 @@ TEST_CASE("Test merger statements in C API", "[capi]") {
 	REQUIRE(result->Fetch<int32_t>(0, 0) == 42);
 	REQUIRE(result->Fetch<double>(1, 0) == 8.2);
 	REQUIRE(result->Fetch<string>(2, 0) == "Hello, World Again");
+}
+
+TEST_CASE("Random key order updates with chunks test c-api", "[capi]") {
+	CAPITester tester;
+	duckdb::unique_ptr<CAPIResult> result;
+	duckdb_state status;
+
+	REQUIRE(tester.OpenDatabase(nullptr));
+	tester.Query("CREATE TABLE integers(i BIGINT, j VARCHAR, b VARCHAR, PRIMARY KEY (i))");
+	duckdb_appender appender;
+
+	status = duckdb_appender_create(tester.connection, nullptr, "integers", &appender);
+	REQUIRE(status == DuckDBSuccess);
+	REQUIRE(duckdb_appender_error(appender) == nullptr);
+
+	for (idx_t i = 0; i < 1000000; i++) {
+		duckdb_appender_begin_row(appender);
+		auto key = "key-" + std::to_string(i);
+		auto val = "val-" + std::to_string(i);
+		duckdb_append_int64(appender, i);
+		duckdb_append_varchar(appender, key.c_str());
+		duckdb_append_varchar(appender, val.c_str());
+		duckdb_appender_end_row(appender);
+	}
+
+	duckdb_appender_close(appender);
+	status = duckdb_appender_destroy(&appender);
+
+	duckdb::vector<idx_t> values;
+	auto number_of_updates = 100000;
+
+	for (idx_t i = 0; i < number_of_updates; i++) {
+		//		if (i % 2 == 0) {
+		//			values.push_back(end_value--);
+		//		}
+		//		else {
+		//			values.push_back(start_value++);
+		//		}
+		values.push_back(i);
+	}
+
+	auto rng = std::default_random_engine {random_device{}()};
+	std::shuffle(std::begin(values), std::end(values), rng);
+	duckdb::vector<duckdb::DataChunk *> chunks;
+	Printer::Print(std::to_string(values[1]));
+
+	for (idx_t c = 0; c < 10; c++) {
+		auto row = 0;
+		for (idx_t i = 0; i < number_of_updates; i++) {
+			if (i % STANDARD_VECTOR_SIZE == 0) {
+				row = 0;
+				auto chunk = new duckdb::DataChunk();
+				duckdb::vector<LogicalType> types = {LogicalType::BIGINT, LogicalType::VARCHAR, LogicalType::VARCHAR};
+				chunk->Initialize(duckdb::Allocator::DefaultAllocator(), types);
+				chunks.push_back(chunk);
+			}
+
+			auto chunk_index = i / STANDARD_VECTOR_SIZE;
+			auto current_chunk = chunks[chunk_index];
+
+			for (idx_t c = 0; c < current_chunk->ColumnCount(); c++) {
+				if (c == 0) {
+					current_chunk->SetValue(c, row, duckdb::Value((int64_t)values[i]));
+				} else if (c == 1) {
+					auto key = "up key-" + std::to_string(values[i]);
+					current_chunk->SetValue(c, row, duckdb::Value(key.c_str()));
+				} else {
+					auto val = "update val-" + std::to_string(values[i]);
+					current_chunk->SetValue(c, row, duckdb::Value(val.c_str()));
+				}
+			}
+			current_chunk->SetCardinality(row);
+			row++;
+		}
+
+		struct timeval start_t;
+		Printer::Print("LocalAppend upsert?");
+		gettimeofday(&start_t, nullptr);
+
+		// merge rows
+		// change even key value
+		duckdb_appender merger;
+		status = duckdb_appender_create(tester.connection, nullptr, "integers", &merger, true);
+		for (size_t i = 0; i < chunks.size(); i++) {
+			duckdb_append_data_chunk(merger, reinterpret_cast<duckdb_data_chunk>(chunks[i]));
+		}
+
+		// close flushes all remaining data
+		status = duckdb_appender_close(merger);
+		REQUIRE(status == DuckDBSuccess);
+
+		struct timeval now;
+		gettimeofday(&now, nullptr);
+		auto time = (now.tv_usec - start_t.tv_usec) / (double)1000.0 + (now.tv_sec - start_t.tv_sec) * (double)1000.0;
+		Printer::Print("conflict time: " + std::to_string(time));
+
+		for (int i = 0; i < chunks.size(); i++) {
+			delete chunks[i];
+		}
+		chunks.clear();
+
+		status = duckdb_appender_destroy(&merger);
+		REQUIRE(status == DuckDBSuccess);
+	}
 }
