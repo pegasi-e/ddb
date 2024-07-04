@@ -161,7 +161,7 @@ TEST_CASE("Random key order updates with chunks test", "[merger]") {
 	}
 	appender.Close();
 
-	auto number_of_updates = 1000;
+	auto number_of_updates = 1000000;
 //	auto end_value = number_of_updates+1;
 //	auto start_value = 0;
 

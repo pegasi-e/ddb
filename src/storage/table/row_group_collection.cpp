@@ -650,7 +650,7 @@ void RowGroupCollection::Update(TransactionData transaction, row_t *ids, const v
 		//	}
 	} else {
 		// new stuff!
-		Printer::Print("update size: " + std::to_string(updates.size()));
+//		Printer::Print("update size: " + std::to_string(updates.size()));
 
 		map<std::tuple<idx_t, idx_t>, OrderedUpdate *> grouped_updates;
 		grouped_updates.clear();
@@ -688,9 +688,9 @@ void RowGroupCollection::Update(TransactionData transaction, row_t *ids, const v
 
 
 
-		struct timeval start_t;
-		gettimeofday(&start_t, nullptr);
-		Printer::Print("number_of_ordered_updates: " + std::to_string(grouped_updates.size()));
+//		struct timeval start_t;
+//		gettimeofday(&start_t, nullptr);
+//		Printer::Print("number_of_ordered_updates: " + std::to_string(grouped_updates.size()));
 
 		//	vector<std::thread> threads;
 		//	threads.reserve(grouped_updates.size());
@@ -737,10 +737,10 @@ void RowGroupCollection::Update(TransactionData transaction, row_t *ids, const v
 		//		grouped_updates[kvp.first] = nullptr;
 		//	}
 
-		struct timeval now;
-		gettimeofday(&now, nullptr);
-		auto time = (now.tv_usec - start_t.tv_usec) / (double)1000.0 + (now.tv_sec - start_t.tv_sec) * (double)1000.0;
-		Printer::Print("" + std::to_string(time));
+//		struct timeval now;
+//		gettimeofday(&now, nullptr);
+//		auto time = (now.tv_usec - start_t.tv_usec) / (double)1000.0 + (now.tv_sec - start_t.tv_sec) * (double)1000.0;
+//		Printer::Print("" + std::to_string(time));
 	}
 
 

@@ -1139,34 +1139,32 @@ void DataTable::LocalMerge(TableCatalogEntry &table, ClientContext &context, Col
 		idx_t index_offset = 0;
 
 		for (idx_t i = 0; i < conflicted_row_ids.size(); i++) {
-			auto row_ids = *conflicted_row_ids[i];
-			D_ASSERT(row_ids.GetType().InternalType() == ROW_TYPE);
-			auto flat_row_ids = FlatVector::GetData<row_t>(row_ids);
-			auto combined_chunk = std::move(combined_chunks[i]);
+			auto &row_ids = conflicted_row_ids[i];
+			D_ASSERT(row_ids->GetType().InternalType() == ROW_TYPE);
+			auto flat_row_ids = FlatVector::GetData<row_t>(*row_ids);
+			auto &combined_chunk = combined_chunks[i];
 
 			for (idx_t ri = 0; ri < combined_chunk->size(); ri++) {
-				auto row_group = storage.row_groups->GetRowGroupByRowNumber(UnsafeNumericCast<idx_t>(flat_row_ids[ri]));
+				auto row_id = UnsafeNumericCast<idx_t>(flat_row_ids[ri]);
+				auto row_group = storage.row_groups->GetRowGroupByRowNumber(row_id);
 				auto rg_index = row_group->index;
-				auto c_index = ((idx_t)flat_row_ids[ri] - row_group->start) / STANDARD_VECTOR_SIZE;
-				if (c_index > 0) {
-					auto abc = 1;
-				}
+				auto c_index = ((idx_t)row_id - row_group->start) / STANDARD_VECTOR_SIZE;
 				auto key = std::make_tuple(rg_index, c_index);
 //				auto index = row_group->index;
 				if (row_group_chunks[key] == nullptr) {
 					auto data_chunk = make_uniq<DataChunk>();
 					data_chunk->Initialize(context, combined_chunk->GetTypes());
 					row_group_chunks[key] = std::move(data_chunk);
-					row_group_row_ids[key] = make_uniq<Vector>(row_ids.GetType());
-					Printer::Print("In row group id: " + std::to_string(std::get<0>(key)) + "_" +  std::to_string(std::get<1>(key)));
+					row_group_row_ids[key] = make_uniq<Vector>(row_ids->GetType());
+//					Printer::Print("In row group id: " + std::to_string(std::get<0>(key)) + "_" +  std::to_string(std::get<1>(key)));
 				}
 
-				row_group_row_ids[key]->SetValue(row_group_chunks[key]->size(), row_ids.GetValue(ri));
+				row_group_row_ids[key]->SetValue(row_group_chunks[key]->size(), row_ids->GetValue(ri));
 
 				for (idx_t ci = 0; ci < combined_chunk->ColumnCount(); ci++) {
 					//TODO: look up column id
 					auto v = combined_chunk->GetValue(ci, ri);
-					row_group_chunks[key]->SetValue(ci, ri, v);
+					row_group_chunks[key]->SetValue(ci, row_group_chunks[key]->size(), v);
 				}
 				row_group_chunks[key]->SetCardinality(row_group_chunks[key]->size() + 1);
 //				row_group_chunks[index]->SetCardinality();
