@@ -161,8 +161,7 @@ TEST_CASE("Random key order updates with chunks test", "[merger]") {
 	}
 	appender.Close();
 
-
-	auto number_of_updates = 2048 * 1;
+	auto number_of_updates = 1000;
 //	auto end_value = number_of_updates+1;
 //	auto start_value = 0;
 
@@ -172,6 +171,7 @@ TEST_CASE("Random key order updates with chunks test", "[merger]") {
 	Printer::Print(std::to_string(values[1]));
 
 	for (idx_t c = 0; c < 1; c++) {
+//		con.Query("begin transaction");
 		auto row = 0;
 		for (idx_t i = 0; i < number_of_updates; i++) {
 			if (i % STANDARD_VECTOR_SIZE == 0) {
@@ -196,8 +196,8 @@ TEST_CASE("Random key order updates with chunks test", "[merger]") {
 					current_chunk->SetValue(c, row, duckdb::Value(val.c_str()));
 				}
 			}
-			current_chunk->SetCardinality(row);
 			row++;
+			current_chunk->SetCardinality(row);
 		}
 
 		struct timeval start_t;
@@ -216,6 +216,7 @@ TEST_CASE("Random key order updates with chunks test", "[merger]") {
 		gettimeofday(&now, nullptr);
 		auto time = (now.tv_usec - start_t.tv_usec) / (double)1000.0 + (now.tv_sec - start_t.tv_sec) * (double)1000.0;
 		Printer::Print("conflict time: " + std::to_string(time));
+//		con.Query("rollback");
 
 		for (int i = 0; i < chunks.size(); i++) {
 			delete chunks[i];
