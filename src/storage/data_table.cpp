@@ -1043,7 +1043,7 @@ void DataTable::LocalMerge(TableCatalogEntry &table, ClientContext &context, Dat
 }
 
 template <bool GLOBAL>
-static idx_t DetermineInsertsAndConflicts(TableCatalogEntry &table, ClientContext &context, DataTable &storage,
+static void DetermineInsertsAndConflicts(TableCatalogEntry &table, ClientContext &context, DataTable &storage,
                                           unordered_set<column_t> &conflict_target,
                                           const vector<unique_ptr<BoundConstraint>> &bound_constraints,
                                           DataChunk &insert_chunk,
@@ -1054,8 +1054,8 @@ static idx_t DetermineInsertsAndConflicts(TableCatalogEntry &table, ClientContex
 	                                                            bound_constraints, conflict_target);
 
 	if (conflict_manager.ConflictCount() == 0) {
-		// No conflicts found, 0 updates performed
-		return 0;
+		// No conflicts found, 0 updates to add
+		return;
 	}
 
 	auto &conflicts = conflict_manager.Conflicts();
@@ -1083,29 +1083,31 @@ static idx_t DetermineInsertsAndConflicts(TableCatalogEntry &table, ClientContex
 	idx_t new_size = SelectionVector::Inverted(conflicts.Selection(), sel_vec, conflicts.Count(), insert_chunk.size());
 	insert_chunk.Slice(sel_vec, new_size);
 	insert_chunk.SetCardinality(new_size);
-
-	return 0;
 }
 
+template <bool GLOBAL>
 static void InsertNewRowsAndGenerateConflicts(TableCatalogEntry &table,
                                               ClientContext &context,
 											  ColumnDataCollection &collection,
 											  const vector<unique_ptr<BoundConstraint>> &bound_constraints,
 											  DataTable &storage,
-											  LocalAppendState &append_state,
 											  unordered_set<column_t> &conflict_target,
 											  vector<unique_ptr<Vector>> &conflicted_row_ids,
-											  vector<unique_ptr<DataChunk>> &combined_chunks) {
+											  vector<unique_ptr<DataChunk>> &combined_chunks,
+                                              vector<unique_ptr<DataChunk>> &insert_chunks) {
 
-
+	idx_t index = 0;
 	for (auto &chunk : collection.Chunks()) {
-		DataChunk insert_chunk;
-		insert_chunk.Initialize(context, chunk.GetTypes());
-		ResolveDefaults(table, chunk, insert_chunk);
-		DetermineInsertsAndConflicts<true>(table, context, storage, conflict_target, bound_constraints, insert_chunk, conflicted_row_ids, combined_chunks);
-		DetermineInsertsAndConflicts<false>(table, context, storage, conflict_target, bound_constraints, insert_chunk, conflicted_row_ids, combined_chunks);
+		if (index >= insert_chunks.size()) {
+			auto insert_chunk = make_uniq<DataChunk>();
+			insert_chunk->Initialize(context, chunk.GetTypes());
+			ResolveDefaults(table, chunk, *insert_chunk);
 
-		storage.LocalAppend(append_state, table, context, insert_chunk, true);
+			insert_chunks.push_back(std::move(insert_chunk));
+		}
+
+		DetermineInsertsAndConflicts<GLOBAL>(table, context, storage, conflict_target, bound_constraints, *insert_chunks[index], conflicted_row_ids, combined_chunks);
+		index++;
 	}
 }
 
@@ -1117,34 +1119,76 @@ static void GroupUpdatesByRowGroupChunk(ClientContext &context,
                                         map<std::tuple<idx_t, idx_t>, unique_ptr<Vector>> &row_group_row_ids) {
 
 
-	for (idx_t i = 0; i < conflicted_row_ids.size(); i++) {
-		auto &row_ids = conflicted_row_ids[i];
+	idx_t row_index = 0;
+	idx_t set_index = 0;
+	while (set_index < conflicted_row_ids.size()) {
+		auto &row_ids = conflicted_row_ids[set_index];
 		D_ASSERT(row_ids->GetType().InternalType() == ROW_TYPE);
 		auto flat_row_ids = FlatVector::GetData<row_t>(*row_ids);
-		auto &combined_chunk = combined_chunks[i];
+		auto &combined_chunk = combined_chunks[set_index];
 
-		for (idx_t ri = 0; ri < combined_chunk->size(); ri++) {
-			auto row_id = UnsafeNumericCast<idx_t>(flat_row_ids[ri]);
-			auto row_group = row_groups->GetRowGroupByRowNumber(row_id);
-			auto rg_index = row_group->index;
-			auto c_index = ((idx_t)row_id - row_group->start) / STANDARD_VECTOR_SIZE;
-			auto key = std::make_tuple(rg_index, c_index);
-			if (row_group_chunks[key] == nullptr) {
-				auto data_chunk = make_uniq<DataChunk>();
-				data_chunk->Initialize(context, combined_chunk->GetTypes());
-				row_group_chunks[key] = std::move(data_chunk);
-				row_group_row_ids[key] = make_uniq<Vector>(row_ids->GetType());
-			}
-
-			row_group_row_ids[key]->SetValue(row_group_chunks[key]->size(), row_ids->GetValue(ri));
-
-			for (idx_t ci = 0; ci < combined_chunk->ColumnCount(); ci++) {
-				//TODO: look up column id
-				auto v = combined_chunk->GetValue(ci, ri);
-				row_group_chunks[key]->SetValue(ci, row_group_chunks[key]->size(), v);
-			}
-			row_group_chunks[key]->SetCardinality(row_group_chunks[key]->size() + 1);
+		auto row_id = UnsafeNumericCast<idx_t>(flat_row_ids[row_index]);
+		auto row_group = row_groups->GetRowGroupByRowNumber(row_id);
+		auto rg_index = row_group->index;
+		auto c_index = ((idx_t)row_id - row_group->start) / STANDARD_VECTOR_SIZE;
+		auto key = std::make_tuple(rg_index, c_index);
+		if (row_group_chunks[key] == nullptr) {
+			auto data_chunk = make_uniq<DataChunk>();
+			data_chunk->Initialize(context, combined_chunk->GetTypes());
+			row_group_chunks[key] = std::move(data_chunk);
+			row_group_row_ids[key] = make_uniq<Vector>(row_ids->GetType());
 		}
+
+		row_group_row_ids[key]->SetValue(row_group_chunks[key]->size(), row_ids->GetValue(row_index));
+
+		for (idx_t ci = 0; ci < combined_chunk->ColumnCount(); ci++) {
+			//TODO: look up column id
+			auto v = combined_chunk->GetValue(ci, row_index);
+			row_group_chunks[key]->SetValue(ci, row_group_chunks[key]->size(), v);
+		}
+		row_group_chunks[key]->SetCardinality(row_group_chunks[key]->size() + 1);
+
+		row_index++;
+		if (row_index >= combined_chunk->size()) {
+			set_index++;
+			row_index = 0;
+		}
+	}
+}
+
+template <bool GLOBAL>
+static void DoMerge(TableCatalogEntry &table, DataTable &storage, shared_ptr<RowGroupCollection> &row_groups, ClientContext &context,
+                    ColumnDataCollection &collection, const vector<unique_ptr<BoundConstraint>> &bound_constraints,
+                    vector<unique_ptr<DataChunk>> &insert_chunks) {
+	map<std::tuple<idx_t, idx_t>, unique_ptr<DataChunk>> row_group_chunks;
+	map<std::tuple<idx_t, idx_t>, unique_ptr<Vector>> row_group_row_ids;
+	vector<unique_ptr<Vector>> conflicted_row_ids;
+	vector<unique_ptr<DataChunk>> combined_chunks;
+
+	auto conflict_target = ExtractConflictTarget(storage);
+	auto set_columns = GetSetColumns(storage, conflict_target);
+
+	InsertNewRowsAndGenerateConflicts<GLOBAL>(table, context, collection, bound_constraints, storage,
+	                                  conflict_target, conflicted_row_ids, combined_chunks, insert_chunks);
+
+	if (conflicted_row_ids.empty()) {
+		return;
+	}
+
+	struct timeval start_t;
+	gettimeofday(&start_t, nullptr);
+
+	GroupUpdatesByRowGroupChunk(context, row_groups, conflicted_row_ids, combined_chunks, row_group_chunks, row_group_row_ids);
+
+	struct timeval now;
+	gettimeofday(&now, nullptr);
+	auto time = (now.tv_usec - start_t.tv_usec) / (double)1000.0 + (now.tv_sec - start_t.tv_sec) * (double)1000.0;
+	Printer::Print("set values time: " + std::to_string(time));
+
+	for (auto &kvp: row_group_chunks) {
+		auto update_chunk = std::move(row_group_chunks[kvp.first]);
+		auto row_ids = std::move(row_group_row_ids[kvp.first]);
+		PerformOnConflictAction<GLOBAL>(context, *update_chunk, table, *row_ids, set_columns, bound_constraints);
 	}
 }
 
@@ -1165,40 +1209,15 @@ void DataTable::LocalMerge(TableCatalogEntry &table, ClientContext &context, Col
 		storage.FinalizeLocalAppend(append_state);
 	}
 	else {
-		map<std::tuple<idx_t, idx_t>, unique_ptr<DataChunk>> row_group_chunks;
-		map<std::tuple<idx_t, idx_t>, unique_ptr<Vector>> row_group_row_ids;
-		vector<unique_ptr<Vector>> conflicted_row_ids;
-		vector<unique_ptr<DataChunk>> combined_chunks;
 		LocalAppendState append_state;
-
 		auto &storage = table.GetStorage();
 		storage.InitializeLocalAppend(append_state, table, context, bound_constraints);
-		auto conflict_target = ExtractConflictTarget(storage);
-		auto set_columns = GetSetColumns(storage, conflict_target);
-
-
-
-		InsertNewRowsAndGenerateConflicts(table, context, collection, bound_constraints, storage, append_state,
-		                                  conflict_target, conflicted_row_ids, combined_chunks);
-
-
-
-		struct timeval start_t;
-		gettimeofday(&start_t, nullptr);
-
-		GroupUpdatesByRowGroupChunk(context, storage.row_groups, conflicted_row_ids, combined_chunks, row_group_chunks, row_group_row_ids);
-
-		struct timeval now;
-		gettimeofday(&now, nullptr);
-		auto time = (now.tv_usec - start_t.tv_usec) / (double)1000.0 + (now.tv_sec - start_t.tv_sec) * (double)1000.0;
-		Printer::Print("set values time: " + std::to_string(time));
-
-		for (auto &kvp: row_group_chunks) {
-			auto update_chunk = std::move(row_group_chunks[kvp.first]);
-			auto row_ids = std::move(row_group_row_ids[kvp.first]);
-			PerformOnConflictAction<true>(context, *update_chunk, table, *row_ids, set_columns, bound_constraints);
+		vector<unique_ptr<DataChunk>> insert_chunks;
+		DoMerge<true>(table, storage, storage.row_groups, context, collection, bound_constraints, insert_chunks);
+		DoMerge<false>(table, storage, storage.row_groups, context, collection, bound_constraints, insert_chunks);
+		for (auto &insert_chunk : insert_chunks) {
+			storage.LocalAppend(append_state, table, context, *insert_chunk, true);
 		}
-
 		storage.FinalizeLocalAppend(append_state);
 	}
 }
