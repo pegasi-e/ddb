@@ -27,6 +27,7 @@
 #include "duckdb/storage/table/scan_state.hpp"
 #include "duckdb/storage/table/update_state.hpp"
 #include "duckdb/common/exception/transaction_exception.hpp"
+#include <sys/time.h>
 
 namespace duckdb {
 
@@ -1041,17 +1042,110 @@ void DataTable::LocalMerge(TableCatalogEntry &table, ClientContext &context, Dat
 	storage.FinalizeLocalAppend(append_state);
 }
 
+template <bool GLOBAL>
+static idx_t DetermineInsertsAndConflicts(TableCatalogEntry &table, ClientContext &context, DataTable &storage,
+                                          unordered_set<column_t> &conflict_target,
+                                          const vector<unique_ptr<BoundConstraint>> &bound_constraints,
+                                          DataChunk &insert_chunk,
+                                          vector<unique_ptr<Vector>> &conflicted_row_ids,
+                                          vector<unique_ptr<DataChunk>> &combined_chunks) {
 
-static ConflictManager CreateConflictManager(bool global, TableCatalogEntry &table, ClientContext &context, DataChunk &insert_chunk,
-					 DataTable &storage, const vector<unique_ptr<BoundConstraint>> &bound_constraints, unordered_set<column_t> &conflict_target) {
-	if (global) {
-		return DetermineConflicts<true>(table, context, insert_chunk, storage,
-		                         bound_constraints, conflict_target);
+	ConflictManager conflict_manager = DetermineConflicts<GLOBAL>(table, context, insert_chunk, storage,
+	                                                            bound_constraints, conflict_target);
+
+	if (conflict_manager.ConflictCount() == 0) {
+		// No conflicts found, 0 updates performed
+		return 0;
 	}
 
-	return DetermineConflicts<false>(table, context, insert_chunk, storage,
-									bound_constraints, conflict_target);
+	auto &conflicts = conflict_manager.Conflicts();
+	auto &row_ids = conflict_manager.RowIds();
 
+	DataChunk conflict_chunk; // contains only the conflicting values
+	DataChunk scan_chunk;     // contains the original values, that caused the conflict
+	auto combined_chunk = make_uniq<DataChunk>(); // contains conflict_chunk + scan_chunk (wide)
+
+	// Filter out everything but the conflicting rows
+	conflict_chunk.Initialize(context, insert_chunk.GetTypes());
+	conflict_chunk.Reference(insert_chunk);
+	conflict_chunk.Slice(conflicts.Selection(), conflicts.Count());
+	conflict_chunk.SetCardinality(conflicts.Count());
+
+	// Splice the Input chunk and the fetched chunk together
+	CombineExistingAndInsertTuples(*combined_chunk, scan_chunk, conflict_chunk, context);
+	CheckForDuplicateTargets<GLOBAL>(row_ids, combined_chunk->size());
+
+	conflicted_row_ids.push_back(make_uniq<Vector>(row_ids));
+	combined_chunks.push_back(std::move(combined_chunk));
+
+	// Remove the conflicting tuples from the insert chunk
+	SelectionVector sel_vec(insert_chunk.size());
+	idx_t new_size = SelectionVector::Inverted(conflicts.Selection(), sel_vec, conflicts.Count(), insert_chunk.size());
+	insert_chunk.Slice(sel_vec, new_size);
+	insert_chunk.SetCardinality(new_size);
+
+	return 0;
+}
+
+static void InsertNewRowsAndGenerateConflicts(TableCatalogEntry &table,
+                                              ClientContext &context,
+											  ColumnDataCollection &collection,
+											  const vector<unique_ptr<BoundConstraint>> &bound_constraints,
+											  DataTable &storage,
+											  LocalAppendState &append_state,
+											  unordered_set<column_t> &conflict_target,
+											  vector<unique_ptr<Vector>> &conflicted_row_ids,
+											  vector<unique_ptr<DataChunk>> &combined_chunks) {
+
+
+	for (auto &chunk : collection.Chunks()) {
+		DataChunk insert_chunk;
+		insert_chunk.Initialize(context, chunk.GetTypes());
+		ResolveDefaults(table, chunk, insert_chunk);
+		DetermineInsertsAndConflicts<true>(table, context, storage, conflict_target, bound_constraints, insert_chunk, conflicted_row_ids, combined_chunks);
+		DetermineInsertsAndConflicts<false>(table, context, storage, conflict_target, bound_constraints, insert_chunk, conflicted_row_ids, combined_chunks);
+
+		storage.LocalAppend(append_state, table, context, insert_chunk, true);
+	}
+}
+
+static void GroupUpdatesByRowGroupChunk(ClientContext &context,
+                                        shared_ptr<RowGroupCollection> &row_groups,
+                                        vector<unique_ptr<Vector>> &conflicted_row_ids,
+                                        vector<unique_ptr<DataChunk>> &combined_chunks,
+                                        map<std::tuple<idx_t, idx_t>, unique_ptr<DataChunk>> &row_group_chunks,
+                                        map<std::tuple<idx_t, idx_t>, unique_ptr<Vector>> &row_group_row_ids) {
+
+
+	for (idx_t i = 0; i < conflicted_row_ids.size(); i++) {
+		auto &row_ids = conflicted_row_ids[i];
+		D_ASSERT(row_ids->GetType().InternalType() == ROW_TYPE);
+		auto flat_row_ids = FlatVector::GetData<row_t>(*row_ids);
+		auto &combined_chunk = combined_chunks[i];
+
+		for (idx_t ri = 0; ri < combined_chunk->size(); ri++) {
+			auto row_id = UnsafeNumericCast<idx_t>(flat_row_ids[ri]);
+			auto row_group = row_groups->GetRowGroupByRowNumber(row_id);
+			auto rg_index = row_group->index;
+			auto c_index = ((idx_t)row_id - row_group->start) / STANDARD_VECTOR_SIZE;
+			auto key = std::make_tuple(rg_index, c_index);
+			if (row_group_chunks[key] == nullptr) {
+				auto data_chunk = make_uniq<DataChunk>();
+				data_chunk->Initialize(context, combined_chunk->GetTypes());
+				row_group_chunks[key] = std::move(data_chunk);
+				row_group_row_ids[key] = make_uniq<Vector>(row_ids->GetType());
+			}
+
+			row_group_row_ids[key]->SetValue(row_group_chunks[key]->size(), row_ids->GetValue(ri));
+
+			for (idx_t ci = 0; ci < combined_chunk->ColumnCount(); ci++) {
+				//TODO: look up column id
+				auto v = combined_chunk->GetValue(ci, ri);
+				row_group_chunks[key]->SetValue(ci, row_group_chunks[key]->size(), v);
+			}
+			row_group_chunks[key]->SetCardinality(row_group_chunks[key]->size() + 1);
+		}
+	}
 }
 
 void DataTable::LocalMerge(TableCatalogEntry &table, ClientContext &context, ColumnDataCollection &collection, const vector<unique_ptr<BoundConstraint>> &bound_constraints) {
@@ -1071,141 +1165,41 @@ void DataTable::LocalMerge(TableCatalogEntry &table, ClientContext &context, Col
 		storage.FinalizeLocalAppend(append_state);
 	}
 	else {
+		map<std::tuple<idx_t, idx_t>, unique_ptr<DataChunk>> row_group_chunks;
+		map<std::tuple<idx_t, idx_t>, unique_ptr<Vector>> row_group_row_ids;
+		vector<unique_ptr<Vector>> conflicted_row_ids;
+		vector<unique_ptr<DataChunk>> combined_chunks;
 		LocalAppendState append_state;
+
 		auto &storage = table.GetStorage();
 		storage.InitializeLocalAppend(append_state, table, context, bound_constraints);
-
 		auto conflict_target = ExtractConflictTarget(storage);
 		auto set_columns = GetSetColumns(storage, conflict_target);
 
-		vector<unique_ptr<Vector>> conflicted_row_ids;
-		vector<unique_ptr<DataChunk>> combined_chunks;
-		for (auto &chunk : collection.Chunks()) {
-			DataChunk insert_chunk;
-			insert_chunk.Initialize(context, chunk.GetTypes());
-			ResolveDefaults(table, chunk, insert_chunk);
-			//OnConflictHandling(table, context, insert_chunk, bound_constraints);
 
-			for (idx_t g = 0; g < 2; g++) {
-				ConflictManager conflict_manager = CreateConflictManager(g == 0, table, context, insert_chunk, storage,
-				                                                          bound_constraints, conflict_target);
 
-				if (conflict_manager.ConflictCount() == 0) {
-					// No conflicts found, 0 updates performed
-					continue;
-				}
-
-				auto &conflicts = conflict_manager.Conflicts();
-				auto &row_ids = conflict_manager.RowIds();
-
-				DataChunk conflict_chunk; // contains only the conflicting values
-				DataChunk scan_chunk;     // contains the original values, that caused the conflict
-				auto combined_chunk = make_uniq<DataChunk>(); // contains conflict_chunk + scan_chunk (wide)
-
-				// Filter out everything but the conflicting rows
-				conflict_chunk.Initialize(context, insert_chunk.GetTypes());
-				conflict_chunk.Reference(insert_chunk);
-				conflict_chunk.Slice(conflicts.Selection(), conflicts.Count());
-				conflict_chunk.SetCardinality(conflicts.Count());
-
-				// Splice the Input chunk and the fetched chunk together
-				CombineExistingAndInsertTuples(*combined_chunk, scan_chunk, conflict_chunk, context);
-				if (g == 0) {
-					CheckForDuplicateTargets<true>(row_ids, combined_chunk->size());
-//					PerformOnConflictAction<true>(context, combined_chunk, table, row_ids, set_columns,
-//					                              bound_constraints);
-				}
-				else {
-					CheckForDuplicateTargets<false>(row_ids, combined_chunk->size());
-
-//					PerformOnConflictAction<false>(context, combined_chunk, table, row_ids, set_columns,
-//					                              bound_constraints);
-				}
-				conflicted_row_ids.push_back(make_uniq<Vector>(row_ids));
-				combined_chunks.push_back(std::move(combined_chunk));
-
-				// Remove the conflicting tuples from the insert chunk
-				SelectionVector sel_vec(insert_chunk.size());
-				idx_t new_size = SelectionVector::Inverted(conflicts.Selection(), sel_vec, conflicts.Count(), insert_chunk.size());
-				insert_chunk.Slice(sel_vec, new_size);
-				insert_chunk.SetCardinality(new_size);
-			}
-
-			storage.LocalAppend(append_state, table, context, insert_chunk, true);
-		}
-
-		map<std::tuple<idx_t, idx_t>, unique_ptr<DataChunk>> row_group_chunks;
-		map<std::tuple<idx_t, idx_t>, unique_ptr<Vector>> row_group_row_ids;
-		idx_t index_offset = 0;
-
-		for (idx_t i = 0; i < conflicted_row_ids.size(); i++) {
-			auto &row_ids = conflicted_row_ids[i];
-			D_ASSERT(row_ids->GetType().InternalType() == ROW_TYPE);
-			auto flat_row_ids = FlatVector::GetData<row_t>(*row_ids);
-			auto &combined_chunk = combined_chunks[i];
-
-			for (idx_t ri = 0; ri < combined_chunk->size(); ri++) {
-				auto row_id = UnsafeNumericCast<idx_t>(flat_row_ids[ri]);
-				auto row_group = storage.row_groups->GetRowGroupByRowNumber(row_id);
-				auto rg_index = row_group->index;
-				auto c_index = ((idx_t)row_id - row_group->start) / STANDARD_VECTOR_SIZE;
-				auto key = std::make_tuple(rg_index, c_index);
-//				auto index = row_group->index;
-				if (row_group_chunks[key] == nullptr) {
-					auto data_chunk = make_uniq<DataChunk>();
-					data_chunk->Initialize(context, combined_chunk->GetTypes());
-					row_group_chunks[key] = std::move(data_chunk);
-					row_group_row_ids[key] = make_uniq<Vector>(row_ids->GetType());
-//					Printer::Print("In row group id: " + std::to_string(std::get<0>(key)) + "_" +  std::to_string(std::get<1>(key)));
-				}
-
-				row_group_row_ids[key]->SetValue(row_group_chunks[key]->size(), row_ids->GetValue(ri));
-
-				for (idx_t ci = 0; ci < combined_chunk->ColumnCount(); ci++) {
-					//TODO: look up column id
-					auto v = combined_chunk->GetValue(ci, ri);
-					row_group_chunks[key]->SetValue(ci, row_group_chunks[key]->size(), v);
-				}
-				row_group_chunks[key]->SetCardinality(row_group_chunks[key]->size() + 1);
-//				row_group_chunks[index]->SetCardinality();
-			}
-//			auto row_id = UnsafeNumericCast<idx_t>(flat_row_ids[i]);
-//			Printer::Print("index: " + std::to_string(index));
-//			auto chunkIndex = row_id / STANDARD_VECTOR_SIZE;
+		InsertNewRowsAndGenerateConflicts(table, context, collection, bound_constraints, storage, append_state,
+		                                  conflict_target, conflicted_row_ids, combined_chunks);
 
 
 
-//			PerformOnConflictAction<true>(context, *combined_chunk, table, row_ids, set_columns, bound_constraints);
-		}
+		struct timeval start_t;
+		gettimeofday(&start_t, nullptr);
+
+		GroupUpdatesByRowGroupChunk(context, storage.row_groups, conflicted_row_ids, combined_chunks, row_group_chunks, row_group_row_ids);
+
+		struct timeval now;
+		gettimeofday(&now, nullptr);
+		auto time = (now.tv_usec - start_t.tv_usec) / (double)1000.0 + (now.tv_sec - start_t.tv_sec) * (double)1000.0;
+		Printer::Print("set values time: " + std::to_string(time));
 
 		for (auto &kvp: row_group_chunks) {
-//		for (idx_t  i = 0; i < row_group_chunks.size(); i++) {
 			auto update_chunk = std::move(row_group_chunks[kvp.first]);
 			auto row_ids = std::move(row_group_row_ids[kvp.first]);
 			PerformOnConflictAction<true>(context, *update_chunk, table, *row_ids, set_columns, bound_constraints);
 		}
 
 		storage.FinalizeLocalAppend(append_state);
-//		LocalAppendState append_state;
-//		auto &storage = table.GetStorage();
-//		storage.InitializeLocalAppend(append_state, table, context, bound_constraints);
-//
-//		vector<DataChunk *> chunks;
-//		for(auto &chunk : collection.Chunks()) {
-//			auto insert_chunk = new DataChunk();
-//			insert_chunk->Initialize(collection.GetAllocator(), chunk.GetTypes());
-//
-//			ResolveDefaults(table, chunk, *insert_chunk);
-//			chunks.push_back(insert_chunk);
-//		}
-//
-//		OnConflictHandling(table, context, chunks, bound_constraints);
-//		for (auto &insert_chunk : chunks) {
-//			storage.LocalAppend(append_state, table, context, *insert_chunk, true);
-//			delete insert_chunk;
-//		}
-//
-//		storage.FinalizeLocalAppend(append_state);
 	}
 }
   
