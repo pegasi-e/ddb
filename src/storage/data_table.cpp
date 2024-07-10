@@ -27,7 +27,6 @@
 #include "duckdb/storage/table/scan_state.hpp"
 #include "duckdb/storage/table/update_state.hpp"
 #include "duckdb/common/exception/transaction_exception.hpp"
-#include <algorithm>
 
 namespace duckdb {
 

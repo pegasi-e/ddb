@@ -179,7 +179,7 @@ void Connection::Append(TableDescription &description, ColumnDataCollection &col
 }
 
 void Connection::Merge(TableDescription &description, DataChunk &chunk) {
-        context->Merge(description, chunk);
+	context->Merge(description, chunk);
 }
 
 shared_ptr<Relation> Connection::Table(const string &table_name) {
