@@ -1037,7 +1037,7 @@ void ART::CheckConstraintsForChunk(DataChunk &input, ConflictManager &conflict_m
 
 	// first resolve the expressions for the index
 	DataChunk expression_chunk;
-	expression_chunk.Initialize(Allocator::DefaultAllocator(), logical_types);
+	expression_chunk.Initialize(Allocator::DefaultAllocator(), logical_types, input.size());
 	ExecuteExpressions(input, expression_chunk);
 
 	// generate the keys for the given input

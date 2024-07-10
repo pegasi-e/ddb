@@ -27,7 +27,6 @@
 #include "duckdb/storage/table/scan_state.hpp"
 #include "duckdb/storage/table/update_state.hpp"
 #include "duckdb/common/exception/transaction_exception.hpp"
-#include <sys/time.h>
 #include <algorithm>
 
 namespace duckdb {
@@ -930,38 +929,6 @@ static vector<PhysicalIndex> GetSetColumns(DataTable &data_table, unordered_set<
 }
 
 template <bool GLOBAL>
-static ConflictManager DetermineConflicts(TableCatalogEntry &table, ClientContext &context, DataChunk &insert_chunk,
-                                   DataTable &data_table, const vector<unique_ptr<BoundConstraint>> &bound_constraints,
-								   unordered_set<column_t> &conflict_target) {
-	// The column ids to apply the ON CONFLICT on
-//	auto conflict_target = ExtractConflictTarget(data_table);
-//	vector<PhysicalIndex> set_columns = GetSetColumns(data_table, conflict_target);
-	auto &local_storage = LocalStorage::Get(context, data_table.db);
-
-	// We either want to do nothing, or perform an update when conflicts arise
-	ConflictInfo conflict_info(conflict_target);
-	ConflictManager conflict_manager(VerifyExistenceType::APPEND, insert_chunk.size(), &conflict_info);
-
-	if (GLOBAL) {
-		auto constraint_state = data_table.InitializeConstraintState(table, bound_constraints);
-		data_table.VerifyAppendConstraints(*constraint_state, context, insert_chunk, &conflict_manager);
-	} else {
-		DataTable::VerifyUniqueIndexes(local_storage.GetIndexes(data_table), context, insert_chunk, &conflict_manager);
-	}
-	conflict_manager.Finalize();
-//	if (conflict_manager.ConflictCount() == 0) {
-//		// No conflicts found, 0 updates performed
-////		return 0;
-//		return ManagedSelection(0, false);
-//	}
-
-	return conflict_manager;
-
-
-//	return updated_tuples;
-}
-
-template <bool GLOBAL>
 static idx_t HandleInsertConflicts(TableCatalogEntry &table, ClientContext &context, DataChunk &insert_chunk, DataTable &data_table, const vector<unique_ptr<BoundConstraint>> &bound_constraints) {
 	// The column ids to apply the ON CONFLICT on
 	auto conflict_target = ExtractConflictTarget(data_table);
@@ -1212,21 +1179,17 @@ static idx_t OnConflictHandling(TableCatalogEntry &table, ClientContext &context
 }
 
 static void AppendInsertChunks(TableCatalogEntry &table, ClientContext &context, DataTable &storage, DataChunk &insert_chunk, LocalAppendState &append_state) {
-	Printer::Print("total inserts: " + std::to_string(insert_chunk.size()));
 	idx_t insert_count = 0;
 	auto standard_chunk_count = (idx_t) ceil((double) insert_chunk.size() / STANDARD_VECTOR_SIZE);
 	for (idx_t i = 0; i < standard_chunk_count; i++) {
 		auto chunk_size = std::min<idx_t>(insert_chunk.size() - insert_count, STANDARD_VECTOR_SIZE);
 		auto offset = i * STANDARD_VECTOR_SIZE;
-		Printer::Print("offset: " + std::to_string(offset));
-		Printer::Print("size: " + std::to_string(chunk_size));
-		Printer::Print("insert count: " + std::to_string(insert_count));
 		DataChunk data_chunk;
 		data_chunk.Initialize(context, insert_chunk.GetTypes());
 		data_chunk.Reference(insert_chunk);
 		data_chunk.Slice(offset, chunk_size);
 
-		storage.LocalAppend(append_state, table, context, insert_chunk, true);
+		storage.LocalAppend(append_state, table, context, data_chunk, true);
 		insert_count += chunk_size;
 	}
 }
@@ -1239,6 +1202,7 @@ void DataTable::LocalMerge(TableCatalogEntry &table, ClientContext &context, Col
 	DataChunk insert_chunk;
 	insert_chunk.Initialize(context, collection.Types(), collection.Count());
 	for (auto &chunk : collection.Chunks()) {
+		//Ideally appending a reference would be better than this copy, but for now this works fairly well.
 		insert_chunk.Append(chunk, false);
 	}
 

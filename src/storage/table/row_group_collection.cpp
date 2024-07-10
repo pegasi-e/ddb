@@ -15,8 +15,6 @@
 #include "duckdb/execution/task_error_manager.hpp"
 #include "duckdb/storage/table/column_checkpoint_state.hpp"
 #include "duckdb/execution/index/bound_index.hpp"
-#include <sys/time.h>
-
 
 namespace duckdb {
 
@@ -493,245 +491,41 @@ idx_t RowGroupCollection::Delete(TransactionData transaction, DataTable &table, 
 	return delete_count;
 }
 
-struct OrderedUpdate {
-	explicit OrderedUpdate(DataChunk &updates) {
-		sel = SelectionVector(updates.size() + 1);
-		//		data_chunk = new duckdb::DataChunk();
-		//		data_chunk->Initialize(duckdb::Allocator::DefaultAllocator(), updates.GetTypes(), updates.size());
-	}
-
-	~OrderedUpdate() {
-		//		delete data_chunk;
-	}
-
-	SelectionVector sel;
-	vector<row_t> ids;
-	//	duckdb::DataChunk *data_chunk;
-};
-
-static void UpdateGroup(
-    TransactionData &transaction, const vector<PhysicalIndex> &column_ids, DataChunk &updates, DataChunk &data_chunk,
-    OrderedUpdate *ordered_update, const shared_ptr<RowGroupSegmentTree> &row_groups, TableStatistics &stats) {
-	//	auto ordered_update = kvp.second;
-	auto update_ids = ordered_update->ids;
-
-	data_chunk.Reference(updates);
-	//		SelectionVector sel(update_ids.size() + 1);
-	//		for (idx_t i = 0; i < update_ids.size(); i++) {
-	//			//		auto row_group = row_groups->GetSegment(UnsafeNumericCast<idx_t>(ids[i]));
-	//			sel.set_index(i, UnsafeNumericCast<idx_t>(update_ids[i]));
-	//		}
-
-	for (idx_t i = 0; i < updates.ColumnCount(); i++) {
-		//TODO: look up column id
-		data_chunk.data[i].Slice(ordered_update->sel, update_ids.size());
-	}
-
-	auto row_group = row_groups->GetSegment(UnsafeNumericCast<idx_t>(update_ids[0]));
-	row_group->Update(transaction, data_chunk, &update_ids[0], 0, update_ids.size(), column_ids);
-
-	auto l = stats.GetLock();
-	for (idx_t i = 0; i < column_ids.size(); i++) {
-		auto column_id = column_ids[i];
-		stats.MergeStats(*l, column_id.index, *row_group->GetStatistics(column_id.index));
-	}
-}
-
 //===--------------------------------------------------------------------===//
 // Update
 //===--------------------------------------------------------------------===//
 void RowGroupCollection::Update(TransactionData transaction, row_t *ids, const vector<PhysicalIndex> &column_ids,
                                 DataChunk &updates) {
 
-	if (1) {
-		idx_t pos = 0;
-		do {
-			idx_t start = pos;
-			auto row_group = row_groups->GetSegment(UnsafeNumericCast<idx_t>(ids[pos]));
-			row_t base_id =
-			    UnsafeNumericCast<row_t>(row_group->start + ((UnsafeNumericCast<idx_t>(ids[pos]) - row_group->start) /
-			                                                 STANDARD_VECTOR_SIZE * STANDARD_VECTOR_SIZE));
-			auto max_id = MinValue<row_t>(base_id + STANDARD_VECTOR_SIZE,
-			                              UnsafeNumericCast<row_t>(row_group->start + row_group->count));
-			for (pos++; pos < updates.size(); pos++) {
-				D_ASSERT(ids[pos] >= 0);
-				// check if this id still belongs to this vector in this row group
-				if (ids[pos] < base_id) {
-					// id is before vector start -> it does not
-					break;
-				}
-				if (ids[pos] >= max_id) {
-					// id is after the maximum id in this vector -> it does not
-					break;
-				}
+	idx_t pos = 0;
+	do {
+		idx_t start = pos;
+		auto row_group = row_groups->GetSegment(UnsafeNumericCast<idx_t>(ids[pos]));
+		row_t base_id =
+			UnsafeNumericCast<row_t>(row_group->start + ((UnsafeNumericCast<idx_t>(ids[pos]) - row_group->start) /
+														 STANDARD_VECTOR_SIZE * STANDARD_VECTOR_SIZE));
+		auto max_id = MinValue<row_t>(base_id + STANDARD_VECTOR_SIZE,
+									  UnsafeNumericCast<row_t>(row_group->start + row_group->count));
+		for (pos++; pos < updates.size(); pos++) {
+			D_ASSERT(ids[pos] >= 0);
+			// check if this id still belongs to this vector in this row group
+			if (ids[pos] < base_id) {
+				// id is before vector start -> it does not
+				break;
 			}
-			row_group->Update(transaction, updates, ids, start, pos - start, column_ids);
-
-			auto l = stats.GetLock();
-			for (idx_t i = 0; i < column_ids.size(); i++) {
-				auto column_id = column_ids[i];
-				stats.MergeStats(*l, column_id.index, *row_group->GetStatistics(column_id.index));
+			if (ids[pos] >= max_id) {
+				// id is after the maximum id in this vector -> it does not
+				break;
 			}
-		} while (pos < updates.size());
-
-		//	struct OrderedUpdate {
-		//		explicit OrderedUpdate(DataChunk &updates) {
-		//			data_chunk = new duckdb::DataChunk();
-		//		    data_chunk->Initialize(duckdb::Allocator::DefaultAllocator(), updates.GetTypes(), updates.size());
-		//		}
-		//
-		//		~OrderedUpdate() {
-		//			delete data_chunk;
-		//		}
-		//
-		//		vector<row_t> ids;
-		//		duckdb::DataChunk *data_chunk;
-		//	};
-		//
-		//	map<std::tuple<idx_t, idx_t>, OrderedUpdate *> grouped_updates;
-		//	for (idx_t i = 0; i < updates.size(); i++) {
-		//		auto row_group = row_groups->GetSegment(UnsafeNumericCast<idx_t>(ids[i]));
-		//		auto rg_index = row_group->index;
-		//		auto c_index = ((idx_t)ids[i] - row_group->start) / STANDARD_VECTOR_SIZE;
-		//		auto key = std::make_tuple(rg_index, c_index);
-		//
-		//		if (grouped_updates.find(key) == grouped_updates.end()) {
-		//			grouped_updates[key] = new OrderedUpdate(updates);
-		//		}
-		//
-		//		auto ordered_update = grouped_updates[key];
-		//
-		//		ordered_update->ids.push_back(ids[i]);
-		////		SelectionVector sel(1);
-		////		sel.set_index(0, i);
-		////		ordered_update->data_chunk->Slice(updates, sel, 1);
-		////		ordered_update->data_chunk->Slice( sel, 1);
-		////		updates.Slice(*ordered_update->data_chunk, sel, 1, i);
-		////		updates.Slice(sel, 1);
-		////		updates.Split(*ordered_update->data_chunk, 1);
-		////		Printer::Print("");
-		////		ordered_update->data_chunk->Reference(updates);
-		//
-		//		for (idx_t c = 0; c < updates.ColumnCount(); c++) {
-		//			// TODO: Eliminate this copy!
-		//			ordered_update->data_chunk->SetValue(c, ordered_update->ids.size() - 1, updates.GetValue(c, i));
-		////			ordered_update->data_chunk->Reference(updates);
-		//		}
-		//	}
-		//
-		//	for (auto kvp : grouped_updates) {
-		//		auto ordered_update = kvp.second;
-		//		auto update_ids = ordered_update->ids;
-		//
-		//		auto row_group = row_groups->GetSegment(UnsafeNumericCast<idx_t>(update_ids[0]));
-		//		row_group->Update(transaction, *ordered_update->data_chunk, &update_ids[0], 0, update_ids.size(), column_ids);
-		//
-		//		auto l = stats.GetLock();
-		//		for (idx_t i = 0; i < column_ids.size(); i++) {
-		//			auto column_id = column_ids[i];
-		//			stats.MergeStats(*l, column_id.index, *row_group->GetStatistics(column_id.index));
-		//		}
-		//
-		//		delete grouped_updates[kvp.first];
-		//		grouped_updates[kvp.first] = nullptr;
-		//	}
-	} else {
-		// new stuff!
-//		Printer::Print("update size: " + std::to_string(updates.size()));
-
-		map<std::tuple<idx_t, idx_t>, OrderedUpdate *> grouped_updates;
-		grouped_updates.clear();
-		for (idx_t i = 0; i < updates.size(); i++) {
-			auto row_group = row_groups->GetSegment(UnsafeNumericCast<idx_t>(ids[i]));
-			auto rg_index = row_group->index;
-			auto c_index = ((idx_t)ids[i] - row_group->start) / STANDARD_VECTOR_SIZE;
-			auto key = std::make_tuple(rg_index, c_index);
-
-			if (grouped_updates.find(key) == grouped_updates.end()) {
-				grouped_updates[key] = new OrderedUpdate(updates);
-			}
-
-			auto ordered_update = grouped_updates[key];
-
-			ordered_update->ids.push_back(ids[i]);
-			ordered_update->sel.set_index(ordered_update->ids.size() - 1, i);
-
-			//		SelectionVector sel(1);
-			//		sel.set_index(0, i);
-			//		ordered_update->data_chunk->Slice(updates, sel, 1);
-			//		ordered_update->data_chunk->Slice( sel, 1);
-			//		updates.Slice(*ordered_update->data_chunk, sel, 1, i);
-			//		updates.Slice(sel, 1);
-			//		updates.Split(*ordered_update->data_chunk, 1);
-			//		Printer::Print("");
-			//		ordered_update->data_chunk->Reference(updates);
-			//
-			//				for (idx_t c = 0; c < updates.ColumnCount(); c++) {
-			//					// TODO: Eliminate this copy!
-			//					ordered_update->data_chunk->SetValue(c, i, updates.GetValue(c, i));
-			//				}
-
 		}
+		row_group->Update(transaction, updates, ids, start, pos - start, column_ids);
 
-
-
-//		struct timeval start_t;
-//		gettimeofday(&start_t, nullptr);
-//		Printer::Print("number_of_ordered_updates: " + std::to_string(grouped_updates.size()));
-
-		//	vector<std::thread> threads;
-		//	threads.reserve(grouped_updates.size());
-		for (auto kvp : grouped_updates) {
-			duckdb::DataChunk data_chunk;
-			data_chunk.Initialize(duckdb::Allocator::DefaultAllocator(), updates.GetTypes(), updates.size());
-			data_chunk.Reference(updates);
-
-			for (idx_t i = 0; i < updates.ColumnCount(); i++) {
-				//TODO: look up column id
-				data_chunk.data[i].Slice(kvp.second->sel, kvp.second->ids.size());
-			}
-			data_chunk.SetCardinality(kvp.second->ids.size());
-
-			auto update_ids = kvp.second->ids;
-
-			auto row_group = row_groups->GetSegment(UnsafeNumericCast<idx_t>(update_ids[0]));
-			row_group->Update(transaction, data_chunk, &update_ids[0], 0, update_ids.size(), column_ids);
-
-			auto l = stats.GetLock();
-			for (idx_t i = 0; i < column_ids.size(); i++) {
-				auto column_id = column_ids[i];
-				stats.MergeStats(*l, column_id.index, *row_group->GetStatistics(column_id.index));
-			}
-
-			delete grouped_updates[kvp.first];
-			grouped_updates[kvp.first] = nullptr;
-
-			//		UpdateGroup2(&transaction, &column_ids, &updates, &data_chunk, kvp.second, &row_groups, &stats);
-
-			//		threads.emplace_back(UpdateGroup2, &transaction, &column_ids, &updates, &data_chunk, kvp.second, &row_groups, &stats);
+		auto l = stats.GetLock();
+		for (idx_t i = 0; i < column_ids.size(); i++) {
+			auto column_id = column_ids[i];
+			stats.MergeStats(*l, column_id.index, *row_group->GetStatistics(column_id.index));
 		}
-
-		//	for (auto &thread : threads) {
-		//		thread.join();
-		//	}
-
-		//	Printer::Print("after join");
-		//	for (auto kvp : grouped_updates) {
-		//
-		////		UpdateGroup(transaction, column_ids, updates, data_chunk, kvp.second, row_groups, stats);
-		//
-		//		delete grouped_updates[kvp.first];
-		//		grouped_updates[kvp.first] = nullptr;
-		//	}
-
-//		struct timeval now;
-//		gettimeofday(&now, nullptr);
-//		auto time = (now.tv_usec - start_t.tv_usec) / (double)1000.0 + (now.tv_sec - start_t.tv_sec) * (double)1000.0;
-//		Printer::Print("" + std::to_string(time));
-	}
-
-
-
+	} while (pos < updates.size());
 }
 
 void RowGroupCollection::RemoveFromIndexes(TableIndexList &indexes, Vector &row_identifiers, idx_t count) {
