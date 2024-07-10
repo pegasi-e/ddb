@@ -53,9 +53,10 @@ jobs:
       DEBUG_STACKTRACE: 1
       FORCE_WARN_UNUSED: 1
       DUCKDB_RUN_PARALLEL_CSV_TESTS: 1
+      ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
 
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v3
       with:
         fetch-depth: 0
 
