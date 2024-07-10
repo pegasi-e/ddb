@@ -186,6 +186,8 @@ public:
 	DUCKDB_API Value GetValue(idx_t index) const;
 	//! Sets the [index] element of the Vector to the specified Value.
 	DUCKDB_API void SetValue(idx_t index, const Value &val);
+	//! References the [index] element of the Vector to the specified Value.
+	DUCKDB_API void ReferenceValue(idx_t index, const Vector &other, idx_t offset);
 
 	inline void SetAuxiliary(buffer_ptr<VectorBuffer> new_buffer) {
 		auxiliary = std::move(new_buffer);

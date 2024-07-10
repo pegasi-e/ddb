@@ -20,37 +20,6 @@
 
 namespace duckdb {
 
-struct OrderedUpdate {
-	explicit OrderedUpdate(DataChunk &updates) {
-		sel = SelectionVector(updates.size() + 1);
-//		data_chunk = new duckdb::DataChunk();
-//		data_chunk->Initialize(duckdb::Allocator::DefaultAllocator(), updates.GetTypes(), updates.size());
-	}
-
-	~OrderedUpdate() {
-//		delete data_chunk;
-	}
-
-	SelectionVector sel;
-	vector<row_t> ids;
-//	duckdb::DataChunk *data_chunk;
-};
-
-//static void UpdateGroup2(TransactionData *transaction, const vector<PhysicalIndex> *column_ids, DataChunk *updates,
-//                         DataChunk *data_chunk, OrderedUpdate *ordered_update, shared_ptr<RowGroupSegmentTree> *row_groups, TableStatistics *stats) {
-//	auto update_ids = ordered_update->ids;
-//
-//	auto row_group = (*row_groups)->GetSegment(UnsafeNumericCast<idx_t>(update_ids[0]));
-//	row_group->Update(*transaction, *data_chunk, &update_ids[0], 0, update_ids.size(), *column_ids);
-//
-//	auto l = stats->GetLock();
-//	for (idx_t i = 0; i < column_ids->size(); i++) {
-//		auto column_id = (*column_ids)[i];
-//		stats->MergeStats(*l, column_id.index, *row_group->GetStatistics(column_id.index));
-//	}
-//
-//}
-
 //===--------------------------------------------------------------------===//
 // Row Group Segment Tree
 //===--------------------------------------------------------------------===//
@@ -524,6 +493,22 @@ idx_t RowGroupCollection::Delete(TransactionData transaction, DataTable &table, 
 	return delete_count;
 }
 
+struct OrderedUpdate {
+	explicit OrderedUpdate(DataChunk &updates) {
+		sel = SelectionVector(updates.size() + 1);
+		//		data_chunk = new duckdb::DataChunk();
+		//		data_chunk->Initialize(duckdb::Allocator::DefaultAllocator(), updates.GetTypes(), updates.size());
+	}
+
+	~OrderedUpdate() {
+		//		delete data_chunk;
+	}
+
+	SelectionVector sel;
+	vector<row_t> ids;
+	//	duckdb::DataChunk *data_chunk;
+};
+
 static void UpdateGroup(
     TransactionData &transaction, const vector<PhysicalIndex> &column_ids, DataChunk &updates, DataChunk &data_chunk,
     OrderedUpdate *ordered_update, const shared_ptr<RowGroupSegmentTree> &row_groups, TableStatistics &stats) {
@@ -564,8 +549,10 @@ void RowGroupCollection::Update(TransactionData transaction, row_t *ids, const v
 			idx_t start = pos;
 			auto row_group = row_groups->GetSegment(UnsafeNumericCast<idx_t>(ids[pos]));
 			row_t base_id =
-				UnsafeNumericCast<row_t>(row_group->start + ((UnsafeNumericCast<idx_t>(ids[pos]) - row_group->start) / 		                                                 STANDARD_VECTOR_SIZE * STANDARD_VECTOR_SIZE)); 		auto max_id = MinValue<row_t>(base_id + STANDARD_VECTOR_SIZE,
-										  UnsafeNumericCast<row_t>(row_group->start + row_group->count));
+			    UnsafeNumericCast<row_t>(row_group->start + ((UnsafeNumericCast<idx_t>(ids[pos]) - row_group->start) /
+			                                                 STANDARD_VECTOR_SIZE * STANDARD_VECTOR_SIZE));
+			auto max_id = MinValue<row_t>(base_id + STANDARD_VECTOR_SIZE,
+			                              UnsafeNumericCast<row_t>(row_group->start + row_group->count));
 			for (pos++; pos < updates.size(); pos++) {
 				D_ASSERT(ids[pos] >= 0);
 				// check if this id still belongs to this vector in this row group

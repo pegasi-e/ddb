@@ -327,6 +327,7 @@ private:
 		dtime_tz_t timetz;
 		timestamp_t timestamp;
 		interval_t interval;
+		string_t string;
 	} value_; // NOLINT
 
 	shared_ptr<ExtraValueInfo> value_info_; // NOLINT
