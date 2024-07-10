@@ -502,10 +502,10 @@ void RowGroupCollection::Update(TransactionData transaction, row_t *ids, const v
 		idx_t start = pos;
 		auto row_group = row_groups->GetSegment(UnsafeNumericCast<idx_t>(ids[pos]));
 		row_t base_id =
-			UnsafeNumericCast<row_t>(row_group->start + ((UnsafeNumericCast<idx_t>(ids[pos]) - row_group->start) /
-														 STANDARD_VECTOR_SIZE * STANDARD_VECTOR_SIZE));
+		    UnsafeNumericCast<row_t>(row_group->start + ((UnsafeNumericCast<idx_t>(ids[pos]) - row_group->start) /
+		                                                 STANDARD_VECTOR_SIZE * STANDARD_VECTOR_SIZE));
 		auto max_id = MinValue<row_t>(base_id + STANDARD_VECTOR_SIZE,
-									  UnsafeNumericCast<row_t>(row_group->start + row_group->count));
+		                              UnsafeNumericCast<row_t>(row_group->start + row_group->count));
 		for (pos++; pos < updates.size(); pos++) {
 			D_ASSERT(ids[pos] >= 0);
 			// check if this id still belongs to this vector in this row group

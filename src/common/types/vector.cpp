@@ -385,25 +385,6 @@ void Vector::Resize(idx_t current_size, idx_t new_size) {
 	}
 }
 
-void Vector::ReferenceValue(idx_t index, const Vector &other, idx_t offset) {
-	auto physical_type = GetType().InternalType();
-	if (physical_type == PhysicalType::VARCHAR && other.GetType().InternalType() == PhysicalType::VARCHAR && GetVectorType() != VectorType::DICTIONARY_VECTOR) {
-		auto is_valid = other.validity.RowIsValid(offset);
-		validity.EnsureWritable();
-		validity.Set(index, other.validity.GetValidityEntry(offset));
-
-		if (!is_valid) {
-			// for structs and arrays we still need to set the child-entries to NULL
-			// so we do not bail out yet
-			return;
-		}
-
-		reinterpret_cast<string_t *>(data)[index] = reinterpret_cast<string_t *>(other.data)[offset];
-	} else {
-		SetValue(index, other.GetValue(offset));
-	}
-}
-
 void Vector::SetValue(idx_t index, const Value &val) {
 	if (GetVectorType() == VectorType::DICTIONARY_VECTOR) {
 		// dictionary: apply dictionary and forward to child

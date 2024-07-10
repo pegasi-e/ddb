@@ -93,10 +93,6 @@ void DataChunk::SetValue(idx_t col_idx, idx_t index, const Value &val) {
 	data[col_idx].SetValue(index, val);
 }
 
-void DataChunk::ReferenceValue(idx_t col_idx, idx_t index, const DataChunk &other, idx_t other_index) {
-	data[col_idx].ReferenceValue(index, other.data[col_idx], other_index);
-}
-
 bool DataChunk::AllConstant() const {
 	for (auto &v : data) {
 		if (v.GetVectorType() != VectorType::CONSTANT_VECTOR) {

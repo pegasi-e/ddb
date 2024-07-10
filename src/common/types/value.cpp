@@ -1386,9 +1386,7 @@ string Value::GetValueUnsafe() const {
 
 template <>
 DUCKDB_API string_t Value::GetValueUnsafe() const {
-//	auto v = value_info_->Get<string_t>();//std::move(reinterpret_cast<shared_ptr<StringValueInfo>>(this->value_info_));
-//	return string_t(StringValue::Get(*this));
-	return value_.string;
+	return string_t(StringValue::Get(*this));
 }
 
 template <>
