@@ -111,7 +111,9 @@ protected:
 
 class Appender : public BaseAppender {
 public:
+	DUCKDB_API Appender(Connection &con, const string &schema_name, const string &table_name, const vector<LogicalType> &logical_types);
 	DUCKDB_API Appender(Connection &con, const string &schema_name, const string &table_name);
+	DUCKDB_API Appender(Connection &con, const string &table_name, const vector<LogicalType> &logical_types);
 	DUCKDB_API Appender(Connection &con, const string &table_name);
 	DUCKDB_API ~Appender() override;
 
@@ -125,7 +127,9 @@ protected:
 
 class Merger : public Appender {
 public:
+	DUCKDB_API Merger(Connection &con, const string &schema_name, const string &table_name, const vector<LogicalType> &types);
 	DUCKDB_API Merger(Connection &con, const string &schema_name, const string &table_name);
+	DUCKDB_API Merger(Connection &con, const string &table_name, const vector<LogicalType> &types);
 	DUCKDB_API Merger(Connection &con, const string &table_name);
 	DUCKDB_API ~Merger() override;
   protected:
