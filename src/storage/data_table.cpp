@@ -660,7 +660,7 @@ bool HasUniqueIndexes(TableIndexList &list) {
 }
 
 void DataTable::VerifyUniqueIndexes(TableIndexList &indexes, ClientContext &context, DataChunk &chunk,
-                                    optional_ptr<ConflictManager> conflict_manager) {
+                                    optional_ptr<ConflictManager> conflict_manager, bool allow_non_standard_vector_sizes) {
 	//! check whether or not the chunk can be inserted into the indexes
 	if (!conflict_manager) {
 		// Only need to verify that no unique constraints are violated
@@ -669,7 +669,7 @@ void DataTable::VerifyUniqueIndexes(TableIndexList &indexes, ClientContext &cont
 				return false;
 			}
 			D_ASSERT(index.IsBound());
-			index.Cast<BoundIndex>().VerifyAppend(chunk);
+			index.Cast<BoundIndex>().VerifyAppend(chunk, allow_non_standard_vector_sizes);
 			return false;
 		});
 		return;
@@ -696,7 +696,7 @@ void DataTable::VerifyUniqueIndexes(TableIndexList &indexes, ClientContext &cont
 		}
 		if (conflict_info.ConflictTargetMatches(index)) {
 			D_ASSERT(index.IsBound());
-			index.Cast<BoundIndex>().VerifyAppend(chunk, *conflict_manager);
+			index.Cast<BoundIndex>().VerifyAppend(chunk, *conflict_manager, true);
 			checked_indexes.insert(&index);
 		}
 		return false;
@@ -720,7 +720,7 @@ void DataTable::VerifyUniqueIndexes(TableIndexList &indexes, ClientContext &cont
 }
 
 void DataTable::VerifyAppendConstraints(ConstraintState &state, ClientContext &context, DataChunk &chunk,
-                                        optional_ptr<ConflictManager> conflict_manager) {
+                                        optional_ptr<ConflictManager> conflict_manager, bool allow_non_standard_vector_sizes) {
 	auto &table = state.table;
 	if (table.HasGeneratedColumns()) {
 		// Verify that the generated columns expression work with the inserted values
@@ -927,70 +927,7 @@ static vector<PhysicalIndex> GetSetColumns(DataTable &data_table, unordered_set<
 	return set_columns;
 }
 
-template <bool GLOBAL>
-static idx_t HandleInsertConflicts(TableCatalogEntry &table, ClientContext &context, DataChunk &insert_chunk, DataTable &data_table, const vector<unique_ptr<BoundConstraint>> &bound_constraints) {
-	// The column ids to apply the ON CONFLICT on
-	auto conflict_target = ExtractConflictTarget(data_table);
-	vector<PhysicalIndex> set_columns = GetSetColumns(data_table, conflict_target);
-  	auto &local_storage = LocalStorage::Get(context, data_table.db);
-
-	// We either want to do nothing, or perform an update when conflicts arise
-	ConflictInfo conflict_info(conflict_target);
-	ConflictManager conflict_manager(VerifyExistenceType::APPEND, insert_chunk.size(), &conflict_info);
-
-	if (GLOBAL) {
-		auto constraint_state = data_table.InitializeConstraintState(table, bound_constraints);
-		data_table.VerifyAppendConstraints(*constraint_state, context, insert_chunk, &conflict_manager);
-	} else {
-		DataTable::VerifyUniqueIndexes(local_storage.GetIndexes(data_table), context, insert_chunk, &conflict_manager);
-	}
-	conflict_manager.Finalize();
-	if (conflict_manager.ConflictCount() == 0) {
-		// No conflicts found, 0 updates performed
-		return 0;
-	}
-
-	auto &conflicts = conflict_manager.Conflicts();
-	auto &row_ids = conflict_manager.RowIds();
-
-	DataChunk conflict_chunk; // contains only the conflicting values
-	DataChunk scan_chunk;     // contains the original values, that caused the conflict
-	DataChunk combined_chunk; // contains conflict_chunk + scan_chunk (wide)
-
-	// Filter out everything but the conflicting rows
-	conflict_chunk.Initialize(context, insert_chunk.GetTypes());
-	conflict_chunk.Reference(insert_chunk);
-	conflict_chunk.Slice(conflicts.Selection(), conflicts.Count());
-	conflict_chunk.SetCardinality(conflicts.Count());
-
-	// Splice the Input chunk and the fetched chunk together
-	CombineExistingAndInsertTuples(combined_chunk, scan_chunk, conflict_chunk, context);
-	CheckForDuplicateTargets<GLOBAL>(row_ids, combined_chunk.size());
-	idx_t updated_tuples = PerformOnConflictAction<GLOBAL>(context, combined_chunk, table, row_ids, set_columns, bound_constraints);
-
-	// Remove the conflicting tuples from the insert chunk
-	SelectionVector sel_vec(insert_chunk.size());
-	idx_t new_size = SelectionVector::Inverted(conflicts.Selection(), sel_vec, conflicts.Count(), insert_chunk.size());
-	insert_chunk.Slice(sel_vec, new_size);
-	insert_chunk.SetCardinality(new_size);
-
-	return updated_tuples;
-}
-
-static idx_t OnConflictHandling(TableCatalogEntry &table, ClientContext &context,
-				DataChunk& chunk, const vector<unique_ptr<BoundConstraint>> &bound_constraints) {
-	auto &data_table = table.GetStorage();
-	idx_t updated_tuples = 0;
-
-	updated_tuples += HandleInsertConflicts<true>(table, context, chunk, data_table, bound_constraints);
-	// Also check the transaction-local storage+ART so we can detect conflicts within this transaction
-	updated_tuples += HandleInsertConflicts<false>(table, context, chunk, data_table, bound_constraints);
-
-	return updated_tuples;
-}
-
-static void ResolveDefaults(const TableCatalogEntry &table, DataChunk &chunk,
-			    DataChunk &result) {
+static void ResolveDefaults(const TableCatalogEntry &table, DataChunk &chunk, DataChunk &result) {
 	chunk.Flatten();
 
 	result.Reset();
@@ -1001,19 +938,6 @@ static void ResolveDefaults(const TableCatalogEntry &table, DataChunk &chunk,
 		D_ASSERT(result.data[i].GetType() == chunk.data[i].GetType());
 		result.data[i].Reference(chunk.data[i]);
 	}
-}
-  
-void DataTable::LocalMerge(TableCatalogEntry &table, ClientContext &context, DataChunk &chunk, const vector<unique_ptr<BoundConstraint>> &bound_constraints) {
-	LocalAppendState append_state;
-	auto &storage = table.GetStorage();
-
-	storage.InitializeLocalAppend(append_state, table, context, bound_constraints);
-	DataChunk insert_chunk;
-	insert_chunk.Initialize(context, chunk.GetTypes());
-	ResolveDefaults(table, chunk, insert_chunk);
-	OnConflictHandling(table, context, insert_chunk, bound_constraints);
-	storage.LocalAppend(append_state, table, context, insert_chunk, true);
-	storage.FinalizeLocalAppend(append_state);
 }
 
 template <bool GLOBAL>
@@ -1041,9 +965,12 @@ static idx_t PerformOrderedUpdate(TableCatalogEntry &table, ClientContext &conte
 }
 
 struct GroupedUpdate {
-	explicit GroupedUpdate(idx_t size) {
-		sel = SelectionVector(size);
+	explicit GroupedUpdate() {
 		count = 0;
+	}
+
+	void Initialize(idx_t size) {
+		sel.Initialize(size);
 	}
 
 	SelectionVector sel;
@@ -1051,12 +978,12 @@ struct GroupedUpdate {
 	vector<row_t> ids;
 };
 
-static map<std::tuple<idx_t, idx_t>, unique_ptr<GroupedUpdate>> GroupUpdatesByRowGroup(DataChunk &conflict_chunk, Vector &row_ids,
-                                                                                       const shared_ptr<RowGroupCollection> &row_groups) {
+static map<std::tuple<idx_t, idx_t>, GroupedUpdate> GroupUpdatesByRowGroup(DataChunk &conflict_chunk, Vector &row_ids,
+                                                                           const shared_ptr<RowGroupCollection> &row_groups) {
 	D_ASSERT(row_ids.GetType().InternalType() == ROW_TYPE);
 
 	auto flat_row_ids = FlatVector::GetData<row_t>(row_ids);
-	map<std::tuple<idx_t, idx_t>, unique_ptr<GroupedUpdate>> grouped_updates;
+	map<std::tuple<idx_t, idx_t>, GroupedUpdate> grouped_updates;
 	for (idx_t i = 0; i < conflict_chunk.size(); i++) {
 		auto row_group = row_groups->GetRowGroupByRowNumber(UnsafeNumericCast<idx_t>(flat_row_ids[i]));
 		auto rg_index = row_group->index;
@@ -1064,14 +991,16 @@ static map<std::tuple<idx_t, idx_t>, unique_ptr<GroupedUpdate>> GroupUpdatesByRo
 		auto key = std::make_tuple(rg_index, c_index);
 
 		if (grouped_updates.find(key) == grouped_updates.end()) {
-			grouped_updates[key] = make_uniq<GroupedUpdate>(row_group->count);
+			GroupedUpdate grouped_update;
+			grouped_update.Initialize(row_group->count);
+			grouped_updates[key] = std::move(grouped_update);
 		}
 
-		auto ordered_update = std::move(grouped_updates[key]);
+		auto grouped_update = std::move(grouped_updates[key]);
 
-		ordered_update->sel.set_index(ordered_update->count, i);
-		ordered_update->count++;
-		grouped_updates[key] = std::move(ordered_update);
+		grouped_update.sel.set_index(grouped_update.count, i);
+		grouped_update.count++;
+		grouped_updates[key] = std::move(grouped_update);
 	}
 
 	return grouped_updates;
@@ -1089,10 +1018,10 @@ static idx_t PerformUnOrderedUpdate(TableCatalogEntry &table, ClientContext &con
 		duckdb::DataChunk data_chunk;
 		data_chunk.Initialize(context, conflict_chunk.GetTypes());
 		data_chunk.Reference(conflict_chunk);
-		data_chunk.Slice(kvp.second->sel, kvp.second->count);
+		data_chunk.Slice(kvp.second.sel, kvp.second.count);
 
 		auto row_group_ids = Vector(row_ids);
-		row_group_ids.Slice(kvp.second->sel, kvp.second->count);
+		row_group_ids.Slice(kvp.second.sel, kvp.second.count);
 
 		updated_tuples += PerformOnConflictAction<GLOBAL>(context, data_chunk, table, row_group_ids, set_columns, bound_constraints);
 	}
@@ -1103,7 +1032,7 @@ static idx_t PerformUnOrderedUpdate(TableCatalogEntry &table, ClientContext &con
 template <bool GLOBAL>
 static idx_t HandleInsertConflicts(TableCatalogEntry &table, ClientContext &context, DataChunk &insert_chunk,
                                     DataTable &data_table, const vector<unique_ptr<BoundConstraint>> &bound_constraints,
-                                    const shared_ptr<RowGroupCollection> &row_groups) {
+                                    const optional_ptr<shared_ptr<RowGroupCollection>> &row_groups) {
 	// The column ids to apply the ON CONFLICT on
 	auto conflict_target = ExtractConflictTarget(data_table);
 	vector<PhysicalIndex> set_columns = GetSetColumns(data_table, conflict_target);
@@ -1115,7 +1044,7 @@ static idx_t HandleInsertConflicts(TableCatalogEntry &table, ClientContext &cont
 
 	if (GLOBAL) {
 		auto constraint_state = data_table.InitializeConstraintState(table, bound_constraints);
-		data_table.VerifyAppendConstraints(*constraint_state, context, insert_chunk, &conflict_manager);
+		data_table.VerifyAppendConstraints(*constraint_state, context, insert_chunk, &conflict_manager, true);
 	} else {
 		DataTable::VerifyUniqueIndexes(local_storage.GetIndexes(data_table), context, insert_chunk, &conflict_manager);
 	}
@@ -1145,14 +1074,14 @@ static idx_t HandleInsertConflicts(TableCatalogEntry &table, ClientContext &cont
 
 	idx_t updated_tuples;
 
-	if (is_sorted) {
+	if (is_sorted || row_groups == nullptr) {
 		// fast path for sorted updates
 		updated_tuples = PerformOrderedUpdate<GLOBAL>(table, context, bound_constraints, set_columns, row_ids,
 		                                              combined_chunk);
 	} else {
 		// fast path for non-sorted updates
 		updated_tuples = PerformUnOrderedUpdate<GLOBAL>(table, context, bound_constraints, set_columns, row_ids,
-		                                                combined_chunk, row_groups);
+		                                                combined_chunk, *row_groups);
 	}
 
 	// Remove the conflicting tuples from the insert chunk
@@ -1166,7 +1095,7 @@ static idx_t HandleInsertConflicts(TableCatalogEntry &table, ClientContext &cont
 
 static idx_t OnConflictHandling(TableCatalogEntry &table, ClientContext &context,
                                 DataChunk& chunk, const vector<unique_ptr<BoundConstraint>> &bound_constraints,
-                                const shared_ptr<RowGroupCollection> &row_groups) {
+                                const optional_ptr<shared_ptr<RowGroupCollection>> &row_groups) {
 	auto &data_table = table.GetStorage();
 	idx_t updated_tuples = 0;
 
@@ -1191,6 +1120,19 @@ static void AppendInsertChunks(TableCatalogEntry &table, ClientContext &context,
 		storage.LocalAppend(append_state, table, context, data_chunk, true);
 		insert_count += chunk_size;
 	}
+}
+
+void DataTable::LocalMerge(TableCatalogEntry &table, ClientContext &context, DataChunk &chunk, const vector<unique_ptr<BoundConstraint>> &bound_constraints) {
+	LocalAppendState append_state;
+	auto &storage = table.GetStorage();
+
+	storage.InitializeLocalAppend(append_state, table, context, bound_constraints);
+	DataChunk insert_chunk;
+	insert_chunk.Initialize(context, chunk.GetTypes());
+	ResolveDefaults(table, chunk, insert_chunk);
+	OnConflictHandling(table, context, insert_chunk, bound_constraints, nullptr);
+	storage.LocalAppend(append_state, table, context, insert_chunk, true);
+	storage.FinalizeLocalAppend(append_state);
 }
 
 void DataTable::LocalMerge(TableCatalogEntry &table, ClientContext &context, ColumnDataCollection &collection, const vector<unique_ptr<BoundConstraint>> &bound_constraints) {

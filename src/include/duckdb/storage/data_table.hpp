@@ -215,7 +215,7 @@ public:
 	                                                      const vector<unique_ptr<BoundConstraint>> &bound_constraints);
 	//! Verify constraints with a chunk from the Append containing all columns of the table
 	void VerifyAppendConstraints(ConstraintState &state, ClientContext &context, DataChunk &chunk,
-	                             optional_ptr<ConflictManager> conflict_manager = nullptr);
+	                             optional_ptr<ConflictManager> conflict_manager = nullptr, bool allow_non_standard_vector_sizes = false);
 
 	shared_ptr<DataTableInfo> &GetDataTableInfo();
 
@@ -233,7 +233,7 @@ public:
 
 public:
 	static void VerifyUniqueIndexes(TableIndexList &indexes, ClientContext &context, DataChunk &chunk,
-	                                optional_ptr<ConflictManager> conflict_manager);
+	                                optional_ptr<ConflictManager> conflict_manager, bool allow_non_standard_vector_sizes = false);
 
 private:
 	//! Verify the new added constraints against current persistent&local data
