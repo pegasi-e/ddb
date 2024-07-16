@@ -414,22 +414,34 @@ static idx_t HandleInsertConflicts(TableCatalogEntry &table, ExecutionContext &c
 	return updated_tuples;
 }
 
-idx_t PhysicalInsert::OnConflictHandling(TableCatalogEntry &table, ExecutionContext &context,
-                                         InsertLocalState &lstate) const {
+idx_t PhysicalInsert::OnConflictHandling(DataTable &storage, TableCatalogEntry &table, ExecutionContext &context,
+                                         InsertLocalState &lstate, InsertGlobalState &gstate, bool do_inserts) const {
+
+	idx_t update_count, insert_count;
+	auto finalize_on_conflict = action_type != OnConflictAction::THROW;
 	auto &data_table = table.GetStorage();
+
 	if (action_type == OnConflictAction::THROW) {
 		auto &constraint_state = lstate.GetConstraintState(data_table, table);
 		data_table.VerifyAppendConstraints(constraint_state, context.client, lstate.insert_chunk, nullptr);
 		return 0;
 	}
-	// Check whether any conflicts arise, and if they all meet the conflict_target + condition
-	// If that's not the case - We throw the first error
-	idx_t updated_tuples = 0;
-	updated_tuples += HandleInsertConflicts<true>(table, context, lstate, data_table, *this);
-	// Also check the transaction-local storage+ART so we can detect conflicts within this transaction
-	updated_tuples += HandleInsertConflicts<false>(table, context, lstate, data_table, *this);
 
-	return updated_tuples;
+	storage.LocalMerge(table, context.client, lstate.insert_chunk, bound_constraints,
+	                   gstate.append_state, !gstate.initialized && do_inserts,
+	                   finalize_on_conflict, do_inserts, update_count, insert_count);
+
+	gstate.initialized = finalize_on_conflict;
+	gstate.insert_count += insert_count;
+	gstate.insert_count += update_count;
+//	// Check whether any conflicts arise, and if they all meet the conflict_target + condition
+//	// If that's not the case - We throw the first error
+//	idx_t updated_tuples = 0;
+//	updated_tuples += HandleInsertConflicts<true>(table, context, lstate, data_table, *this);
+//	// Also check the transaction-local storage+ART so we can detect conflicts within this transaction
+//	updated_tuples += HandleInsertConflicts<false>(table, context, lstate, data_table, *this);
+
+	return update_count + insert_count;
 }
 
 SinkResultType PhysicalInsert::Sink(ExecutionContext &context, DataChunk &chunk, OperatorSinkInput &input) const {
@@ -441,24 +453,25 @@ SinkResultType PhysicalInsert::Sink(ExecutionContext &context, DataChunk &chunk,
 	PhysicalInsert::ResolveDefaults(table, chunk, column_index_map, lstate.default_executor, lstate.insert_chunk);
 
 	if (!parallel) {
-		if (!gstate.initialized) {
-			storage.InitializeLocalAppend(gstate.append_state, table, context.client, bound_constraints);
-			gstate.initialized = true;
-		}
-
-		if (return_chunk) {
-			gstate.return_collection.Append(lstate.insert_chunk);
-		}
-		idx_t updated_tuples = OnConflictHandling(table, context, lstate);
-		gstate.insert_count += lstate.insert_chunk.size();
-		gstate.insert_count += updated_tuples;
-		storage.LocalAppend(gstate.append_state, table, context.client, lstate.insert_chunk, true);
-
-		// We finalize the local append to write the segment node count.
-		if (action_type != OnConflictAction::THROW) {
-			storage.FinalizeLocalAppend(gstate.append_state);
-			gstate.initialized = false;
-		}
+//		if (!gstate.initialized) {
+//			storage.InitializeLocalAppend(gstate.append_state, table, context.client, bound_constraints);
+//			gstate.initialized = true;
+//		}
+//
+//		if (return_chunk) {
+//			gstate.return_collection.Append(lstate.insert_chunk);
+//		}
+//		idx_t updated_tuples = OnConflictHandling(table, context, lstate);
+//		gstate.insert_count += lstate.insert_chunk.size();
+//		gstate.insert_count += updated_tuples;
+//		storage.LocalAppend(gstate.append_state, table, context.client, lstate.insert_chunk, true);
+//
+//		// We finalize the local append to write the segment node count.
+//		if (action_type != OnConflictAction::THROW) {
+//			storage.FinalizeLocalAppend(gstate.append_state);
+//			gstate.initialized = false;
+//		}
+		OnConflictHandling(storage, table, context, lstate, gstate, true);
 
 	} else {
 		D_ASSERT(!return_chunk);
@@ -473,7 +486,7 @@ SinkResultType PhysicalInsert::Sink(ExecutionContext &context, DataChunk &chunk,
 			lstate.local_collection->InitializeAppend(lstate.local_append_state);
 			lstate.writer = &gstate.table.GetStorage().CreateOptimisticWriter(context.client);
 		}
-		OnConflictHandling(table, context, lstate);
+		OnConflictHandling(storage, table, context, lstate, gstate, false);
 
 		auto new_row_group = lstate.local_collection->Append(lstate.insert_chunk, lstate.local_append_state);
 		if (new_row_group) {

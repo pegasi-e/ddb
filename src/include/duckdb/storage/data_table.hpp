@@ -107,6 +107,9 @@ public:
 	void FinalizeLocalAppend(LocalAppendState &state);
 
     void LocalMerge(TableCatalogEntry &table, ClientContext &context, DataChunk &chunk, const vector<unique_ptr<BoundConstraint>> &bound_constraints);
+	void LocalMerge(TableCatalogEntry &table, ClientContext &context, DataChunk &chunk, const vector<unique_ptr<BoundConstraint>> &bound_constraints,
+	                LocalAppendState &append_state, bool initialize, bool finalize_on_conflict, bool do_appends,
+	                idx_t &update_count, idx_t &insert_count);
     void LocalMerge(TableCatalogEntry &table, ClientContext &context, ColumnDataCollection &collection, const vector<unique_ptr<BoundConstraint>> &bound_constraints);
 	void LocalMerge(ClientContext &context, DataChunk &chunk);
 	//! Append a chunk to the transaction-local storage of this table
