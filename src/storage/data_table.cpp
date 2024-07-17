@@ -846,21 +846,58 @@ bool AllConflictsMeetCondition(DataChunk &result) {
 	return true;
 }
 
-void CheckOnConflictCondition(ExecutionContext &context, DataChunk &conflicts, const unique_ptr<Expression> &condition,
+void CheckOnConflictCondition(ClientContext &context, DataChunk &conflicts, const unique_ptr<Expression> &condition,
                               DataChunk &result) {
-	ExpressionExecutor executor(context.client, *condition);
-	result.Initialize(context.client, {LogicalType::BOOLEAN});
+	ExpressionExecutor executor(context, *condition);
+	result.Initialize(context, {LogicalType::BOOLEAN});
 	executor.Execute(conflicts, result);
 	result.SetCardinality(conflicts.size());
 }
 
 static void CombineExistingAndInsertTuples(DataChunk &result, DataChunk &scan_chunk, DataChunk &input_chunk,
-                                           ClientContext &client) {
+                                           ClientContext &client,
+                                           const optional_ptr<const vector<LogicalType>> &insert_types,
+                                           const optional_ptr<const vector<LogicalType>> &types_to_fetch) {
 
-  // We have not scanned the initial table, so we can just duplicate the initial chunk
-  result.Initialize(client, input_chunk.GetTypes());
-  result.Reference(input_chunk);
-  result.SetCardinality(input_chunk);
+	if (types_to_fetch == nullptr || types_to_fetch->empty()) {
+		// We have not scanned the initial table, so we can just duplicate the initial chunk
+		result.Initialize(client, input_chunk.GetTypes());
+		result.Reference(input_chunk);
+		result.SetCardinality(input_chunk);
+		return;
+	}
+
+	D_ASSERT(insert_types != nullptr);
+	vector<LogicalType> combined_types;
+	combined_types.reserve(insert_types->size() + types_to_fetch->size());
+	combined_types.insert(combined_types.end(), insert_types->begin(), insert_types->end());
+	combined_types.insert(combined_types.end(), types_to_fetch->begin(), types_to_fetch->end());
+
+	result.Initialize(client, combined_types);
+	result.Reset();
+	// Add the VALUES list
+	for (idx_t i = 0; i < insert_types->size(); i++) {
+		idx_t col_idx = i;
+		auto &other_col = input_chunk.data[i];
+		auto &this_col = result.data[col_idx];
+		D_ASSERT(other_col.GetType() == this_col.GetType());
+		this_col.Reference(other_col);
+	}
+	// Add the columns from the original conflicting tuples
+	for (idx_t i = 0; i < types_to_fetch->size(); i++) {
+		idx_t col_idx = i + insert_types->size();
+		auto &other_col = scan_chunk.data[i];
+		auto &this_col = result.data[col_idx];
+		D_ASSERT(other_col.GetType() == this_col.GetType());
+		this_col.Reference(other_col);
+	}
+	// This is guaranteed by the requirement of a conflict target to have a condition or set expressions
+	// Only when we have any sort of condition or SET expression that references the existing table is this possible
+	// to not be true.
+	// We can have a SET expression without a conflict target ONLY if there is only 1 Index on the table
+	// In which case this also can't cause a discrepancy between existing tuple count and insert tuple count
+	D_ASSERT(input_chunk.size() == scan_chunk.size());
+	result.SetCardinality(input_chunk.size());
 }
 
 // TODO: should we use a hash table to keep track of this instead?
@@ -893,53 +930,59 @@ static bool CheckForDuplicateTargets(const Vector &row_ids, idx_t count) {
 	return is_sorted;
 }
 
-static void CreateUpdateChunk(ClientContext &context, DataChunk &chunk, TableCatalogEntry &table, Vector &row_ids, DataChunk &update_chunk) {
+static void CreateUpdateChunk(ClientContext &context, DataChunk &chunk, TableCatalogEntry &table, Vector &row_ids, DataChunk &update_chunk,
+                              const optional_ptr<const vector<unique_ptr<Expression>>> &set_expressions,
+                              const optional_ptr<const vector<LogicalType>> &set_types,
+                              const optional_ptr<const unique_ptr<Expression>> &do_update_condition) {
 
-//	auto &do_update_condition = op.do_update_condition;
-//	auto &set_types = op.set_types;
-//	auto &set_expressions = op.set_expressions;
-//	// Check the optional condition for the DO UPDATE clause, to filter which rows will be updated
-//	if (do_update_condition) {
-//		DataChunk do_update_filter_result;
-//		do_update_filter_result.Initialize(context, {LogicalType::BOOLEAN});
-//		ExpressionExecutor where_executor(context, *do_update_condition);
-//		where_executor.Execute(chunk, do_update_filter_result);
-//		do_update_filter_result.SetCardinality(chunk.size());
-//		do_update_filter_result.Flatten();
-//
-//		ManagedSelection selection(chunk.size());
-//
-//		auto where_data = FlatVector::GetData<bool>(do_update_filter_result.data[0]);
-//		for (idx_t i = 0; i < chunk.size(); i++) {
-//			if (where_data[i]) {
-//				selection.Append(i);
-//			}
-//		}
-//		if (selection.Count() != selection.Size()) {
-//			// Not all conflicts met the condition, need to filter out the ones that don't
-//			chunk.Slice(selection.Selection(), selection.Count());
-//			chunk.SetCardinality(selection.Count());
-//			// Also apply this Slice to the to-update row_ids
-//			row_ids.Slice(selection.Selection(), selection.Count());
-//		}
-//	}
-//
-//	// Execute the SET expressions
-//	update_chunk.Initialize(context, set_types);
-//	ExpressionExecutor executor(context, set_expressions);
-//	executor.Execute(chunk, update_chunk);
-//	update_chunk.SetCardinality(chunk);
+	if (set_expressions) {
+		D_ASSERT(set_types != nullptr);
+		// Check the optional condition for the DO UPDATE clause, to filter which rows will be updated
+		if (do_update_condition && *do_update_condition) {
+			DataChunk do_update_filter_result;
+			do_update_filter_result.Initialize(context, {LogicalType::BOOLEAN});
+			ExpressionExecutor where_executor(context, **do_update_condition);
+			where_executor.Execute(chunk, do_update_filter_result);
+			do_update_filter_result.SetCardinality(chunk.size());
+			do_update_filter_result.Flatten();
 
-	chunk.Split(update_chunk, 1);
-	update_chunk.SetCardinality(chunk);
+			ManagedSelection selection(chunk.size());
+
+			auto where_data = FlatVector::GetData<bool>(do_update_filter_result.data[0]);
+			for (idx_t i = 0; i < chunk.size(); i++) {
+				if (where_data[i]) {
+					selection.Append(i);
+				}
+			}
+			if (selection.Count() != selection.Size()) {
+				// Not all conflicts met the condition, need to filter out the ones that don't
+				chunk.Slice(selection.Selection(), selection.Count());
+				chunk.SetCardinality(selection.Count());
+				// Also apply this Slice to the to-update row_ids
+				row_ids.Slice(selection.Selection(), selection.Count());
+			}
+		}
+
+		// Execute the SET expressions
+		update_chunk.Initialize(context, *set_types);
+		ExpressionExecutor executor(context, *set_expressions);
+		executor.Execute(chunk, update_chunk);
+		update_chunk.SetCardinality(chunk);
+	} else {
+		chunk.Split(update_chunk, 1);
+		update_chunk.SetCardinality(chunk);
+	}
 }
   
 template <bool GLOBAL>
 static idx_t PerformOnConflictAction(ClientContext &context, DataChunk &chunk, TableCatalogEntry &table,
-                                     Vector &row_ids, vector<PhysicalIndex>& set_columns, const vector<unique_ptr<BoundConstraint>> &bound_constraints) {
+                                     Vector &row_ids, vector<PhysicalIndex>& set_columns, const vector<unique_ptr<BoundConstraint>> &bound_constraints,
+                                     const optional_ptr<const vector<unique_ptr<Expression>>> &set_expressions,
+                                     const optional_ptr<const vector<LogicalType>> &set_types,
+                                     const optional_ptr<const unique_ptr<Expression>> &do_update_condition) {
 
 	DataChunk update_chunk;
-	CreateUpdateChunk(context, chunk, table, row_ids, update_chunk);
+	CreateUpdateChunk(context, chunk, table, row_ids, update_chunk, set_expressions, set_types, do_update_condition);
 
 	auto &data_table = table.GetStorage();
 	// Perform the update, using the results of the SET expressions
@@ -984,8 +1027,11 @@ static vector<PhysicalIndex> GetSetColumns(DataTable &data_table, unordered_set<
 
 template <bool GLOBAL>
 static idx_t PerformOrderedUpdate(TableCatalogEntry &table, ClientContext &context,
-                    const vector<unique_ptr<BoundConstraint>> &bound_constraints, vector<PhysicalIndex> &set_columns,
-                    Vector &row_ids, DataChunk &conflict_chunk) {
+                                  const vector<unique_ptr<BoundConstraint>> &bound_constraints, vector<PhysicalIndex> &set_columns,
+                                  Vector &row_ids, DataChunk &conflict_chunk,
+                                  const optional_ptr<const vector<unique_ptr<Expression>>> &set_expressions,
+                                  const optional_ptr<const vector<LogicalType>> &set_types,
+                                  const optional_ptr<const unique_ptr<Expression>> &do_update_condition) {
 
 	idx_t updated_tuples = 0;
 	auto standard_chunk_count = (idx_t) ceil((double) conflict_chunk.size() / STANDARD_VECTOR_SIZE);
@@ -1000,7 +1046,7 @@ static idx_t PerformOrderedUpdate(TableCatalogEntry &table, ClientContext &conte
 		Vector group_row_ids(row_ids);
 		group_row_ids.Slice(row_ids, offset, offset + chunk_size);
 
-		updated_tuples += PerformOnConflictAction<GLOBAL>(context, data_chunk, table, group_row_ids, set_columns, bound_constraints);
+		updated_tuples += PerformOnConflictAction<GLOBAL>(context, data_chunk, table, group_row_ids, set_columns, bound_constraints, set_expressions, set_types, do_update_condition);
 	}
 
 	return updated_tuples;
@@ -1051,7 +1097,10 @@ static map<std::tuple<idx_t, idx_t>, GroupedUpdate> GroupUpdatesByRowGroup(DataC
 template <bool GLOBAL>
 static idx_t PerformUnOrderedUpdate(TableCatalogEntry &table, ClientContext &context,
                                     const vector<unique_ptr<BoundConstraint>> &bound_constraints, vector<PhysicalIndex> &set_columns,
-                                    Vector &row_ids, DataChunk &conflict_chunk, const shared_ptr<RowGroupCollection> &row_groups) {
+                                    Vector &row_ids, DataChunk &conflict_chunk, const shared_ptr<RowGroupCollection> &row_groups,
+                                    const optional_ptr<const vector<unique_ptr<Expression>>> &set_expressions,
+                                    const optional_ptr<const vector<LogicalType>> &set_types,
+                                    const optional_ptr<const unique_ptr<Expression>> &do_update_condition) {
 
 	idx_t updated_tuples = 0;
 	auto grouped_updates = GroupUpdatesByRowGroup(conflict_chunk, row_ids, row_groups);
@@ -1065,7 +1114,8 @@ static idx_t PerformUnOrderedUpdate(TableCatalogEntry &table, ClientContext &con
 		auto row_group_ids = Vector(row_ids);
 		row_group_ids.Slice(kvp.second.sel, kvp.second.count);
 
-		updated_tuples += PerformOnConflictAction<GLOBAL>(context, data_chunk, table, row_group_ids, set_columns, bound_constraints);
+		updated_tuples += PerformOnConflictAction<GLOBAL>(context, data_chunk, table, row_group_ids,
+		                                                  set_columns, bound_constraints, set_expressions, set_types, do_update_condition);
 	}
 
 	return updated_tuples;
@@ -1073,8 +1123,16 @@ static idx_t PerformUnOrderedUpdate(TableCatalogEntry &table, ClientContext &con
 
 template <bool GLOBAL>
 static idx_t HandleInsertConflicts(TableCatalogEntry &table, ClientContext &context, DataChunk &insert_chunk,
-                                    DataTable &data_table, const vector<unique_ptr<BoundConstraint>> &bound_constraints,
-                                    const optional_ptr<shared_ptr<RowGroupCollection>> &row_groups) {
+                                   DataTable &data_table, const vector<unique_ptr<BoundConstraint>> &bound_constraints,
+                                   const optional_ptr<shared_ptr<RowGroupCollection>> &row_groups,
+                                   const optional_ptr<const vector<LogicalType>> &insert_types,
+                                   const optional_ptr<const vector<LogicalType>> &types_to_fetch,
+                                   const optional_ptr<const unique_ptr<Expression>> &conflict_condition,
+                                   const optional_ptr<const vector<column_t>> &columns_to_fetch,
+                                   const optional_ptr<const vector<unique_ptr<Expression>>> &set_expressions,
+                                   const optional_ptr<const vector<LogicalType>> &set_types,
+                                   const optional_ptr<const unique_ptr<Expression>> &do_update_condition
+                                   ) {
 	// The column ids to apply the ON CONFLICT on
 	auto conflict_target = ExtractConflictTarget(data_table);
 	vector<PhysicalIndex> set_columns = GetSetColumns(data_table, conflict_target);
@@ -1112,50 +1170,50 @@ static idx_t HandleInsertConflicts(TableCatalogEntry &table, ClientContext &cont
 
 	// Holds the pins for the fetched rows
 	unique_ptr<ColumnFetchState> fetch_state;
-//	if (!types_to_fetch.empty()) {
-//		D_ASSERT(scan_chunk.size() == 0);
-//		// When these values are required for the conditions or the SET expressions,
-//		// then we scan the existing table for the conflicting tuples, using the rowids
-//		scan_chunk.Initialize(context.client, types_to_fetch);
-//		fetch_state = make_uniq<ColumnFetchState>();
-//		if (GLOBAL) {
-//			auto &transaction = DuckTransaction::Get(context.client, table.catalog);
-//			data_table.Fetch(transaction, scan_chunk, columns_to_fetch, row_ids, conflicts.Count(), *fetch_state);
-//		} else {
-//			local_storage.FetchChunk(data_table, row_ids, conflicts.Count(), columns_to_fetch, scan_chunk,
-//			                         *fetch_state);
-//		}
-//	}
+	if (types_to_fetch != nullptr && !types_to_fetch->empty()) {
+		D_ASSERT(scan_chunk.size() == 0);
+		// When these values are required for the conditions or the SET expressions,
+		// then we scan the existing table for the conflicting tuples, using the rowids
+		scan_chunk.Initialize(context, *types_to_fetch);
+		fetch_state = make_uniq<ColumnFetchState>();
+		if (GLOBAL) {
+			auto &transaction = DuckTransaction::Get(context, table.catalog);
+			data_table.Fetch(transaction, scan_chunk, *columns_to_fetch, row_ids, conflicts.Count(), *fetch_state);
+		} else {
+			local_storage.FetchChunk(data_table, row_ids, conflicts.Count(), *columns_to_fetch, scan_chunk,
+			                         *fetch_state);
+		}
+	}
 
 	// Splice the Input chunk and the fetched chunk together
-	CombineExistingAndInsertTuples(combined_chunk, scan_chunk, conflict_chunk, context);
+	CombineExistingAndInsertTuples(combined_chunk, scan_chunk, conflict_chunk, context, insert_types, types_to_fetch);
 
-//	if (on_conflict_condition) {
-//		DataChunk conflict_condition_result;
-//		CheckOnConflictCondition(context, combined_chunk, on_conflict_condition, conflict_condition_result);
-//		bool conditions_met = AllConflictsMeetCondition(conflict_condition_result);
-//		if (!conditions_met) {
-//			// Filter out the tuples that did pass the filter, then run the verify again
-//			ManagedSelection sel(combined_chunk.size());
-//			auto data = FlatVector::GetData<bool>(conflict_condition_result.data[0]);
-//			for (idx_t i = 0; i < combined_chunk.size(); i++) {
-//				if (!data[i]) {
-//					// Only populate the selection vector with the tuples that did not meet the condition
-//					sel.Append(i);
-//				}
-//			}
-//			combined_chunk.Slice(sel.Selection(), sel.Count());
-//			row_ids.Slice(sel.Selection(), sel.Count());
-//			if (GLOBAL) {
-//				auto &constraint_state = lstate.GetConstraintState(data_table, table);
-//				data_table.VerifyAppendConstraints(constraint_state, context, combined_chunk, nullptr);
-//			} else {
-//				DataTable::VerifyUniqueIndexes(local_storage.GetIndexes(data_table), context,
-//				                               insert_chunk, nullptr);
-//			}
-//			throw InternalException("The previous operation was expected to throw but didn't");
-//		}
-//	}
+	if (conflict_condition && *conflict_condition) {
+		DataChunk conflict_condition_result;
+		CheckOnConflictCondition(context, combined_chunk, *conflict_condition, conflict_condition_result);
+		bool conditions_met = AllConflictsMeetCondition(conflict_condition_result);
+		if (!conditions_met) {
+			// Filter out the tuples that did pass the filter, then run the verify again
+			ManagedSelection sel(combined_chunk.size());
+			auto data = FlatVector::GetData<bool>(conflict_condition_result.data[0]);
+			for (idx_t i = 0; i < combined_chunk.size(); i++) {
+				if (!data[i]) {
+					// Only populate the selection vector with the tuples that did not meet the condition
+					sel.Append(i);
+				}
+			}
+			combined_chunk.Slice(sel.Selection(), sel.Count());
+			row_ids.Slice(sel.Selection(), sel.Count());
+			if (GLOBAL) {
+				auto constraint_state = data_table.InitializeConstraintState(table, bound_constraints);
+				data_table.VerifyAppendConstraints(*constraint_state, context, combined_chunk, nullptr);
+			} else {
+				DataTable::VerifyUniqueIndexes(local_storage.GetIndexes(data_table), context,
+				                               insert_chunk, nullptr);
+			}
+			throw InternalException("The previous operation was expected to throw but didn't");
+		}
+	}
 
 	auto is_sorted = CheckForDuplicateTargets<GLOBAL>(row_ids, combined_chunk.size());
 
@@ -1164,11 +1222,12 @@ static idx_t HandleInsertConflicts(TableCatalogEntry &table, ClientContext &cont
 	if (is_sorted || row_groups == nullptr) {
 		// fast path for sorted updates
 		updated_tuples = PerformOrderedUpdate<GLOBAL>(table, context, bound_constraints, set_columns, row_ids,
-		                                              combined_chunk);
+		                                              combined_chunk, set_expressions, set_types, do_update_condition);
 	} else {
 		// fast path for non-sorted updates
 		updated_tuples = PerformUnOrderedUpdate<GLOBAL>(table, context, bound_constraints, set_columns, row_ids,
-		                                                combined_chunk, *row_groups);
+		                                                combined_chunk, *row_groups,
+		                                                set_expressions, set_types, do_update_condition);
 	}
 
 	// Remove the conflicting tuples from the insert chunk
@@ -1182,13 +1241,25 @@ static idx_t HandleInsertConflicts(TableCatalogEntry &table, ClientContext &cont
 
 static idx_t OnConflictHandling(TableCatalogEntry &table, ClientContext &context,
                                 DataChunk& chunk, const vector<unique_ptr<BoundConstraint>> &bound_constraints,
-                                const optional_ptr<shared_ptr<RowGroupCollection>> &row_groups) {
+                                const optional_ptr<shared_ptr<RowGroupCollection>> &row_groups,
+                                const optional_ptr<const vector<LogicalType>> &insert_types,
+                                const optional_ptr<const vector<LogicalType>> &types_to_fetch,
+                                const optional_ptr<const unique_ptr<Expression>> &conflict_condition,
+                                const optional_ptr<const vector<column_t>> &columns_to_fetch,
+                                const optional_ptr<const vector<unique_ptr<Expression>>> &set_expressions,
+                                const optional_ptr<const vector<LogicalType>> &set_types,
+                                const optional_ptr<const unique_ptr<Expression>> &do_update_condition
+                                ) {
 	auto &data_table = table.GetStorage();
 	idx_t updated_tuples = 0;
 
-	updated_tuples += HandleInsertConflicts<true>(table, context, chunk, data_table, bound_constraints, row_groups);
+	updated_tuples += HandleInsertConflicts<true>(table, context, chunk, data_table, bound_constraints,
+	                                              row_groups, insert_types, types_to_fetch, conflict_condition, columns_to_fetch,
+	                                              set_expressions, set_types, do_update_condition);
 	// Also check the transaction-local storage+ART so we can detect conflicts within this transaction
-	updated_tuples += HandleInsertConflicts<false>(table, context, chunk, data_table, bound_constraints, row_groups);
+	updated_tuples += HandleInsertConflicts<false>(table, context, chunk, data_table, bound_constraints,
+	                                               row_groups, insert_types, types_to_fetch, conflict_condition, columns_to_fetch,
+	                                               set_expressions, set_types, do_update_condition);
 
 	return updated_tuples;
 }
@@ -1211,7 +1282,10 @@ static void AppendInsertChunks(TableCatalogEntry &table, ClientContext &context,
 
 void DataTable::LocalMerge(TableCatalogEntry &table, ClientContext &context, DataChunk &chunk, const vector<unique_ptr<BoundConstraint>> &bound_constraints,
                            LocalAppendState &append_state, bool initialize, bool finalize_on_conflict, bool do_appends,
-                           idx_t &update_count, idx_t &insert_count) {
+                           idx_t &update_count, idx_t &insert_count, const vector<LogicalType> &types_to_fetch,
+                           const vector<LogicalType> &insert_types, const unique_ptr<Expression> &conflict_condition,
+                           const vector<column_t> &columns_to_fetch, const vector<unique_ptr<Expression>> &set_expressions,
+                           const vector<LogicalType> &set_types, const unique_ptr<Expression> &do_update_condition) {
 
 	auto &storage = table.GetStorage();
 	if (initialize) {
@@ -1221,7 +1295,9 @@ void DataTable::LocalMerge(TableCatalogEntry &table, ClientContext &context, Dat
 	DataChunk insert_chunk;
 	insert_chunk.Initialize(context, chunk.GetTypes());
 	insert_chunk.Reference(chunk);
-	update_count = OnConflictHandling(table, context, insert_chunk, bound_constraints, nullptr);
+	update_count = OnConflictHandling(table, context, insert_chunk, bound_constraints, nullptr,
+	                                  insert_types, types_to_fetch, conflict_condition, columns_to_fetch, set_expressions,
+	                                  set_types, do_update_condition);
 
 	if (do_appends) {
 		storage.LocalAppend(append_state, table, context, insert_chunk, true);
@@ -1235,10 +1311,33 @@ void DataTable::LocalMerge(TableCatalogEntry &table, ClientContext &context, Dat
 	}
 }
 
+void DataTable::LocalMerge(TableCatalogEntry &table, ClientContext &context, DataChunk &chunk, const vector<unique_ptr<BoundConstraint>> &bound_constraints,
+                           LocalAppendState &append_state, bool initialize, bool do_appends, idx_t &update_count, idx_t &insert_count) {
+
+	if (initialize) {
+		InitializeLocalAppend(append_state, table, context, bound_constraints);
+	}
+
+	DataChunk insert_chunk;
+	insert_chunk.Initialize(context, chunk.GetTypes());
+	insert_chunk.Reference(chunk);
+	update_count = OnConflictHandling(table, context, insert_chunk, bound_constraints,
+	                                  nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr);
+
+	if (do_appends) {
+		LocalAppend(append_state, table, context, insert_chunk, true);
+		insert_count = insert_chunk.size();
+	} else {
+		insert_count = 0;
+	}
+
+	FinalizeLocalAppend(append_state);
+}
+
 void DataTable::LocalMerge(TableCatalogEntry &table, ClientContext &context, DataChunk &chunk, const vector<unique_ptr<BoundConstraint>> &bound_constraints) {
 	LocalAppendState append_state;
 	idx_t update_count, insert_count;
-	LocalMerge(table, context, chunk, bound_constraints, append_state, true, true, true, update_count, insert_count);
+	LocalMerge(table, context, chunk, bound_constraints, append_state, true, true, update_count, insert_count);
 }
 
 void DataTable::LocalMerge(TableCatalogEntry &table, ClientContext &context, ColumnDataCollection &collection, const vector<unique_ptr<BoundConstraint>> &bound_constraints) {
@@ -1253,7 +1352,8 @@ void DataTable::LocalMerge(TableCatalogEntry &table, ClientContext &context, Col
 		insert_chunk.Append(chunk, false);
 	}
 
-	OnConflictHandling(table, context, insert_chunk, bound_constraints, row_groups);
+	OnConflictHandling(table, context, insert_chunk, bound_constraints, row_groups,
+	                   nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr);
 	AppendInsertChunks(table, context, storage, insert_chunk, append_state);
 	storage.FinalizeLocalAppend(append_state);
 }
