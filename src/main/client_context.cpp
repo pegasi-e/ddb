@@ -1114,6 +1114,34 @@ unique_ptr<TableDescription> ClientContext::TableInfo(const string &schema_name,
 	return result;
 }
 
+static vector<PhysicalIndex> GetSetColumns(DataTable &data_table, unordered_set<column_t> &conflict_target) {
+	vector<PhysicalIndex> set_columns;
+
+	for (idx_t i = 0; i < data_table.Columns().size(); i++) {
+		auto &col = data_table.Columns()[i];
+		column_t oid = col.Oid();
+		if (conflict_target.find(oid) == conflict_target.end()) {
+			set_columns.push_back(col.Physical());
+		}
+	}
+
+	return set_columns;
+}
+
+static unordered_set<column_t> ExtractConflictTarget(DataTable &data_table) {
+	// The column ids to apply the ON CONFLICT on
+	unordered_set<column_t> conflict_target;
+	data_table.GetDataTableInfo()->GetIndexes().Scan([&](Index &index) {
+		if (index.IsPrimary()) {
+			conflict_target = index.GetColumnIdSet();
+			return true;
+		}
+		return false;
+	});
+
+	return conflict_target;
+}
+
 void ClientContext::Merge(TableDescription &description, DataChunk& chunk) {
   RunFunctionInTransaction([&]() {
 		auto &table_entry =
@@ -1130,7 +1158,10 @@ void ClientContext::Merge(TableDescription &description, DataChunk& chunk) {
 		auto binder = Binder::CreateBinder(*this);
 		auto bound_constraints = binder->BindConstraints(table_entry);
 		MetaTransaction::Get(*this).ModifyDatabase(table_entry.ParentCatalog().GetAttached());
-		table_entry.GetStorage().LocalMerge(table_entry, *this, chunk, bound_constraints);
+		auto &storage = table_entry.GetStorage();
+		auto conflict_target = ExtractConflictTarget(storage);
+		auto set_columns = GetSetColumns(storage, conflict_target);
+		table_entry.GetStorage().LocalMerge(table_entry, *this, chunk, bound_constraints, conflict_target, set_columns);
 	});
 }
 
@@ -1150,7 +1181,10 @@ void ClientContext::Merge(TableDescription &description, ColumnDataCollection &c
 		auto binder = Binder::CreateBinder(*this);
 		auto bound_constraints = binder->BindConstraints(table_entry);
 		MetaTransaction::Get(*this).ModifyDatabase(table_entry.ParentCatalog().GetAttached());
-		table_entry.GetStorage().LocalMerge(table_entry, *this, collection, bound_constraints);
+		auto &storage = table_entry.GetStorage();
+		auto conflict_target = ExtractConflictTarget(storage);
+		auto set_columns = GetSetColumns(storage, conflict_target);
+		storage.LocalMerge(table_entry, *this, collection, bound_constraints, conflict_target, set_columns);
 	});
 }
   

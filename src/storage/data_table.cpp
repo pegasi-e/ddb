@@ -976,7 +976,7 @@ static void CreateUpdateChunk(ClientContext &context, DataChunk &chunk, TableCat
   
 template <bool GLOBAL>
 static idx_t PerformOnConflictAction(ClientContext &context, DataChunk &chunk, TableCatalogEntry &table,
-                                     Vector &row_ids, vector<PhysicalIndex>& set_columns, const vector<unique_ptr<BoundConstraint>> &bound_constraints,
+                                     Vector &row_ids, const vector<PhysicalIndex>& set_columns, const vector<unique_ptr<BoundConstraint>> &bound_constraints,
                                      const optional_ptr<const vector<unique_ptr<Expression>>> &set_expressions,
                                      const optional_ptr<const vector<LogicalType>> &set_types,
                                      const optional_ptr<const unique_ptr<Expression>> &do_update_condition) {
@@ -997,37 +997,10 @@ static idx_t PerformOnConflictAction(ClientContext &context, DataChunk &chunk, T
 	return update_chunk.size();
 }
 
-static unordered_set<column_t> ExtractConflictTarget(DataTable &data_table) {
-	// The column ids to apply the ON CONFLICT on
-	unordered_set<column_t> conflict_target;
-	data_table.GetDataTableInfo()->GetIndexes().Scan([&](Index &index) {
-		if (index.IsPrimary()) {
-			conflict_target = index.GetColumnIdSet();
-			return true;
-		}
-		return false;
-	});
-
-	return conflict_target;
-}
-
-static vector<PhysicalIndex> GetSetColumns(DataTable &data_table, unordered_set<column_t> &conflict_target) {
-	vector<PhysicalIndex> set_columns;
-
-	for (idx_t i = 0; i < data_table.Columns().size(); i++) {
-		auto &col = data_table.Columns()[i];
-		column_t oid = col.Oid();
-		if (conflict_target.find(oid) == conflict_target.end()) {
-			set_columns.push_back(col.Physical());
-		}
-	}
-
-	return set_columns;
-}
-
 template <bool GLOBAL>
 static idx_t PerformOrderedUpdate(TableCatalogEntry &table, ClientContext &context,
-                                  const vector<unique_ptr<BoundConstraint>> &bound_constraints, vector<PhysicalIndex> &set_columns,
+                                  const vector<unique_ptr<BoundConstraint>> &bound_constraints,
+                                  const vector<PhysicalIndex> &set_columns,
                                   Vector &row_ids, DataChunk &conflict_chunk,
                                   const optional_ptr<const vector<unique_ptr<Expression>>> &set_expressions,
                                   const optional_ptr<const vector<LogicalType>> &set_types,
@@ -1096,7 +1069,8 @@ static map<std::tuple<idx_t, idx_t>, GroupedUpdate> GroupUpdatesByRowGroup(DataC
 
 template <bool GLOBAL>
 static idx_t PerformUnOrderedUpdate(TableCatalogEntry &table, ClientContext &context,
-                                    const vector<unique_ptr<BoundConstraint>> &bound_constraints, vector<PhysicalIndex> &set_columns,
+                                    const vector<unique_ptr<BoundConstraint>> &bound_constraints,
+                                    const vector<PhysicalIndex> &set_columns,
                                     Vector &row_ids, DataChunk &conflict_chunk, const shared_ptr<RowGroupCollection> &row_groups,
                                     const optional_ptr<const vector<unique_ptr<Expression>>> &set_expressions,
                                     const optional_ptr<const vector<LogicalType>> &set_types,
@@ -1124,6 +1098,7 @@ static idx_t PerformUnOrderedUpdate(TableCatalogEntry &table, ClientContext &con
 template <bool GLOBAL>
 static idx_t HandleInsertConflicts(TableCatalogEntry &table, ClientContext &context, DataChunk &insert_chunk,
                                    DataTable &data_table, const vector<unique_ptr<BoundConstraint>> &bound_constraints,
+                                   const unordered_set<column_t> &conflict_target, const vector<PhysicalIndex> &set_columns,
                                    const optional_ptr<shared_ptr<RowGroupCollection>> &row_groups,
                                    const optional_ptr<const vector<LogicalType>> &insert_types,
                                    const optional_ptr<const vector<LogicalType>> &types_to_fetch,
@@ -1133,9 +1108,7 @@ static idx_t HandleInsertConflicts(TableCatalogEntry &table, ClientContext &cont
                                    const optional_ptr<const vector<LogicalType>> &set_types,
                                    const optional_ptr<const unique_ptr<Expression>> &do_update_condition
                                    ) {
-	// The column ids to apply the ON CONFLICT on
-	auto conflict_target = ExtractConflictTarget(data_table);
-	vector<PhysicalIndex> set_columns = GetSetColumns(data_table, conflict_target);
+
 	auto &local_storage = LocalStorage::Get(context, data_table.db);
 
 	// We either want to do nothing, or perform an update when conflicts arise
@@ -1241,6 +1214,7 @@ static idx_t HandleInsertConflicts(TableCatalogEntry &table, ClientContext &cont
 
 static idx_t OnConflictHandling(TableCatalogEntry &table, ClientContext &context,
                                 DataChunk& chunk, const vector<unique_ptr<BoundConstraint>> &bound_constraints,
+                                const unordered_set<column_t> &conflict_target, const vector<PhysicalIndex> &set_columns,
                                 const optional_ptr<shared_ptr<RowGroupCollection>> &row_groups,
                                 const optional_ptr<const vector<LogicalType>> &insert_types,
                                 const optional_ptr<const vector<LogicalType>> &types_to_fetch,
@@ -1253,11 +1227,11 @@ static idx_t OnConflictHandling(TableCatalogEntry &table, ClientContext &context
 	auto &data_table = table.GetStorage();
 	idx_t updated_tuples = 0;
 
-	updated_tuples += HandleInsertConflicts<true>(table, context, chunk, data_table, bound_constraints,
+	updated_tuples += HandleInsertConflicts<true>(table, context, chunk, data_table, bound_constraints, conflict_target, set_columns,
 	                                              row_groups, insert_types, types_to_fetch, conflict_condition, columns_to_fetch,
 	                                              set_expressions, set_types, do_update_condition);
 	// Also check the transaction-local storage+ART so we can detect conflicts within this transaction
-	updated_tuples += HandleInsertConflicts<false>(table, context, chunk, data_table, bound_constraints,
+	updated_tuples += HandleInsertConflicts<false>(table, context, chunk, data_table, bound_constraints, conflict_target, set_columns,
 	                                               row_groups, insert_types, types_to_fetch, conflict_condition, columns_to_fetch,
 	                                               set_expressions, set_types, do_update_condition);
 
@@ -1281,6 +1255,7 @@ static void AppendInsertChunks(TableCatalogEntry &table, ClientContext &context,
 }
 
 void DataTable::LocalMerge(TableCatalogEntry &table, ClientContext &context, DataChunk &chunk, const vector<unique_ptr<BoundConstraint>> &bound_constraints,
+                           const unordered_set<column_t> &conflict_target, const vector<PhysicalIndex> &set_columns,
                            LocalAppendState &append_state, bool initialize, bool finalize_on_conflict, bool do_appends,
                            idx_t &update_count, idx_t &insert_count, const vector<LogicalType> &types_to_fetch,
                            const vector<LogicalType> &insert_types, const unique_ptr<Expression> &conflict_condition,
@@ -1295,7 +1270,7 @@ void DataTable::LocalMerge(TableCatalogEntry &table, ClientContext &context, Dat
 	DataChunk insert_chunk;
 	insert_chunk.Initialize(context, chunk.GetTypes());
 	insert_chunk.Reference(chunk);
-	update_count = OnConflictHandling(table, context, insert_chunk, bound_constraints, nullptr,
+	update_count = OnConflictHandling(table, context, insert_chunk, bound_constraints, conflict_target, set_columns, nullptr,
 	                                  insert_types, types_to_fetch, conflict_condition, columns_to_fetch, set_expressions,
 	                                  set_types, do_update_condition);
 
@@ -1312,16 +1287,19 @@ void DataTable::LocalMerge(TableCatalogEntry &table, ClientContext &context, Dat
 }
 
 void DataTable::LocalMerge(TableCatalogEntry &table, ClientContext &context, DataChunk &chunk, const vector<unique_ptr<BoundConstraint>> &bound_constraints,
+                           const unordered_set<column_t> &conflict_target, const vector<PhysicalIndex> &set_columns,
                            LocalAppendState &append_state, bool initialize, bool do_appends, idx_t &update_count, idx_t &insert_count) {
 
 	if (initialize) {
 		InitializeLocalAppend(append_state, table, context, bound_constraints);
 	}
 
+
+
 	DataChunk insert_chunk;
 	insert_chunk.Initialize(context, chunk.GetTypes());
 	insert_chunk.Reference(chunk);
-	update_count = OnConflictHandling(table, context, insert_chunk, bound_constraints,
+	update_count = OnConflictHandling(table, context, insert_chunk, bound_constraints, conflict_target, set_columns,
 	                                  nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr);
 
 	if (do_appends) {
@@ -1334,13 +1312,15 @@ void DataTable::LocalMerge(TableCatalogEntry &table, ClientContext &context, Dat
 	FinalizeLocalAppend(append_state);
 }
 
-void DataTable::LocalMerge(TableCatalogEntry &table, ClientContext &context, DataChunk &chunk, const vector<unique_ptr<BoundConstraint>> &bound_constraints) {
+void DataTable::LocalMerge(TableCatalogEntry &table, ClientContext &context, DataChunk &chunk, const vector<unique_ptr<BoundConstraint>> &bound_constraints,
+                           const unordered_set<column_t> &conflict_target, const vector<PhysicalIndex> &set_columns) {
 	LocalAppendState append_state;
 	idx_t update_count, insert_count;
-	LocalMerge(table, context, chunk, bound_constraints, append_state, true, true, update_count, insert_count);
+	LocalMerge(table, context, chunk, bound_constraints, conflict_target, set_columns, append_state, true, true, update_count, insert_count);
 }
 
-void DataTable::LocalMerge(TableCatalogEntry &table, ClientContext &context, ColumnDataCollection &collection, const vector<unique_ptr<BoundConstraint>> &bound_constraints) {
+void DataTable::LocalMerge(TableCatalogEntry &table, ClientContext &context, ColumnDataCollection &collection, const vector<unique_ptr<BoundConstraint>> &bound_constraints,
+                           const unordered_set<column_t> &conflict_target, const vector<PhysicalIndex> &set_columns) {
 	LocalAppendState append_state;
 	auto &storage = table.GetStorage();
 	storage.InitializeLocalAppend(append_state, table, context, bound_constraints);
@@ -1352,7 +1332,7 @@ void DataTable::LocalMerge(TableCatalogEntry &table, ClientContext &context, Col
 		insert_chunk.Append(chunk, false);
 	}
 
-	OnConflictHandling(table, context, insert_chunk, bound_constraints, row_groups,
+	OnConflictHandling(table, context, insert_chunk, bound_constraints, conflict_target, set_columns, row_groups,
 	                   nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr);
 	AppendInsertChunks(table, context, storage, insert_chunk, append_state);
 	storage.FinalizeLocalAppend(append_state);

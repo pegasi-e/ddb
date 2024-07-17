@@ -198,10 +198,11 @@ idx_t PhysicalInsert::OnConflictHandling(DataTable &storage, TableCatalogEntry &
 		storage.LocalAppend(gstate.append_state, table, context.client, lstate.insert_chunk, true);
 		insert_count = lstate.insert_chunk.size();
 
-	} else if (!throw_on_conflict) {
-		storage.LocalMerge(table, context.client, lstate.insert_chunk, bound_constraints, gstate.append_state,
-		                   !gstate.initialized && do_inserts ,do_inserts, update_count,
-		                   insert_count);
+	} else if (!throw_on_conflict && action_type != OnConflictAction::NOTHING) {
+		storage.LocalMerge(table, context.client, lstate.insert_chunk, bound_constraints,
+		                   conflict_target, set_columns, gstate.append_state, !gstate.initialized && do_inserts, true,
+		                   do_inserts, update_count, insert_count, types_to_fetch, insert_types, on_conflict_condition,
+		                   columns_to_fetch, set_expressions, set_types, do_update_condition);
 
 		gstate.initialized = false;
 	}
