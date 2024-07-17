@@ -2629,7 +2629,21 @@ Note that the object must be destroyed with `duckdb_appender_destroy`.
 * returns: `DuckDBSuccess` on success or `DuckDBError` on failure.
 */
 DUCKDB_API duckdb_state duckdb_appender_create(duckdb_connection connection, const char *schema, const char *table,
-                                               duckdb_appender *out_appender, bool merge = false);
+                                               duckdb_appender *out_appender);
+
+/*!
+Creates an merger object that allows upsert style merges with existing data while appending new data.
+
+Note that the object must be destroyed with `duckdb_appender_destroy`.
+
+* connection: The connection context to create the appender in.
+* schema: The schema of the table to append to, or `nullptr` for the default schema.
+* table: The table name to append to.
+* out_appender: The resulting appender object.
+* returns: `DuckDBSuccess` on success or `DuckDBError` on failure.
+*/
+DUCKDB_API duckdb_state duckdb_merger_create(duckdb_connection connection, const char *schema, const char *table,
+                                               duckdb_appender *out_appender);
 
 /*!
 Returns the number of columns in the table that belongs to the appender.

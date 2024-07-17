@@ -14,8 +14,9 @@ using duckdb::string_t;
 using duckdb::timestamp_t;
 using duckdb::uhugeint_t;
 
+template <class TYPE>
 duckdb_state duckdb_appender_create(duckdb_connection connection, const char *schema, const char *table,
-                                    duckdb_appender *out_appender, bool merge) {
+                                  duckdb_appender *out_appender) {
 	Connection *conn = reinterpret_cast<Connection *>(connection);
 
 	if (!connection || !table || !out_appender) {
@@ -27,11 +28,7 @@ duckdb_state duckdb_appender_create(duckdb_connection connection, const char *sc
 	auto wrapper = new AppenderWrapper();
 	*out_appender = (duckdb_appender)wrapper;
 	try {
-	  if (merge) {
-		  wrapper->appender = duckdb::make_uniq<Merger>(*conn, schema, table);
-	  } else {
-		  wrapper->appender = duckdb::make_uniq<Appender>(*conn, schema, table);
-	  }
+		wrapper->appender = duckdb::make_uniq<TYPE>(*conn, schema, table);
 	} catch (std::exception &ex) {
 		ErrorData error(ex);
 		wrapper->error = error.RawMessage();
@@ -41,6 +38,16 @@ duckdb_state duckdb_appender_create(duckdb_connection connection, const char *sc
 		return DuckDBError;
 	} // LCOV_EXCL_STOP
 	return DuckDBSuccess;
+}
+
+duckdb_state duckdb_merger_create(duckdb_connection connection, const char *schema, const char *table,
+                                    duckdb_appender *out_appender) {
+	return duckdb_appender_create<Merger>(connection, schema, table, out_appender);
+}
+
+duckdb_state duckdb_appender_create(duckdb_connection connection, const char *schema, const char *table,
+                                    duckdb_appender *out_appender) {
+	return duckdb_appender_create<Appender>(connection, schema, table, out_appender);
 }
 
 duckdb_state duckdb_appender_destroy(duckdb_appender *appender) {
