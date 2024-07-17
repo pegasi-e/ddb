@@ -1290,11 +1290,10 @@ void DataTable::LocalMerge(TableCatalogEntry &table, ClientContext &context, Dat
                            const unordered_set<column_t> &conflict_target, const vector<PhysicalIndex> &set_columns,
                            LocalAppendState &append_state, bool initialize, bool do_appends, idx_t &update_count, idx_t &insert_count) {
 
+	auto &storage = table.GetStorage();
 	if (initialize) {
-		InitializeLocalAppend(append_state, table, context, bound_constraints);
+		storage.InitializeLocalAppend(append_state, table, context, bound_constraints);
 	}
-
-
 
 	DataChunk insert_chunk;
 	insert_chunk.Initialize(context, chunk.GetTypes());
@@ -1303,13 +1302,13 @@ void DataTable::LocalMerge(TableCatalogEntry &table, ClientContext &context, Dat
 	                                  nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr);
 
 	if (do_appends) {
-		LocalAppend(append_state, table, context, insert_chunk, true);
+		storage.LocalAppend(append_state, table, context, insert_chunk, true);
 		insert_count = insert_chunk.size();
 	} else {
 		insert_count = 0;
 	}
 
-	FinalizeLocalAppend(append_state);
+	storage.FinalizeLocalAppend(append_state);
 }
 
 void DataTable::LocalMerge(TableCatalogEntry &table, ClientContext &context, DataChunk &chunk, const vector<unique_ptr<BoundConstraint>> &bound_constraints,
