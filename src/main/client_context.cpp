@@ -1123,33 +1123,6 @@ unique_ptr<TableDescription> ClientContext::TableInfo(const string &schema_name,
 	return result;
 }
 
-static vector<PhysicalIndex> GetSetColumns(TableCatalogEntry &table, ColumnList &targets, unordered_set<column_t> &conflict_target) {
-	vector<PhysicalIndex> set_columns;
-
-	for (auto &column_definition : targets.Physical()) {
-		auto &column = table.GetColumn(column_definition.Name());
-		if (conflict_target.find(column.Oid()) == conflict_target.end()) {
-			set_columns.push_back(column.Physical());
-		}
-	}
-
-	return set_columns;
-}
-
-static vector<PhysicalIndex> GetSetColumns(DataTable &data_table, unordered_set<column_t> &conflict_target) {
-	vector<PhysicalIndex> set_columns;
-
-	for (idx_t i = 0; i < data_table.Columns().size(); i++) {
-		auto &col = data_table.Columns()[i];
-		column_t oid = col.Oid();
-		if (conflict_target.find(oid) == conflict_target.end()) {
-			set_columns.push_back(col.Physical());
-		}
-	}
-
-	return set_columns;
-}
-
 static unordered_set<column_t> ExtractConflictTarget(DataTable &data_table) {
 	// The column ids to apply the ON CONFLICT on
 	unordered_set<column_t> conflict_target;
@@ -1186,7 +1159,7 @@ void ClientContext::Merge(TableDescription &description, ColumnDataCollection &c
 		auto column_list = ColumnList(std::move(description.columns));
 		vector<unique_ptr<Expression>> defaults;
 		auto binder = Binder::CreateBinder(*this);
-	  	binder->BindDefaultValues(column_list, defaults);
+	  	binder->BindDefaultValues(table_entry.GetColumns(), defaults);
 	  	auto bound_constraints = binder->BindConstraints(table_entry);
 		MetaTransaction::Get(*this).ModifyDatabase(table_entry.ParentCatalog().GetAttached());
 		auto &storage = table_entry.GetStorage();
@@ -1194,13 +1167,17 @@ void ClientContext::Merge(TableDescription &description, ColumnDataCollection &c
 
 		vector<PhysicalIndex> set_columns;
 		physical_index_vector_t<idx_t> column_index_map;
+		vector<LogicalType> table_types;
 
 		for (auto &column : table_entry.GetColumns().Physical()) {
 			auto column_name = column.Name();
 			auto idx = column_list.GetColumnIndex(column_name);
 			if (idx.IsValid()) {
 				column_index_map.push_back(idx.index);
+			} else {
+				column_index_map.push_back(DConstants::INVALID_INDEX);
 			}
+			table_types.push_back(column.Type());
 		}
 
 		for (auto &column_definition : column_list.Physical()) {
@@ -1211,14 +1188,13 @@ void ClientContext::Merge(TableDescription &description, ColumnDataCollection &c
 		}
 
 		ExpressionExecutor default_executor(*this, defaults);
-		ColumnDataCollection reordered_collection(collection.GetAllocator());
+		ColumnDataCollection reordered_collection(collection.GetAllocator(), table_types);
 		for (auto &c : collection.Chunks()) {
 			DataChunk result_chunk;
-			result_chunk.Initialize(collection.GetAllocator(), c.GetTypes(), c.size());
+			result_chunk.Initialize(collection.GetAllocator(), table_types);
 			PhysicalInsert::ResolveDefaults(table_entry, c, column_index_map, default_executor, result_chunk);
 			reordered_collection.Append(result_chunk);
 		}
-//		ExpressionExecutor e(*this, table_entry.GetColumns().GetColumn("b").DefaultValue());
 
 		storage.Merge(table_entry, *this, reordered_collection, bound_constraints, conflict_target, set_columns);
 	});

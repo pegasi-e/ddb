@@ -930,7 +930,7 @@ static bool CheckForDuplicateTargets(const Vector &row_ids, idx_t count) {
 	return is_sorted;
 }
 
-static void CreateUpdateChunk(ClientContext &context, DataChunk &chunk, TableCatalogEntry &table, Vector &row_ids, DataChunk &update_chunk,
+static void CreateUpdateChunk(ClientContext &context, DataChunk &chunk, TableCatalogEntry &table, const vector<PhysicalIndex>& set_columns, Vector &row_ids, DataChunk &update_chunk,
                               const optional_ptr<const vector<unique_ptr<Expression>>> &set_expressions,
                               const optional_ptr<const vector<LogicalType>> &set_types,
                               const optional_ptr<const unique_ptr<Expression>> &do_update_condition) {
@@ -969,7 +969,17 @@ static void CreateUpdateChunk(ClientContext &context, DataChunk &chunk, TableCat
 		executor.Execute(chunk, update_chunk);
 		update_chunk.SetCardinality(chunk);
 	} else {
-		chunk.Split(update_chunk, 1);
+		D_ASSERT(table.GetColumns().Physical().Size() == chunk.ColumnCount());
+		vector<LogicalType> update_types;
+		for (idx_t i = 0; i < set_columns.size(); i++) {
+			update_types.push_back(table.GetColumns().GetColumn(set_columns[i]).Type());
+		}
+
+		update_chunk.Initialize(context, update_types, chunk.size());
+		for (idx_t i = 0; i < set_columns.size(); i++) {
+			update_chunk.data[i].Reference(chunk.data[set_columns[i].index]);
+		}
+
 		update_chunk.SetCardinality(chunk);
 	}
 }
@@ -982,7 +992,7 @@ static idx_t PerformOnConflictAction(ClientContext &context, DataChunk &chunk, T
                                      const optional_ptr<const unique_ptr<Expression>> &do_update_condition) {
 
 	DataChunk update_chunk;
-	CreateUpdateChunk(context, chunk, table, row_ids, update_chunk, set_expressions, set_types, do_update_condition);
+	CreateUpdateChunk(context, chunk, table, set_columns, row_ids, update_chunk, set_expressions, set_types, do_update_condition);
 
 	auto &data_table = table.GetStorage();
 	// Perform the update, using the results of the SET expressions
