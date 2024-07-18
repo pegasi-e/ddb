@@ -930,13 +930,21 @@ static bool CheckForDuplicateTargets(const Vector &row_ids, idx_t count) {
 	return is_sorted;
 }
 
+static vector<LogicalType> GetTypesOfSetColumns(const vector<PhysicalIndex>& set_columns, TableCatalogEntry &table) {
+	vector<LogicalType> update_types;
+	for (idx_t i = 0; i < set_columns.size(); i++) {
+		update_types.push_back(table.GetColumns().GetColumn(set_columns[i]).Type());
+	}
+
+	return update_types;
+}
+
 static void CreateUpdateChunk(ClientContext &context, DataChunk &chunk, TableCatalogEntry &table, const vector<PhysicalIndex>& set_columns, Vector &row_ids, DataChunk &update_chunk,
+                              const vector<LogicalType> &set_types,
                               const optional_ptr<const vector<unique_ptr<Expression>>> &set_expressions,
-                              const optional_ptr<const vector<LogicalType>> &set_types,
                               const optional_ptr<const unique_ptr<Expression>> &do_update_condition) {
 
 	if (set_expressions) {
-		D_ASSERT(set_types != nullptr);
 		// Check the optional condition for the DO UPDATE clause, to filter which rows will be updated
 		if (do_update_condition && *do_update_condition) {
 			DataChunk do_update_filter_result;
@@ -964,18 +972,14 @@ static void CreateUpdateChunk(ClientContext &context, DataChunk &chunk, TableCat
 		}
 
 		// Execute the SET expressions
-		update_chunk.Initialize(context, *set_types);
+		update_chunk.Initialize(context, set_types);
 		ExpressionExecutor executor(context, *set_expressions);
 		executor.Execute(chunk, update_chunk);
 		update_chunk.SetCardinality(chunk);
 	} else {
 		D_ASSERT(table.GetColumns().Physical().Size() == chunk.ColumnCount());
-		vector<LogicalType> update_types;
-		for (idx_t i = 0; i < set_columns.size(); i++) {
-			update_types.push_back(table.GetColumns().GetColumn(set_columns[i]).Type());
-		}
-
-		update_chunk.Initialize(context, update_types, chunk.size());
+		auto update_types = GetTypesOfSetColumns(set_columns, table);
+		update_chunk.Initialize(context, set_types, chunk.size());
 		for (idx_t i = 0; i < set_columns.size(); i++) {
 			update_chunk.data[i].Reference(chunk.data[set_columns[i].index]);
 		}
@@ -987,12 +991,12 @@ static void CreateUpdateChunk(ClientContext &context, DataChunk &chunk, TableCat
 template <bool GLOBAL>
 static idx_t PerformOnConflictAction(ClientContext &context, DataChunk &chunk, TableCatalogEntry &table,
                                      Vector &row_ids, const vector<PhysicalIndex>& set_columns, const vector<unique_ptr<BoundConstraint>> &bound_constraints,
+                                     const vector<LogicalType> &set_types,
                                      const optional_ptr<const vector<unique_ptr<Expression>>> &set_expressions,
-                                     const optional_ptr<const vector<LogicalType>> &set_types,
                                      const optional_ptr<const unique_ptr<Expression>> &do_update_condition) {
 
 	DataChunk update_chunk;
-	CreateUpdateChunk(context, chunk, table, set_columns, row_ids, update_chunk, set_expressions, set_types, do_update_condition);
+	CreateUpdateChunk(context, chunk, table, set_columns, row_ids, update_chunk, set_types, set_expressions, do_update_condition);
 
 	auto &data_table = table.GetStorage();
 	// Perform the update, using the results of the SET expressions
@@ -1012,8 +1016,8 @@ static idx_t PerformOrderedUpdate(TableCatalogEntry &table, ClientContext &conte
                                   const vector<unique_ptr<BoundConstraint>> &bound_constraints,
                                   const vector<PhysicalIndex> &set_columns,
                                   Vector &row_ids, DataChunk &conflict_chunk,
+                                  const vector<LogicalType> &set_types,
                                   const optional_ptr<const vector<unique_ptr<Expression>>> &set_expressions,
-                                  const optional_ptr<const vector<LogicalType>> &set_types,
                                   const optional_ptr<const unique_ptr<Expression>> &do_update_condition) {
 
 	idx_t updated_tuples = 0;
@@ -1029,7 +1033,7 @@ static idx_t PerformOrderedUpdate(TableCatalogEntry &table, ClientContext &conte
 		Vector group_row_ids(row_ids);
 		group_row_ids.Slice(row_ids, offset, offset + chunk_size);
 
-		updated_tuples += PerformOnConflictAction<GLOBAL>(context, data_chunk, table, group_row_ids, set_columns, bound_constraints, set_expressions, set_types, do_update_condition);
+		updated_tuples += PerformOnConflictAction<GLOBAL>(context, data_chunk, table, group_row_ids, set_columns, bound_constraints, set_types, set_expressions, do_update_condition);
 	}
 
 	return updated_tuples;
@@ -1082,8 +1086,8 @@ static idx_t PerformUnOrderedUpdate(TableCatalogEntry &table, ClientContext &con
                                     const vector<unique_ptr<BoundConstraint>> &bound_constraints,
                                     const vector<PhysicalIndex> &set_columns,
                                     Vector &row_ids, DataChunk &conflict_chunk, const shared_ptr<RowGroupCollection> &row_groups,
+                                    const vector<LogicalType> &set_types,
                                     const optional_ptr<const vector<unique_ptr<Expression>>> &set_expressions,
-                                    const optional_ptr<const vector<LogicalType>> &set_types,
                                     const optional_ptr<const unique_ptr<Expression>> &do_update_condition) {
 
 	idx_t updated_tuples = 0;
@@ -1099,7 +1103,7 @@ static idx_t PerformUnOrderedUpdate(TableCatalogEntry &table, ClientContext &con
 		row_group_ids.Slice(kvp.second.sel, kvp.second.count);
 
 		updated_tuples += PerformOnConflictAction<GLOBAL>(context, data_chunk, table, row_group_ids,
-		                                                  set_columns, bound_constraints, set_expressions, set_types, do_update_condition);
+		                                                  set_columns, bound_constraints, set_types, set_expressions, do_update_condition);
 	}
 
 	return updated_tuples;
@@ -1109,13 +1113,13 @@ template <bool GLOBAL>
 static idx_t HandleInsertConflicts(TableCatalogEntry &table, ClientContext &context, DataChunk &insert_chunk,
                                    DataTable &data_table, const vector<unique_ptr<BoundConstraint>> &bound_constraints,
                                    const unordered_set<column_t> &conflict_target, const vector<PhysicalIndex> &set_columns,
+                                   const vector<LogicalType> &set_types,
                                    const optional_ptr<shared_ptr<RowGroupCollection>> &row_groups,
                                    const optional_ptr<const vector<LogicalType>> &insert_types,
                                    const optional_ptr<const vector<LogicalType>> &types_to_fetch,
                                    const optional_ptr<const unique_ptr<Expression>> &conflict_condition,
                                    const optional_ptr<const vector<column_t>> &columns_to_fetch,
                                    const optional_ptr<const vector<unique_ptr<Expression>>> &set_expressions,
-                                   const optional_ptr<const vector<LogicalType>> &set_types,
                                    const optional_ptr<const unique_ptr<Expression>> &do_update_condition
                                    ) {
 
@@ -1205,12 +1209,12 @@ static idx_t HandleInsertConflicts(TableCatalogEntry &table, ClientContext &cont
 	if (is_sorted || row_groups == nullptr) {
 		// fast path for sorted updates
 		updated_tuples = PerformOrderedUpdate<GLOBAL>(table, context, bound_constraints, set_columns, row_ids,
-		                                              combined_chunk, set_expressions, set_types, do_update_condition);
+		                                              combined_chunk, set_types, set_expressions, do_update_condition);
 	} else {
 		// fast path for non-sorted updates
 		updated_tuples = PerformUnOrderedUpdate<GLOBAL>(table, context, bound_constraints, set_columns, row_ids,
 		                                                combined_chunk, *row_groups,
-		                                                set_expressions, set_types, do_update_condition);
+		                                                set_types, set_expressions, do_update_condition);
 	}
 
 	// Remove the conflicting tuples from the insert chunk
@@ -1225,25 +1229,25 @@ static idx_t HandleInsertConflicts(TableCatalogEntry &table, ClientContext &cont
 static idx_t OnConflictHandling(TableCatalogEntry &table, ClientContext &context,
                                 DataChunk& chunk, const vector<unique_ptr<BoundConstraint>> &bound_constraints,
                                 const unordered_set<column_t> &conflict_target, const vector<PhysicalIndex> &set_columns,
+                                const vector<LogicalType> &set_types,
                                 const optional_ptr<shared_ptr<RowGroupCollection>> &row_groups,
                                 const optional_ptr<const vector<LogicalType>> &insert_types,
                                 const optional_ptr<const vector<LogicalType>> &types_to_fetch,
                                 const optional_ptr<const unique_ptr<Expression>> &conflict_condition,
                                 const optional_ptr<const vector<column_t>> &columns_to_fetch,
                                 const optional_ptr<const vector<unique_ptr<Expression>>> &set_expressions,
-                                const optional_ptr<const vector<LogicalType>> &set_types,
                                 const optional_ptr<const unique_ptr<Expression>> &do_update_condition
                                 ) {
 	auto &data_table = table.GetStorage();
 	idx_t updated_tuples = 0;
 
 	updated_tuples += HandleInsertConflicts<true>(table, context, chunk, data_table, bound_constraints, conflict_target, set_columns,
-	                                              row_groups, insert_types, types_to_fetch, conflict_condition, columns_to_fetch,
-	                                              set_expressions, set_types, do_update_condition);
+	                                              set_types, row_groups, insert_types, types_to_fetch, conflict_condition,
+	                                              columns_to_fetch, set_expressions, do_update_condition);
 	// Also check the transaction-local storage+ART so we can detect conflicts within this transaction
 	updated_tuples += HandleInsertConflicts<false>(table, context, chunk, data_table, bound_constraints, conflict_target, set_columns,
-	                                               row_groups, insert_types, types_to_fetch, conflict_condition, columns_to_fetch,
-	                                               set_expressions, set_types, do_update_condition);
+	                                               set_types, row_groups, insert_types, types_to_fetch, conflict_condition,
+	                                               columns_to_fetch, set_expressions, do_update_condition);
 
 	return updated_tuples;
 }
@@ -1280,9 +1284,9 @@ void DataTable::Merge(TableCatalogEntry &table, ClientContext &context, DataChun
 	DataChunk insert_chunk;
 	insert_chunk.Initialize(context, chunk.GetTypes());
 	insert_chunk.Reference(chunk);
-	update_count = OnConflictHandling(table, context, insert_chunk, bound_constraints, conflict_target, set_columns, nullptr,
-	                                  insert_types, types_to_fetch, conflict_condition, columns_to_fetch, set_expressions,
-	                                  set_types, do_update_condition);
+	update_count = OnConflictHandling(table, context, insert_chunk, bound_constraints, conflict_target, set_columns,
+	                                  set_types, nullptr, insert_types, types_to_fetch, conflict_condition,
+	                                  columns_to_fetch, set_expressions, do_update_condition);
 
 	if (do_appends) {
 		storage.LocalAppend(append_state, table, context, insert_chunk, true);
@@ -1308,8 +1312,9 @@ void DataTable::Merge(TableCatalogEntry &table, ClientContext &context, DataChun
 	DataChunk insert_chunk;
 	insert_chunk.Initialize(context, chunk.GetTypes());
 	insert_chunk.Reference(chunk);
-	update_count = OnConflictHandling(table, context, insert_chunk, bound_constraints, conflict_target, set_columns,
-	                                  nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr);
+	auto set_types = GetTypesOfSetColumns(set_columns, table);
+	update_count = OnConflictHandling(table, context, insert_chunk, bound_constraints, conflict_target, set_columns, set_types,
+	                                  nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr);
 
 	if (do_appends) {
 		storage.LocalAppend(append_state, table, context, insert_chunk, true);
@@ -1345,8 +1350,9 @@ void DataTable::Merge(TableCatalogEntry &table, ClientContext &context, ColumnDa
 		}
 	}
 
-	OnConflictHandling(table, context, insert_chunk, bound_constraints, conflict_target, set_columns, row_groups,
-	                   nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr);
+	auto set_types = GetTypesOfSetColumns(set_columns, table);
+	OnConflictHandling(table, context, insert_chunk, bound_constraints, conflict_target, set_columns, set_types, row_groups,
+	                   nullptr, nullptr, nullptr, nullptr, nullptr, nullptr);
 	AppendInsertChunks(table, context, storage, insert_chunk, append_state);
 	storage.FinalizeLocalAppend(append_state);
 }
