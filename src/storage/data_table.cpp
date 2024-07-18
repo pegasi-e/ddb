@@ -1254,7 +1254,7 @@ static void AppendInsertChunks(TableCatalogEntry &table, ClientContext &context,
 	}
 }
 
-void DataTable::LocalMerge(TableCatalogEntry &table, ClientContext &context, DataChunk &chunk, const vector<unique_ptr<BoundConstraint>> &bound_constraints,
+void DataTable::Merge(TableCatalogEntry &table, ClientContext &context, DataChunk &chunk, const vector<unique_ptr<BoundConstraint>> &bound_constraints,
                            const unordered_set<column_t> &conflict_target, const vector<PhysicalIndex> &set_columns,
                            LocalAppendState &append_state, bool initialize, bool finalize_on_conflict, bool do_appends,
                            idx_t &update_count, idx_t &insert_count, const vector<LogicalType> &types_to_fetch,
@@ -1286,7 +1286,7 @@ void DataTable::LocalMerge(TableCatalogEntry &table, ClientContext &context, Dat
 	}
 }
 
-void DataTable::LocalMerge(TableCatalogEntry &table, ClientContext &context, DataChunk &chunk, const vector<unique_ptr<BoundConstraint>> &bound_constraints,
+void DataTable::Merge(TableCatalogEntry &table, ClientContext &context, DataChunk &chunk, const vector<unique_ptr<BoundConstraint>> &bound_constraints,
                            const unordered_set<column_t> &conflict_target, const vector<PhysicalIndex> &set_columns,
                            LocalAppendState &append_state, bool initialize, bool do_appends, idx_t &update_count, idx_t &insert_count) {
 
@@ -1311,14 +1311,14 @@ void DataTable::LocalMerge(TableCatalogEntry &table, ClientContext &context, Dat
 	storage.FinalizeLocalAppend(append_state);
 }
 
-void DataTable::LocalMerge(TableCatalogEntry &table, ClientContext &context, DataChunk &chunk, const vector<unique_ptr<BoundConstraint>> &bound_constraints,
+void DataTable::Merge(TableCatalogEntry &table, ClientContext &context, DataChunk &chunk, const vector<unique_ptr<BoundConstraint>> &bound_constraints,
                            const unordered_set<column_t> &conflict_target, const vector<PhysicalIndex> &set_columns) {
 	LocalAppendState append_state;
 	idx_t update_count, insert_count;
-	LocalMerge(table, context, chunk, bound_constraints, conflict_target, set_columns, append_state, true, true, update_count, insert_count);
+	Merge(table, context, chunk, bound_constraints, conflict_target, set_columns, append_state, true, true, update_count, insert_count);
 }
 
-void DataTable::LocalMerge(TableCatalogEntry &table, ClientContext &context, ColumnDataCollection &collection, const vector<unique_ptr<BoundConstraint>> &bound_constraints,
+void DataTable::Merge(TableCatalogEntry &table, ClientContext &context, ColumnDataCollection &collection, const vector<unique_ptr<BoundConstraint>> &bound_constraints,
                            const unordered_set<column_t> &conflict_target, const vector<PhysicalIndex> &set_columns) {
 	LocalAppendState append_state;
 	auto &storage = table.GetStorage();
@@ -1327,8 +1327,12 @@ void DataTable::LocalMerge(TableCatalogEntry &table, ClientContext &context, Col
 	DataChunk insert_chunk;
 	insert_chunk.Initialize(context, collection.Types(), collection.Count());
 	for (auto &chunk : collection.Chunks()) {
-		//Ideally appending a reference would be better than this copy, but for now this works fairly well.
-		insert_chunk.Append(chunk, false);
+		if (chunk.size() <= STANDARD_VECTOR_SIZE && collection.ChunkCount() == 1) {
+			insert_chunk.Reference(chunk);
+		} else {
+			//Ideally appending a reference would be better than this copy, but for now this works fairly well.
+			insert_chunk.Append(chunk, false);
+		}
 	}
 
 	OnConflictHandling(table, context, insert_chunk, bound_constraints, conflict_target, set_columns, row_groups,

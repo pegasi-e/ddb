@@ -106,22 +106,21 @@ public:
 	//! Finalizes a transaction-local append
 	void FinalizeLocalAppend(LocalAppendState &state);
 
-    void LocalMerge(TableCatalogEntry &table, ClientContext &context, DataChunk &chunk, const vector<unique_ptr<BoundConstraint>> &bound_constraints,
+    void Merge(TableCatalogEntry &table, ClientContext &context, DataChunk &chunk, const vector<unique_ptr<BoundConstraint>> &bound_constraints,
 	                const unordered_set<column_t> &conflict_target, const vector<PhysicalIndex> &set_columns);
-	void LocalMerge(TableCatalogEntry &table, ClientContext &context, DataChunk &chunk, const vector<unique_ptr<BoundConstraint>> &bound_constraints,
+	void Merge(TableCatalogEntry &table, ClientContext &context, DataChunk &chunk, const vector<unique_ptr<BoundConstraint>> &bound_constraints,
 	                const unordered_set<column_t> &conflict_target, const vector<PhysicalIndex> &set_columns,
 	                LocalAppendState &append_state, bool initialize, bool do_appends,
 	                idx_t &update_count, idx_t &insert_count);
-	void LocalMerge(TableCatalogEntry &table, ClientContext &context, DataChunk &chunk, const vector<unique_ptr<BoundConstraint>> &bound_constraints,
+	void Merge(TableCatalogEntry &table, ClientContext &context, DataChunk &chunk, const vector<unique_ptr<BoundConstraint>> &bound_constraints,
 	                const unordered_set<column_t> &conflict_target, const vector<PhysicalIndex> &set_columns,
 	                LocalAppendState &append_state, bool initialize, bool finalize_on_conflict, bool do_appends,
 	                idx_t &update_count, idx_t &insert_count, const vector<LogicalType> &types_to_fetch,
 	                const vector<LogicalType> &insert_types, const unique_ptr<Expression> &conflict_condition,
 	                const vector<column_t> &columns_to_fetch, const vector<unique_ptr<Expression>> &set_expressions,
 	                const vector<LogicalType> &set_types, const unique_ptr<Expression> &do_update_condition);
-    void LocalMerge(TableCatalogEntry &table, ClientContext &context, ColumnDataCollection &collection, const vector<unique_ptr<BoundConstraint>> &bound_constraints,
+    void Merge(TableCatalogEntry &table, ClientContext &context, ColumnDataCollection &collection, const vector<unique_ptr<BoundConstraint>> &bound_constraints,
 	                const unordered_set<column_t> &conflict_target, const vector<PhysicalIndex> &set_columns);
-	void LocalMerge(ClientContext &context, DataChunk &chunk);
 	//! Append a chunk to the transaction-local storage of this table
 	void LocalAppend(TableCatalogEntry &table, ClientContext &context, DataChunk &chunk,
 	                 const vector<unique_ptr<BoundConstraint>> &bound_constraints);

@@ -1143,26 +1143,9 @@ static unordered_set<column_t> ExtractConflictTarget(DataTable &data_table) {
 }
 
 void ClientContext::Merge(TableDescription &description, DataChunk& chunk) {
-  RunFunctionInTransaction([&]() {
-		auto &table_entry =
-		    Catalog::GetEntry<TableCatalogEntry>(*this, INVALID_CATALOG, description.schema, description.table);
-		// verify that the table columns and types match up
-		if (description.columns.size() != table_entry.GetColumns().PhysicalColumnCount()) {
-			throw InvalidInputException("Failed to append: table entry has different number of columns!");
-		}
-		for (idx_t i = 0; i < description.columns.size(); i++) {
-			if (description.columns[i].Type() != table_entry.GetColumns().GetColumn(PhysicalIndex(i)).Type()) {
-				throw InvalidInputException("Failed to append: table entry has different number of columns!");
-			}
-		}
-		auto binder = Binder::CreateBinder(*this);
-		auto bound_constraints = binder->BindConstraints(table_entry);
-		MetaTransaction::Get(*this).ModifyDatabase(table_entry.ParentCatalog().GetAttached());
-		auto &storage = table_entry.GetStorage();
-		auto conflict_target = ExtractConflictTarget(storage);
-		auto set_columns = GetSetColumns(storage, conflict_target);
-		table_entry.GetStorage().LocalMerge(table_entry, *this, chunk, bound_constraints, conflict_target, set_columns);
-	});
+	ColumnDataCollection collection(Allocator::DefaultAllocator());
+	collection.Append(chunk);
+	Merge(description, collection);
 }
 
 void ClientContext::Merge(TableDescription &description, ColumnDataCollection &collection) {
@@ -1184,7 +1167,7 @@ void ClientContext::Merge(TableDescription &description, ColumnDataCollection &c
 		auto &storage = table_entry.GetStorage();
 		auto conflict_target = ExtractConflictTarget(storage);
 		auto set_columns = GetSetColumns(storage, conflict_target);
-		storage.LocalMerge(table_entry, *this, collection, bound_constraints, conflict_target, set_columns);
+		storage.Merge(table_entry, *this, collection, bound_constraints, conflict_target, set_columns);
 	});
 }
   
