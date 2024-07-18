@@ -113,7 +113,7 @@ public:
 	DUCKDB_API void Destroy();
 
 	//! Get the table info of a specific table, or nullptr if it cannot be found
-	DUCKDB_API unique_ptr<TableDescription> TableInfo(const string &schema_name, const string &table_name);
+	DUCKDB_API unique_ptr<TableDescription> TableInfo(const string &schema_name, const string &table_name, const optional_ptr<const vector<string>> column_names = nullptr);
 	//! Appends a DataChunk to the specified table. Returns whether or not the append was successful.
 	DUCKDB_API void Append(TableDescription &description, ColumnDataCollection &collection);
 	DUCKDB_API void Merge(TableDescription &description, DataChunk &chunk);

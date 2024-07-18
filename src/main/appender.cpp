@@ -49,9 +49,9 @@ InternalAppender::~InternalAppender() {
 	Destructor();
 }
 
-Appender::Appender(Connection &con, const string &schema_name, const string &table_name, const vector<LogicalType> &logical_types)
+Appender::Appender(Connection &con, const string &schema_name, const string &table_name, const vector<LogicalType> &logical_types, const optional_ptr<const vector<string>> &column_names)
     : BaseAppender(Allocator::DefaultAllocator(), AppenderType::LOGICAL), context(con.context) {
-	description = con.TableInfo(schema_name, table_name);
+	description = con.TableInfo(schema_name, table_name, column_names);
 	if (!description) {
 		// table could not be found
 		throw CatalogException(StringUtil::Format("Table \"%s.%s\" could not be found", schema_name, table_name));
@@ -65,6 +65,10 @@ Appender::Appender(Connection &con, const string &schema_name, const string &tab
 	}
 	InitializeChunk();
 	collection = make_uniq<ColumnDataCollection>(allocator, types);
+}
+
+Appender::Appender(Connection &con, const string &schema_name, const string &table_name, const vector<LogicalType> &logical_types)
+    : Appender(con, schema_name, table_name, logical_types, nullptr) {
 }
 
 Appender::Appender(Connection &con, const string &table_name, const vector<LogicalType> &logical_types)
@@ -407,13 +411,20 @@ Merger::Merger(Connection &con, const string &schema_name, const string &table_n
     : Appender(con, schema_name, table_name, types) {
 }
 
+Merger::Merger(Connection &con, const string &schema_name, const string &table_name, const vector<LogicalType> &types, const vector<string> &column_names)
+    : Appender(con, schema_name, table_name, types, column_names) {
+}
+
 Merger::Merger(Connection &con, const string &table_name, const vector<LogicalType> &types)
     : Appender(con, table_name, types) {
 }
 
+Merger::Merger(Connection &con, const string &table_name, const vector<LogicalType> &types, const vector<string> &column_names)
+    : Merger(con, DEFAULT_SCHEMA, table_name, types, column_names) {
+}
+
 Merger::Merger(Connection &con, const string &schema_name, const string &table_name)
     : Appender(con, schema_name, table_name) {
-
 }
 
 Merger::Merger(Connection &con, const string &table_name) : Appender(con, DEFAULT_SCHEMA, table_name) {

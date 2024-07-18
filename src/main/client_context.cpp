@@ -45,6 +45,7 @@
 #include "duckdb/storage/data_table.hpp"
 #include "duckdb/common/exception/transaction_exception.hpp"
 #include "duckdb/main/client_context_state.hpp"
+#include "duckdb/execution/operator/persistent/physical_insert.hpp"
 
 namespace duckdb {
 
@@ -1094,7 +1095,7 @@ void ClientContext::RunFunctionInTransaction(const std::function<void(void)> &fu
 	RunFunctionInTransactionInternal(*lock, fun, requires_valid_transaction);
 }
 
-unique_ptr<TableDescription> ClientContext::TableInfo(const string &schema_name, const string &table_name) {
+unique_ptr<TableDescription> ClientContext::TableInfo(const string &schema_name, const string &table_name, const optional_ptr<const vector<string>> column_names) {
 	unique_ptr<TableDescription> result;
 	RunFunctionInTransaction([&]() {
 		// obtain the table info
@@ -1107,11 +1108,32 @@ unique_ptr<TableDescription> ClientContext::TableInfo(const string &schema_name,
 		result = make_uniq<TableDescription>();
 		result->schema = schema_name;
 		result->table = table_name;
-		for (auto &column : table->GetColumns().Logical()) {
-			result->columns.emplace_back(column.Name(), column.Type());
+		if (column_names && !column_names->empty()) {
+			for (auto &column_name : *column_names) {
+				auto &column = table->GetColumn(column_name);
+				result->columns.emplace_back(column.Name(), column.Type());
+			}
+		} else {
+			for (auto &column : table->GetColumns().Logical()) {
+				result->columns.emplace_back(column.Name(), column.Type());
+			}
 		}
+
 	});
 	return result;
+}
+
+static vector<PhysicalIndex> GetSetColumns(TableCatalogEntry &table, ColumnList &targets, unordered_set<column_t> &conflict_target) {
+	vector<PhysicalIndex> set_columns;
+
+	for (auto &column_definition : targets.Physical()) {
+		auto &column = table.GetColumn(column_definition.Name());
+		if (conflict_target.find(column.Oid()) == conflict_target.end()) {
+			set_columns.push_back(column.Physical());
+		}
+	}
+
+	return set_columns;
 }
 
 static vector<PhysicalIndex> GetSetColumns(DataTable &data_table, unordered_set<column_t> &conflict_target) {
@@ -1149,25 +1171,56 @@ void ClientContext::Merge(TableDescription &description, DataChunk& chunk) {
 }
 
 void ClientContext::Merge(TableDescription &description, ColumnDataCollection &collection) {
-  RunFunctionInTransaction([&]() {
+	RunFunctionInTransaction([&]() {
 		auto &table_entry =
 		    Catalog::GetEntry<TableCatalogEntry>(*this, INVALID_CATALOG, description.schema, description.table);
 		// verify that the table columns and types match up
-		if (description.columns.size() != table_entry.GetColumns().PhysicalColumnCount()) {
+		if (description.columns.size() != collection.ColumnCount()) {
 			throw InvalidInputException("Failed to append: table entry has different number of columns!");
 		}
 		for (idx_t i = 0; i < description.columns.size(); i++) {
-			if (description.columns[i].Type() != table_entry.GetColumns().GetColumn(PhysicalIndex(i)).Type()) {
+			if (description.columns[i].Type() != collection.Types()[i]) {
 				throw InvalidInputException("Failed to append: table entry has different number of columns!");
 			}
 		}
+		auto column_list = ColumnList(std::move(description.columns));
+		vector<unique_ptr<Expression>> defaults;
 		auto binder = Binder::CreateBinder(*this);
-		auto bound_constraints = binder->BindConstraints(table_entry);
+	  	binder->BindDefaultValues(column_list, defaults);
+	  	auto bound_constraints = binder->BindConstraints(table_entry);
 		MetaTransaction::Get(*this).ModifyDatabase(table_entry.ParentCatalog().GetAttached());
 		auto &storage = table_entry.GetStorage();
 		auto conflict_target = ExtractConflictTarget(storage);
-		auto set_columns = GetSetColumns(storage, conflict_target);
-		storage.Merge(table_entry, *this, collection, bound_constraints, conflict_target, set_columns);
+
+		vector<PhysicalIndex> set_columns;
+		physical_index_vector_t<idx_t> column_index_map;
+
+		for (auto &column : table_entry.GetColumns().Physical()) {
+			auto column_name = column.Name();
+			auto idx = column_list.GetColumnIndex(column_name);
+			if (idx.IsValid()) {
+				column_index_map.push_back(idx.index);
+			}
+		}
+
+		for (auto &column_definition : column_list.Physical()) {
+			auto &column = table_entry.GetColumn(column_definition.Name());
+			if (conflict_target.find(column.Oid()) == conflict_target.end()) {
+				set_columns.push_back(column.Physical());
+			}
+		}
+
+		ExpressionExecutor default_executor(*this, defaults);
+		ColumnDataCollection reordered_collection(collection.GetAllocator());
+		for (auto &c : collection.Chunks()) {
+			DataChunk result_chunk;
+			result_chunk.Initialize(collection.GetAllocator(), c.GetTypes(), c.size());
+			PhysicalInsert::ResolveDefaults(table_entry, c, column_index_map, default_executor, result_chunk);
+			reordered_collection.Append(result_chunk);
+		}
+//		ExpressionExecutor e(*this, table_entry.GetColumns().GetColumn("b").DefaultValue());
+
+		storage.Merge(table_entry, *this, reordered_collection, bound_constraints, conflict_target, set_columns);
 	});
 }
   

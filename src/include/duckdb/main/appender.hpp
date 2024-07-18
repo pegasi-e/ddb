@@ -118,6 +118,7 @@ public:
 	DUCKDB_API ~Appender() override;
 
 protected:
+	DUCKDB_API Appender(Connection &con, const string &schema_name, const string &table_name, const vector<LogicalType> &logical_types, const optional_ptr<const vector<string>> &column_names);
   	//! A reference to a database connection that created this appender
 	shared_ptr<ClientContext> context;
 	//! The table description (including column names)
@@ -127,12 +128,14 @@ protected:
 
 class Merger : public Appender {
 public:
+	DUCKDB_API Merger(Connection &con, const string &schema_name, const string &table_name, const vector<LogicalType> &types, const vector<std::string> &column_names);
 	DUCKDB_API Merger(Connection &con, const string &schema_name, const string &table_name, const vector<LogicalType> &types);
 	DUCKDB_API Merger(Connection &con, const string &schema_name, const string &table_name);
 	DUCKDB_API Merger(Connection &con, const string &table_name, const vector<LogicalType> &types);
+	DUCKDB_API Merger(Connection &con, const string &table_name, const vector<LogicalType> &types, const vector<string> &column_names);
 	DUCKDB_API Merger(Connection &con, const string &table_name);
 	DUCKDB_API ~Merger() override;
-  protected:
+protected:
 	void FlushInternal(ColumnDataCollection &collection) override;
 };
   
