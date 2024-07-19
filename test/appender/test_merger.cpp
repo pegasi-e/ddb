@@ -119,3 +119,74 @@ TEST_CASE("Test merging out of key order", "[merger]") {
 	REQUIRE(CHECK_COLUMN(result, 1, j_values));
 	REQUIRE(CHECK_COLUMN(result, 2, b_values));
 }
+
+TEST_CASE("Partial merge tests", "[merger]") {
+	duckdb::unique_ptr<QueryResult> result;
+	DuckDB db(nullptr);
+	Connection con(db);
+
+	REQUIRE_NO_FAIL(con.Query("CREATE TABLE integers(i BIGINT, b VARCHAR default 'abc', j int, k int default 9, PRIMARY KEY (i))"));
+
+	// append a bunch of values
+	duckdb::vector<idx_t> values;
+	Appender appender(con, "integers");
+	for (idx_t i = 0; i < 1; i++) {
+		auto num = i;
+		auto key = "key-" + std::to_string(num);
+		appender.AppendRow((int64_t)(num), duckdb::Value(key.c_str()), (int32_t) i, (int32_t) i);
+		values.push_back(num);
+	}
+	appender.Close();
+
+	duckdb::vector<std::string> columns = {"j", "i"};
+
+	Merger merger(con, "integers", columns);
+	merger.AppendRow(33, 0);
+	merger.Close();
+
+	result = con.Query("SELECT b, j, k FROM integers");
+	REQUIRE(CHECK_COLUMN(result, 0, {"key-0"}));
+	REQUIRE(CHECK_COLUMN(result, 1, {33}));
+	REQUIRE(CHECK_COLUMN(result, 2, {0}));
+
+	duckdb::vector<std::string> columns2 = {"k", "i"};
+
+	Merger merger2(con, "integers", columns2);
+	merger2.AppendRow(44, 0);
+	merger2.Close();
+
+	result = con.Query("SELECT b, j, k FROM integers");
+	REQUIRE(CHECK_COLUMN(result, 0, {"key-0"}));
+	REQUIRE(CHECK_COLUMN(result, 1, {33}));
+	REQUIRE(CHECK_COLUMN(result, 2, {44}));
+}
+
+TEST_CASE("Merger new rows add defaults", "[merger]") {
+	duckdb::unique_ptr<QueryResult> result;
+	DuckDB db(nullptr);
+	Connection con(db);
+
+	REQUIRE_NO_FAIL(con.Query("CREATE TABLE integers(i BIGINT, b VARCHAR default 'abc', j int, k int default 9, PRIMARY KEY (i))"));
+
+	// append a bunch of values
+	duckdb::vector<idx_t> values;
+	Appender appender(con, "integers");
+	for (idx_t i = 0; i < 1; i++) {
+		auto num = i;
+		auto key = "key-" + std::to_string(num);
+		appender.AppendRow((int64_t)(num), duckdb::Value(key.c_str()), (int32_t) i, (int32_t) i);
+		values.push_back(num);
+	}
+	appender.Close();
+
+	duckdb::vector<std::string> columns = {"j", "i"};
+
+	Merger merger(con, "integers", columns);
+	merger.AppendRow(33, 1);
+	merger.Close();
+
+	result = con.Query("SELECT b, j, k FROM integers");
+	REQUIRE(CHECK_COLUMN(result, 0, {"key-0", "abc"}));
+	REQUIRE(CHECK_COLUMN(result, 1, {0, 33}));
+	REQUIRE(CHECK_COLUMN(result, 2, {0, 9}));
+}

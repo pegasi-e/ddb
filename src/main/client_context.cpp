@@ -1156,14 +1156,21 @@ void ClientContext::Merge(TableDescription &description, ColumnDataCollection &c
 				throw InvalidInputException("Failed to append: table entry has different number of columns!");
 			}
 		}
-		auto column_list = ColumnList(std::move(description.columns));
+
+		// Copy the column descriptors to ensure we don't steal them from the TableDescription
+		auto column_descriptors = make_uniq<vector<ColumnDefinition>>();
+		for (auto &column_definition : description.columns) {
+			column_descriptors->push_back(column_definition.Copy());
+		}
+
+		auto &storage = table_entry.GetStorage();
+		auto conflict_target = ExtractConflictTarget(storage);
+	  	auto column_list = ColumnList(std::move(*column_descriptors));
 		vector<unique_ptr<Expression>> defaults;
 		auto binder = Binder::CreateBinder(*this);
 	  	binder->BindDefaultValues(table_entry.GetColumns(), defaults);
 	  	auto bound_constraints = binder->BindConstraints(table_entry);
 		MetaTransaction::Get(*this).ModifyDatabase(table_entry.ParentCatalog().GetAttached());
-		auto &storage = table_entry.GetStorage();
-		auto conflict_target = ExtractConflictTarget(storage);
 
 		vector<PhysicalIndex> set_columns;
 		physical_index_vector_t<idx_t> column_index_map;
@@ -1180,10 +1187,11 @@ void ClientContext::Merge(TableDescription &description, ColumnDataCollection &c
 			table_types.push_back(column.Type());
 		}
 
+		//In order to maintain proper order we must loop through the column list
 		for (auto &column_definition : column_list.Physical()) {
-			auto &column = table_entry.GetColumn(column_definition.Name());
-			if (conflict_target.find(column.Oid()) == conflict_target.end()) {
-				set_columns.push_back(column.Physical());
+			auto physical_index = table_entry.GetColumn(column_definition.Name()).Physical();
+			if (conflict_target.find(physical_index.index) == conflict_target.end()) {
+				set_columns.push_back(physical_index);
 			}
 		}
 

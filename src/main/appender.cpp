@@ -407,27 +407,28 @@ void BaseAppender::Close() {
 	}
 }
 
+Merger::Merger(Connection &con, const string &schema_name, const string &table_name, const vector<string> &column_names)
+    : Appender(con, schema_name, table_name, vector<LogicalType>(), column_names) {
+}
+
 Merger::Merger(Connection &con, const string &schema_name, const string &table_name, const vector<LogicalType> &types)
     : Appender(con, schema_name, table_name, types) {
 }
 
-Merger::Merger(Connection &con, const string &schema_name, const string &table_name, const vector<LogicalType> &types, const vector<string> &column_names)
-    : Appender(con, schema_name, table_name, types, column_names) {
-}
-
 Merger::Merger(Connection &con, const string &table_name, const vector<LogicalType> &types)
-    : Appender(con, table_name, types) {
+    : Merger(con, DEFAULT_SCHEMA, table_name, types) {
 }
 
-Merger::Merger(Connection &con, const string &table_name, const vector<LogicalType> &types, const vector<string> &column_names)
-    : Merger(con, DEFAULT_SCHEMA, table_name, types, column_names) {
+Merger::Merger(Connection &con, const string &table_name, const vector<string> &column_names)
+    : Merger(con, DEFAULT_SCHEMA, table_name, column_names) {
 }
 
 Merger::Merger(Connection &con, const string &schema_name, const string &table_name)
     : Appender(con, schema_name, table_name) {
 }
 
-Merger::Merger(Connection &con, const string &table_name) : Appender(con, DEFAULT_SCHEMA, table_name) {
+Merger::Merger(Connection &con, const string &table_name)
+    : Merger(con, DEFAULT_SCHEMA, table_name) {
 }
 
 Merger::~Merger() {

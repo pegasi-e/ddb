@@ -126,13 +126,16 @@ protected:
 	void FlushInternal(ColumnDataCollection &collection) override;
 };
 
+//! Used to merge and insert content into a table.  This object mirrors the way upsert works for the query engine.
+//! Primary key is assumed to be the conflict target
 class Merger : public Appender {
 public:
-	DUCKDB_API Merger(Connection &con, const string &schema_name, const string &table_name, const vector<LogicalType> &types, const vector<std::string> &column_names);
+	// Mergers and inserts columns for the given column names.  This function is
+	DUCKDB_API Merger(Connection &con, const string &schema_name, const string &table_name, const vector<string> &column_names);
 	DUCKDB_API Merger(Connection &con, const string &schema_name, const string &table_name, const vector<LogicalType> &types);
 	DUCKDB_API Merger(Connection &con, const string &schema_name, const string &table_name);
 	DUCKDB_API Merger(Connection &con, const string &table_name, const vector<LogicalType> &types);
-	DUCKDB_API Merger(Connection &con, const string &table_name, const vector<LogicalType> &types, const vector<string> &column_names);
+	DUCKDB_API Merger(Connection &con, const string &table_name, const vector<string> &column_names);
 	DUCKDB_API Merger(Connection &con, const string &table_name);
 	DUCKDB_API ~Merger() override;
 protected:
