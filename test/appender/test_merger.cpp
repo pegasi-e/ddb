@@ -82,7 +82,7 @@ TEST_CASE("Test merging out of key order", "[merger]") {
 	REQUIRE_NO_FAIL(con.Query("CREATE TABLE test(i BIGINT, j VARCHAR, b VARCHAR, PRIMARY KEY (i))"));
 
 	auto number_of_values = 2000;
-	std::vector<int32_t> key_ids;
+	std::vector<idx_t> key_ids;
 	duckdb::vector<duckdb::Value> key_values;
 	duckdb::vector<duckdb::Value> j_values;
 	duckdb::vector<duckdb::Value> b_values;
