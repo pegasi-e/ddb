@@ -105,7 +105,7 @@ TEST_CASE("Test merging out of key order", "[merger]") {
 
 	// merge rows
 	Merger merger(con, "test");
-	for (int32_t i = 0; i < key_ids.size(); i++) {
+	for (idx_t i = 0; i < key_ids.size(); i++) {
 		int32_t key_value = key_ids[i];
 		auto j_update_value = j_values[key_value];
 		auto b_update_value = b_values[key_value];
