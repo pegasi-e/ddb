@@ -2639,10 +2639,11 @@ Note that the object must be destroyed with `duckdb_appender_destroy`.
 * connection: The connection context to create the appender in.
 * schema: The schema of the table to append to, or `nullptr` for the default schema.
 * table: The table name to append to.
+* column_names: A comma seperated string of column names to merge or `nullptr` for all columns
 * out_appender: The resulting appender object.
 * returns: `DuckDBSuccess` on success or `DuckDBError` on failure.
 */
-DUCKDB_API duckdb_state duckdb_merger_create(duckdb_connection connection, const char *schema, const char *table,
+DUCKDB_API duckdb_state duckdb_merger_create(duckdb_connection connection, const char *schema, const char *table, const char *column_names,
                                                duckdb_appender *out_appender);
 
 /*!
