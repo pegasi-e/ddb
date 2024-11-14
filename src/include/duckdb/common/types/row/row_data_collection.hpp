@@ -15,6 +15,7 @@
 
 namespace duckdb {
 
+
 struct RowDataBlock {
 public:
 	RowDataBlock(MemoryTag tag, BufferManager &buffer_manager, idx_t capacity, idx_t entry_size)
