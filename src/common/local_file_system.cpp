@@ -22,6 +22,7 @@
 
 #ifdef __linux__
 #include <linux/fs.h>
+#undef BLOCK_SIZE
 #endif
 
 #ifndef _WIN32
