@@ -36,7 +36,7 @@ struct Storage {
 	//! default to 256KB. (1 << 18)
 	constexpr static idx_t BLOCK_ALLOC_SIZE = DEFAULT_BLOCK_ALLOC_SIZE;
 	//! The actual memory space that is available within the blocks
-	constexpr static idx_t BLOCK_SIZE = BLOCK_ALLOC_SIZE - BLOCK_HEADER_SIZE;
+        constexpr static idx_t BLOCK_SIZE = (BLOCK_ALLOC_SIZE - BLOCK_HEADER_SIZE);
 	//! The size of the headers. This should be small and written more or less atomically by the hard disk. We default
 	//! to the page size, which is 4KB. (1 << 12)
 	constexpr static idx_t FILE_HEADER_SIZE = 4096U;
