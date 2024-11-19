@@ -54,6 +54,7 @@ extern "C" WINBASEAPI BOOL WINAPI GetPhysicallyInstalledSystemMemory(PULONGLONG)
 #include <libgen.h>
 #include <unistd.h>
 #include <stdlib.h>
+#include <sys/sendfile.h>
 // See e.g.:
 // https://opensource.apple.com/source/CarbonHeaders/CarbonHeaders-18.1/TargetConditionals.h.auto.html
 #elif defined(__APPLE__)
@@ -1373,7 +1374,8 @@ void LocalFileSystem::CopyFile(const string &source, const string &target, uniqu
 
     do
       {
-        ret = copy_file_range(src_fd, NULL, dst_fd, NULL, len, 0);
+        //ret = copy_file_range(src_fd, NULL, dst_fd, NULL, len, 0);
+        ret = sendfile(dst_fd, src_fd, NULL, len);
         if (ret == -1)
           {
             perror("copy_file_range");
