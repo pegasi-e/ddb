@@ -20,11 +20,6 @@
 #include <sys/clonefile.h>
 #endif
 
-#ifdef __linux__
-#include <linux/fs.h>
-#undef BLOCK_SIZE
-#endif
-
 #ifndef _WIN32
 #include <dirent.h>
 #include <fcntl.h>
@@ -1363,9 +1358,27 @@ void LocalFileSystem::CopyFile(const string &source, const string &target, uniqu
 }
 #elif __linux__
 void LocalFileSystem::CopyFile(const string &source, const string &target, unique_ptr<FileHandle>& src_handle, unique_ptr<FileHandle>& dst_handle) {
-    int dst_fd = dst_handle->Cast<UnixFileHandle>().fd;
+    int dst_fd = open(target.c_str(), O_CREAT | O_WRONLY | O_TRUNC, 0644);
     int src_fd = src_handle->Cast<UnixFileHandle>().fd;
-    ioctl(dst_fd, FICLONE, src_fd);
+    off_t len, ret;
+    struct stat stat;
+
+    if (fstat(src_fd, &stat) == -1)
+      {
+        perror("fstat");
+      }
+    len = stat.st_size;
+
+    do
+      {
+        ret = copy_file_range(src_fd, NULL, dst_fd, NULL, len, 0);
+        if (ret == -1)
+          {
+            perror("copy_file_range");
+          }
+        len -= ret;
+      }
+    while (len > 0 && ret > 0);
 }
 #else
 #ifndef _WIN32
