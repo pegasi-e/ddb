@@ -2,6 +2,7 @@
 
 #include "duckdb/catalog/catalog.hpp"
 #include "duckdb/common/file_system.hpp"
+#include "duckdb/common/printer.hpp"
 #include "duckdb/common/serializer/buffered_file_reader.hpp"
 #include "duckdb/function/function.hpp"
 #include "duckdb/main/attached_database.hpp"
@@ -365,6 +366,7 @@ string SingleFileStorageManager::Snapshot() {
   ret += to_string(sid);
   auto &fs = FileSystem::Get(db);
   fs.CopyFile(path, ret, src_handle);
+  Printer::PrintF("SingleFileStorageManager::Snapshot\n");
   return ret;
 }
  

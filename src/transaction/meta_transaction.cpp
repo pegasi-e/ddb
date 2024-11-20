@@ -3,7 +3,7 @@
 #include "duckdb/main/attached_database.hpp"
 #include "duckdb/transaction/transaction_manager.hpp"
 #include "duckdb/common/exception/transaction_exception.hpp"
-
+#include "duckdb/common/printer.hpp"
 namespace duckdb {
 
 MetaTransaction::MetaTransaction(ClientContext &context_p, timestamp_t start_timestamp_p, idx_t catalog_version_p)
@@ -164,7 +164,9 @@ void MetaTransaction::ModifyDatabase(AttachedDatabase &db) {
 
 string MetaTransaction::Snapshot(optional_ptr<AttachedDatabase> db) {
   auto &transaction_manager = db->GetTransactionManager();
-  return transaction_manager.Snapshot(context);
+  string ret = transaction_manager.Snapshot(context);
+  Printer::PrintF("MetaTransaction::Snapshot\n");
+  return ret;
 }
 
 uint64_t MetaTransaction::GetSnapshotId(optional_ptr<AttachedDatabase> db) {

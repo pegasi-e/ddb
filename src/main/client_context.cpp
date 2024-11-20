@@ -9,6 +9,7 @@
 #include "duckdb/common/progress_bar/progress_bar.hpp"
 #include "duckdb/common/serializer/buffered_file_writer.hpp"
 #include "duckdb/common/types/column/column_data_collection.hpp"
+#include "duckdb/common/printer.hpp"
 #include "duckdb/execution/column_binding_resolver.hpp"
 #include "duckdb/execution/operator/helper/physical_result_collector.hpp"
 #include "duckdb/main/buffered_data/file_buffered_data.hpp"
@@ -1402,26 +1403,31 @@ pair<string, unique_ptr<QueryResult>> ClientContext::CreateSnapshot() {
   RunFunctionInTransaction([&]() {
     snapshot_file = transaction.Snapshot();
   });
-
+  Printer::PrintF("CreateSnapshot1\n");
   if (snapshot_file.length() == 0) {
     return make_pair(snapshot_file, unique_ptr<QueryResult>(nullptr));
   }
-  
+  Printer::PrintF("CreateSnapshot2\n");
   StatementType statement_type = StatementType::SELECT_STATEMENT;
   string query = "SELECT blob_column";
   auto lock = LockContext();
+    Printer::PrintF("CreateSnapshot3\n");
   BeginQueryInternal(*lock, query);
+    Printer::PrintF("CreateSnapshot4\n");
   StatementProperties properties;
   vector<LogicalType> types{LogicalType::BLOB};
   vector<string> names{"blob_column"};
   ClientProperties client_properties;
   auto ctx = this->shared_from_this();
+    Printer::PrintF("CreateSnapshot5\n");
   FileSystem &fs = FileSystem::GetFileSystem(*this);
   auto buffered_data = make_shared_ptr<FileBufferedData>(ctx, fs, snapshot_file);
   auto result = make_uniq<StreamQueryResult>(statement_type, properties, types,
 					     names, client_properties,
 					     buffered_data);
+    Printer::PrintF("CreateSnapshot6\n");
   SetActiveResult(*lock, *result);
+    Printer::PrintF("CreateSnapshot7\n");
   return make_pair(snapshot_file, std::move(result));
 }
 

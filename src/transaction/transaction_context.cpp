@@ -7,7 +7,7 @@
 #include "duckdb/main/database_manager.hpp"
 #include "duckdb/main/client_context.hpp"
 #include "duckdb/main/client_context_state.hpp"
-
+#include "duckdb/common/printer.hpp"
 namespace duckdb {
 
 TransactionContext::TransactionContext(ClientContext &context)
@@ -108,7 +108,9 @@ string TransactionContext::Snapshot() {
   }
   auto &db_manager = DatabaseManager::Get(context);
   auto db = db_manager.GetDatabase(context, DatabaseManager::GetDefaultDatabase(context));
-  return current_transaction->Snapshot(db);
+  string ret = current_transaction->Snapshot(db);
+  Printer::PrintF("TransactionContext::Snapshot\n");
+  return ret;
 }
 
 uint64_t TransactionContext::GetSnapshotId() {
