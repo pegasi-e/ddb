@@ -34,10 +34,10 @@ duckdb_state duckdb_create_snapshot(duckdb_connection connection, duckdb_result 
   if (! result.second) {
     return DuckDBError;
   }
-  Printer::PrintF("duckdb_create_snapshot1\n");
+  duckdb::Printer::PrintF("duckdb_create_snapshot1\n");
   *out_snapshot_file_name = (char *)duckdb_malloc(result.first.length() + 1);
   memcpy(*out_snapshot_file_name, result.first.c_str(), result.first.length() + 1);
-  Printer::PrintF("duckdb_create_snapshot2\n");
+  duckdb::Printer::PrintF("duckdb_create_snapshot2\n");
   return DuckDBTranslateResult(std::move(result.second), out_result);
 }
 
