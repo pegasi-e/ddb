@@ -6,6 +6,7 @@
 #include "duckdb/common/helper.hpp"
 #include "duckdb/common/string_util.hpp"
 #include "duckdb/common/windows.hpp"
+#include "duckdb/common/printer.hpp"
 #include "duckdb/function/scalar/string_functions.hpp"
 #include "duckdb/main/client_context.hpp"
 #include "duckdb/main/database.hpp"
@@ -1355,12 +1356,13 @@ unique_ptr<FileSystem> FileSystem::CreateLocal() {
 }
 
 #if defined(__DARWIN__) || defined(__APPLE__) || defined(__OpenBSD__)
-void LocalFileSystem::CopyFile(const string &source, const string &target, unique_ptr<FileHandle>& src_handle, unique_ptr<FileHandle>& dst_handle) {
+void LocalFileSystem::CopyFile(const string &source, const string &target, unique_ptr<FileHandle>& src_handle) {
   int src_fd = src_handle->Cast<UnixFileHandle>().fd;
   fclonefileat(src_fd, AT_FDCWD, target.c_str(), 0);
 }
 #elif __linux__
-void LocalFileSystem::CopyFile(const string &source, const string &target, unique_ptr<FileHandle>& src_handle, unique_ptr<FileHandle>& dst_handle) {
+void LocalFileSystem::CopyFile(const string &source, const string &target, unique_ptr<FileHandle>& src_handle) {
+  Printer::PrintF("CopyFile: %s %s\n", source, target);
     int dst_fd = open(target.c_str(), O_CREAT | O_WRONLY | O_TRUNC, 0644);
     int src_fd = src_handle->Cast<UnixFileHandle>().fd;
     off_t len, ret;
@@ -1383,6 +1385,11 @@ void LocalFileSystem::CopyFile(const string &source, const string &target, uniqu
         len -= ret;
       }
     while (len > 0 && ret > 0);
+    if (close(dst_fd) == -1)
+      {
+        perror("close");
+      }
+    Printer::PrintF("CopyFile Done: %s %s\n", source, target);
 }
 #else
 #ifndef _WIN32
