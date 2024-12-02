@@ -42,7 +42,7 @@ jobs:
     # Builds binaries for linux_amd64_gcc4
     name: Linux (x64)
     runs-on: ubuntu-latest
-    container: quay.io/pypa/manylinux2014_x86_64
+    container: quay.io/pypa/manylinux_2_28_x86_64
     env:
       EXTENSION_CONFIGS: '${GITHUB_WORKSPACE}/.github/config/bundled_extensions.cmake'
       ENABLE_EXTENSION_AUTOLOADING: 1
@@ -106,7 +106,7 @@ jobs:
    name: Linux (aarch64)
    runs-on: ubuntu-latest
    needs: linux-release-64
-   container: ubuntu:18.04
+   container: ubuntu:22.04
    env:
      EXTENSION_CONFIGS: '${GITHUB_WORKSPACE}/.github/config/bundled_extensions.cmake'
      ENABLE_EXTENSION_AUTOLOADING: 1
@@ -119,7 +119,6 @@ jobs:
      ODBC_CONFIG: ../../build/unixodbc/build/bin/odbc_config
      DUCKDB_PLATFORM: linux_arm64
      ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
-     ACTIONS_RUNNER_FORCE_ACTIONS_NODE_VERSION: 'node16'
 
    steps:
      - uses: actions/checkout@v3
