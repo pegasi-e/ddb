@@ -57,19 +57,17 @@ jobs:
     # Builds binaries for linux_amd64_gcc4
     name: Linux (x64)
     runs-on: ubuntu-latest
+    container: quay.io/pypa/manylinux2014_x86_64
+    needs: linux-extensions-64
     env:
       EXTENSION_CONFIGS: '${GITHUB_WORKSPACE}/.github/config/bundled_extensions.cmake'
       ENABLE_EXTENSION_AUTOLOADING: 1
       ENABLE_EXTENSION_AUTOINSTALL: 1
       GEN: ninja
       BUILD_BENCHMARK: 1
-      BUILD_ODBC: 1
-      DEBUG_STACKTRACE: 1
       FORCE_WARN_UNUSED: 1
       DUCKDB_RUN_PARALLEL_CSV_TESTS: 1
       ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
-      ACTIONS_RUNNER_FORCE_ACTIONS_NODE_VERSION: 'node16'
-      ACTIONS_RUNNER_FORCED_INTERNAL_NODE_VERSION: 'node16'
 
     steps:
     - uses: actions/checkout@v3
