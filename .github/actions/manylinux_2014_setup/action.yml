@@ -51,6 +51,12 @@ runs:
       shell: bash
       run: scripts/setup_manylinux2014.sh general
 
+    - name: Install
+      shell: bash
+      if: ${{ inputs.aarch64_cross_compile == 1 }}
+      run: |
+        yum install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu      
+
     - name: Install AWS CLI
       if: ${{ inputs.aws-cli == 1 }}
       shell: bash
