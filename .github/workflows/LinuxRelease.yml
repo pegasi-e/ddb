@@ -106,11 +106,7 @@ jobs:
    name: Linux (aarch64)
    runs-on: ubuntu-latest
    # needs: linux-release-64
-   strategy:
-     matrix:
-       container:
-         - centos:7
-         - ubuntu:18.04
+   container: ubuntu:18.04
    env:
      EXTENSION_CONFIGS: '${GITHUB_WORKSPACE}/.github/config/bundled_extensions.cmake'
      ENABLE_EXTENSION_AUTOLOADING: 1
