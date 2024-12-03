@@ -123,14 +123,13 @@ jobs:
      ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
 
    steps:
-     # - name: install old node
-     #   shell: bash
-     #   run: |
-     #     ldd --version
-     #     apt update && apt -y install curl
-     #     curl -LO https://unofficial-builds.nodejs.org/download/release/v20.9.0/node-v20.9.0-linux-x64-glibc-217.tar.xz
-     #     tar -xf node-v20.9.0-linux-x64-glibc-217.tar.xz --strip-components 1 -C /node20217
-     #     ldd /__e/node20/bin/node
+     - name: install old node
+       shell: bash
+       run: |
+         ldd --version
+         apt update && apt -y install curl
+         curl -sL https://unofficial-builds.nodejs.org/download/release/v20.9.0/node-v20.9.0-linux-x64-glibc-217.tar.xz | tar -xJ --strip-components 1 -C /node20217
+         ldd /__e/node20/bin/node
    
      - uses: actions/checkout@v4
        with:
