@@ -109,8 +109,8 @@ jobs:
    container:
      image: ubuntu:18.04
      volumes:
-          - ${{ inputs.architecture == 'x86_64' && '/node20217:/node20217:rw,rshared' || ' ' }}
-          - ${{ inputs.architecture == 'x86_64' && '/node20217:/__e/node20:ro,rshared' || ' ' }}
+          - ${{ '/node20217:/node20217:rw,rshared'}}
+          - ${{ '/node20217:/__e/node20:ro,rshared' }}
    env:
      EXTENSION_CONFIGS: '${GITHUB_WORKSPACE}/.github/config/bundled_extensions.cmake'
      ENABLE_EXTENSION_AUTOLOADING: 1
