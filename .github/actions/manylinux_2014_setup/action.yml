@@ -55,7 +55,7 @@ runs:
       shell: bash
       if: ${{ inputs.aarch64_cross_compile == 1 }}
       run: |
-        yum install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu      
+        yum install -y gcc-aarch64-linux-gnu gcc-c++-aarch64-linux-gnu      
 
     - name: Install AWS CLI
       if: ${{ inputs.aws-cli == 1 }}
