@@ -126,6 +126,7 @@ jobs:
      - name: install old node
        shell: bash
        run: |
+         ls /
          ldd --version
          apt update && apt -y install curl
          curl -sL https://unofficial-builds.nodejs.org/download/release/v20.9.0/node-v20.9.0-linux-x64-glibc-217.tar.xz | tar -xJ --strip-components 1 -C /node20217
