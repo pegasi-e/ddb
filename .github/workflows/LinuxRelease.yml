@@ -134,7 +134,9 @@ jobs:
           ls /__e/
           ldd --version
           apt update && apt -y install curl
-          curl -sL https://unofficial-builds.nodejs.org/download/release/v20.9.0/node-v20.9.0-linux-x64-glibc-217.tar.xz | tar -xJ --strip-components 1 -C /__e/node20/bin/node
+          curl -sL https://unofficial-builds.nodejs.org/download/release/v20.9.0/node-v20.9.0-linux-x64-glibc-217.tar.xz
+          ls
+          tar node-v20.9.0-linux-x64-glibc-217.tar.xz -xJ --strip-components 1 -C /__e/node20/bin/node
           ldd /__e/node20/bin/node
    
       - uses: actions/checkout@v1
