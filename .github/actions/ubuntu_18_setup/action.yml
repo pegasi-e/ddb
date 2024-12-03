@@ -45,9 +45,9 @@ runs:
         make prefix=/usr install
         git --version
 
-#    - uses: actions/checkout@v4
-#      with:
-#        fetch-depth: 0
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
 
     - name: Install CMake 3.21
       shell: bash
@@ -82,7 +82,9 @@ runs:
 
     - name: Setup vcpkg
       if: ${{ inputs.vcpkg == 1 }}
-      uses: lukka/run-vcpkg@v11.5
+      uses: lukka/run-vcpkg@v11.1
+      with:
+        vcpkgGitCommitId: a1a1cbc975abf909a6c8985a6a2b8fe20bbd9bd6
 
     - name: Setup Ccache
       if: ${{ inputs.ccache == 1 }}
