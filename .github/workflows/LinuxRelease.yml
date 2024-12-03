@@ -138,14 +138,11 @@ jobs:
           apt-get update && apt-get install xz-utils
           ls /node20217
           echo "done with ls"
-          ls /node20217
-          rm -fr /node20217
           ldd --version
           apt update && apt -y install curl
           curl --output node-v20.9.0-linux-x64-glibc-217.tar.xz https://unofficial-builds.nodejs.org/download/release/v20.9.0/node-v20.9.0-linux-x64-glibc-217.tar.xz
-          ls
-          mkdir new-node
           tar -xJf ./node-v20.9.0-linux-x64-glibc-217.tar.xz --strip-components 1 -C /node20217
+          ls /node20217
           ldd /node20217/bin/node
    
       - uses: actions/checkout@v4
