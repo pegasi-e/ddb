@@ -136,10 +136,10 @@ jobs:
           apt update && apt -y install curl
           curl --output node-v20.9.0-linux-x64-glibc-217.tar.xz https://unofficial-builds.nodejs.org/download/release/v20.9.0/node-v20.9.0-linux-x64-glibc-217.tar.xz
           ls
-          tar -xf node-v20.9.0-linux-x64-glibc-217.tar.xz --strip-components 1 -C /__e/node20/bin/node
+          tar -xf ./node-v20.9.0-linux-x64-glibc-217.tar.xz --strip-components 1 -C /__e/node20/bin/node
           ldd /__e/node20/bin/node
    
-      - uses: actions/checkout@v1
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
