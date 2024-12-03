@@ -130,6 +130,7 @@ jobs:
       - name: install old node
         shell: bash
         run: |
+          sudo apt-get install xz-utils
           ls /
           ls /__e/
           ldd --version
