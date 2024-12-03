@@ -106,7 +106,12 @@ jobs:
     name: Linux (aarch64)
     runs-on: ubuntu-latest
     # needs: linux-release-64
-    container: ubuntu:18.04
+#    container: ubuntu:18.04
+    container:
+        image: ubuntu:18.04
+        volumes:
+          - /node20217:/node20217:rw,rshared
+          - /node20217:/__e/node20:ro,rshared
 #    strategy:
 #      fail-fast: false
 #      matrix:
@@ -131,17 +136,17 @@ jobs:
         shell: bash
         run: |
           apt-get update && apt-get install xz-utils
-          ls /__e/node20/bin/
+          ls /node20217
           echo "done with ls"
-          ls /__e/node20/bin/node
-          rm -fr /__e/node20/
+          ls /node20217
+          rm -fr /node20217
           ldd --version
           apt update && apt -y install curl
           curl --output node-v20.9.0-linux-x64-glibc-217.tar.xz https://unofficial-builds.nodejs.org/download/release/v20.9.0/node-v20.9.0-linux-x64-glibc-217.tar.xz
           ls
           mkdir new-node
-          tar -xJf ./node-v20.9.0-linux-x64-glibc-217.tar.xz --strip-components 1 -C /__e/node20/
-          ldd /__e/node20/bin/node
+          tar -xJf ./node-v20.9.0-linux-x64-glibc-217.tar.xz --strip-components 1 -C /node20217
+          ldd /node20217/bin/node
    
       - uses: actions/checkout@v4
         with:
