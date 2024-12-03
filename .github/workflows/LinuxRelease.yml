@@ -106,11 +106,11 @@ jobs:
    name: Linux (aarch64)
    runs-on: ubuntu-latest
    # needs: linux-release-64
-   container:
-     image: ubuntu:18.04
-     volumes:
-          - ${{ '/node20217:/node20217:rw,rshared'}}
-          - ${{ '/node20217:/__e/node20:ro,rshared' }}
+   strategy:
+     matrix:
+       container:
+         - centos:7
+         - ubuntu:18.04
    env:
      EXTENSION_CONFIGS: '${GITHUB_WORKSPACE}/.github/config/bundled_extensions.cmake'
      ENABLE_EXTENSION_AUTOLOADING: 1
@@ -127,14 +127,14 @@ jobs:
      ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
 
    steps:
-     - name: install old node
-       shell: bash
-       run: |
-         ldd --version
-         apt update && apt -y install curl
-         curl -LO https://unofficial-builds.nodejs.org/download/release/v20.9.0/node-v20.9.0-linux-x64-glibc-217.tar.xz
-         tar -xf node-v20.9.0-linux-x64-glibc-217.tar.xz --strip-components 1 -C /node20217
-         ldd /__e/node20/bin/node
+     # - name: install old node
+     #   shell: bash
+     #   run: |
+     #     ldd --version
+     #     apt update && apt -y install curl
+     #     curl -LO https://unofficial-builds.nodejs.org/download/release/v20.9.0/node-v20.9.0-linux-x64-glibc-217.tar.xz
+     #     tar -xf node-v20.9.0-linux-x64-glibc-217.tar.xz --strip-components 1 -C /node20217
+     #     ldd /__e/node20/bin/node
    
      - uses: actions/checkout@v4
        with:
