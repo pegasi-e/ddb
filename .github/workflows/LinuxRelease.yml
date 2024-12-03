@@ -106,13 +106,13 @@ jobs:
     name: Linux (aarch64)
     runs-on: ubuntu-latest
     # needs: linux-release-64
-#    container: ubuntu:18.04
-    strategy:
-      fail-fast: false
-      matrix:
-        container:
-          - centos:7
-          - ubuntu:18.04
+    container: ubuntu:18.04
+#    strategy:
+#      fail-fast: false
+#      matrix:
+#        container:
+#          - centos:7
+#          - ubuntu:18.04
     env:
       EXTENSION_CONFIGS: '${GITHUB_WORKSPACE}/.github/config/bundled_extensions.cmake'
       ENABLE_EXTENSION_AUTOLOADING: 1
@@ -136,20 +136,17 @@ jobs:
 #          curl -sL https://unofficial-builds.nodejs.org/download/release/v20.9.0/node-v20.9.0-linux-x64-glibc-217.tar.xz | tar -xJ --strip-components 1 -C /node20217
 #          ldd /__e/node20/bin/node
    
-      - uses: actions/checkout@v4
-        if: ${{ matrix.os == 'ubuntu:18.04' }}
+      - uses: actions/checkout@v1
         with:
           fetch-depth: 0
 
       - uses: ./.github/actions/ubuntu_18_setup
-        if: ${{ matrix.os == 'ubuntu:18.04' }}
         with:
          ccache: 1
          aarch64_cross_compile: 1
          vcpkg: 1
 
       - name: Install unixODBC
-        if: ${{ matrix.os == 'ubuntu:18.04' }}
         shell: bash
         run: | # we need an x86 odbc_config tool to run cmake. fun.
           apt-get remove -y unixodbc unixodbc-dev
@@ -159,7 +156,6 @@ jobs:
           cp odbc_config build/unixodbc/build/bin/odbc_config
 
       - name: Build
-        if: ${{ matrix.os == 'ubuntu:18.04' }}
         shell: bash
         env:
           CMAKE_TOOLCHAIN_FILE: ${VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake
@@ -171,7 +167,6 @@ jobs:
           CMAKE_SYSTEM_ARCH=aarch64 CPACK_DEBIAN_PACKAGE_ARCHITECTURE=arm64 CMAKE_SYSTEM_NAME=Linux CMAKE_SYSTEM_PROCESSOR=arm64 CC=aarch64-linux-gnu-gcc CXX=aarch64-linux-gnu-g++ make
 
       - name: Deploy
-        if: ${{ matrix.os == 'ubuntu:18.04' }}
         shell: bash
         run: |
           python3 scripts/amalgamation.py
@@ -181,7 +176,6 @@ jobs:
           python3 scripts/asset-upload-gha.py libduckdb-linux-aarch64.zip duckdb_cli-linux-aarch64.zip duckdb_odbc-linux-aarch64.zip
 
       - uses: actions/upload-artifact@v3
-        if: ${{ matrix.os == 'ubuntu:18.04' }}
         with:
           name: duckdb-binaries-linux-aarch64
           path: |
