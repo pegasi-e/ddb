@@ -3,6 +3,7 @@
 #include "duckdb/main/client_context.hpp"
 #include "duckdb/main/materialized_query_result.hpp"
 #include "duckdb/common/box_renderer.hpp"
+#include "duckdb/common/printer.hpp"
 #include "duckdb/main/database.hpp"
 
 namespace duckdb {
@@ -42,21 +43,29 @@ unique_ptr<ClientContextLock> StreamQueryResult::LockContext() {
 }
 
 unique_ptr<DataChunk> StreamQueryResult::FetchInternal(ClientContextLock &lock) {
+    duckdb::Printer::PrintF("FetchInternal\n");
 	bool invalidate_query = true;
 	unique_ptr<DataChunk> chunk;
 	try {
 		// fetch the chunk and return it
 		auto res = buffered_data->ReplenishBuffer(*this, lock);
+                    duckdb::Printer::PrintF("FetchInternal1\n");
 		if (res == PendingExecutionResult::EXECUTION_ERROR) {
+                      duckdb::Printer::PrintF("FetchInternal2\n");
 			return chunk;
 		}
-		chunk = buffered_data->Scan();
+    duckdb::Printer::PrintF("FetchInternal3\n");
+                chunk = buffered_data->Scan();
+                    duckdb::Printer::PrintF("FetchInternal4\n");
 		if (!chunk || chunk->ColumnCount() == 0 || chunk->size() == 0) {
+                      duckdb::Printer::PrintF("FetchInternal5\n");
 			context->CleanupInternal(lock, this);
 			chunk = nullptr;
 		}
+                    duckdb::Printer::PrintF("FetchInternal6\n");
 		return chunk;
 	} catch (std::exception &ex) {
+              duckdb::Printer::PrintF("FetchInternal7\n");
 		ErrorData error(ex);
 		if (!Exception::InvalidatesTransaction(error.Type())) {
 			// standard exceptions do not invalidate the current transaction
@@ -71,14 +80,17 @@ unique_ptr<DataChunk> StreamQueryResult::FetchInternal(ClientContextLock &lock) 
 		}
 		context->ProcessError(error, context->GetCurrentQuery());
 		SetError(std::move(error));
+                    duckdb::Printer::PrintF("FetchInternal8\n");
 	} catch (...) { // LCOV_EXCL_START
 		SetError(ErrorData("Unhandled exception in FetchInternal"));
 	} // LCOV_EXCL_STOP
 	context->CleanupInternal(lock, this, invalidate_query);
+            duckdb::Printer::PrintF("FetchInternal9\n");
 	return nullptr;
 }
 
 unique_ptr<DataChunk> StreamQueryResult::FetchRaw() {
+  duckdb::Printer::PrintF("FetchRaw\n");
 	unique_ptr<DataChunk> chunk;
 	{
 		auto lock = LockContext();
