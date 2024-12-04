@@ -27,7 +27,7 @@ duckdb_data_chunk duckdb_fetch_chunk(duckdb_result result) {
 	}
           duckdb::Printer::PrintF("duckdb_fetch_chunk4a\n");
 	result_data.result_set_type = duckdb::CAPIResultSetType::CAPI_RESULT_TYPE_STREAMING;
-	auto &result_instance = (duckdb::StreamQueryResult &)*result_data.result;
+	//auto &result_instance = (duckdb::StreamQueryResult &)*result_data.result;
         if (result_data.result == nullptr)
           {
             duckdb::Printer::PrintF("duckdb_fetch_chunk : null ptr\n");
