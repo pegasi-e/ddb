@@ -41,7 +41,7 @@ duckdb_data_chunk duckdb_fetch_chunk(duckdb_result result) {
 	try {
             duckdb::Printer::PrintF("duckdb_fetch_chunk6\n");
             //auto chunk = result_instance.FetchRaw();
-            auto chunk = ((duckdb::StreamQueryResult *)(result_data.result))->FetchRaw();
+            auto chunk = result_data.result->Fetch();
                   duckdb::Printer::PrintF("duckdb_fetch_chunk7\n");
 		return reinterpret_cast<duckdb_data_chunk>(chunk.release());
 	} catch (std::exception &e) {
