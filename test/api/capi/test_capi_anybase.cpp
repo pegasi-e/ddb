@@ -5,7 +5,7 @@
 using namespace duckdb;
 using namespace std;
 
-TEST_CASE("Convert DuckDBResult to Arrow Array in C API", "[rToArrow]") {
+TEST_CASE("Convert DuckDBResult to Arrow Array in C API", "[cAnybaseApi]") {
 	duckdb_database db;
 	duckdb_connection con;
 	duckdb_result result;
@@ -28,7 +28,7 @@ TEST_CASE("Convert DuckDBResult to Arrow Array in C API", "[rToArrow]") {
 	duckdb_close(&db);
 }
 
-TEST_CASE("Convert DuckDB Chunks to Arrow Array in C API", "[cToArrow]") {
+TEST_CASE("Convert DuckDB Chunks to Arrow Array in C API", "[cAnybaseApi]") {
 	duckdb_database db;
 	duckdb_connection con;
 	duckdb_result result;
@@ -62,7 +62,7 @@ TEST_CASE("Convert DuckDB Chunks to Arrow Array in C API", "[cToArrow]") {
 	duckdb_close(&db);
 }
 
-TEST_CASE("Convert DuckDB Chunk column to Arrow Array in C API", "[ccToArrow]") {
+TEST_CASE("Convert DuckDB Chunk column to Arrow Array in C API", "[cAnybaseApi]") {
 	duckdb_database db;
 	duckdb_connection con;
 	duckdb_result result;
@@ -108,7 +108,7 @@ TEST_CASE("Convert DuckDB Chunk column to Arrow Array in C API", "[ccToArrow]") 
 	delete[] chunks;
 }
 
-TEST_CASE("Test DataChunk C API reference", "[capi]") {
+TEST_CASE("Test DataChunk C API reference", "[cAnybaseApi]") {
 	duckdb_logical_type types[2];
 	types[0] = duckdb_create_logical_type(DUCKDB_TYPE_BIGINT);
 	types[1] = duckdb_create_logical_type(DUCKDB_TYPE_SMALLINT);
@@ -149,7 +149,7 @@ TEST_CASE("Test DataChunk C API reference", "[capi]") {
 	duckdb_destroy_logical_type(&types[1]);
 }
 
-TEST_CASE("Test Snapshot in C API", "[capi]") {
+TEST_CASE("Test Snapshot in C API", "[cAnybaseApi]") {
 	duckdb_database db;
 	duckdb_connection con;
 	duckdb_result result;
