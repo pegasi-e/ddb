@@ -1126,11 +1126,11 @@ unique_ptr<TableDescription> ClientContext::TableInfo(const string &schema_name,
 		if (column_names && !column_names->empty()) {
 			for (auto &column_name : *column_names) {
 				auto &column = table->GetColumn(column_name);
-				result->columns.emplace_back(column.Name(), column.Type());
+				result->columns.emplace_back(column.Copy());
 			}
 		} else {
 			for (auto &column : table->GetColumns().Logical()) {
-				result->columns.emplace_back(column.Name(), column.Type());
+				result->columns.emplace_back(column.Copy());
 			}
 		}
 
