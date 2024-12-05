@@ -54,7 +54,7 @@ InternalAppender::~InternalAppender() {
 
 Appender::Appender(Connection &con, const string &schema_name, const string &table_name, const optional_ptr<const vector<string>> &column_names)
 	: BaseAppender(Allocator::DefaultAllocator(), AppenderType::LOGICAL), context(con.context) {
-	description = con.TableInfo(schema_name, table_name);
+	description = con.TableInfo(schema_name, table_name, column_names);
 	if (!description) {
 		// table could not be found
 		throw CatalogException(StringUtil::Format("Table \"%s.%s\" could not be found", schema_name, table_name));
