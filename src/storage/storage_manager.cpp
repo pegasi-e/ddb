@@ -420,22 +420,21 @@ shared_ptr<TableIOManager> SingleFileStorageManager::GetTableIOManager(BoundCrea
 }
 
 uint64_t SingleFileStorageManager::GetSnapshotId() {
-  if (InMemory() || read_only) {
-    return 0;
-  }
-  return dynamic_cast<SingleFileBlockManager *>(block_manager.get())->GetSnapshotId();
+	if (InMemory() || read_only) {
+		return 0;
+	}
+	return dynamic_cast<SingleFileBlockManager *>(block_manager.get())->GetSnapshotId();
 }
 
 string SingleFileStorageManager::Snapshot() {
-  uint64_t sid = dynamic_cast<SingleFileBlockManager *>(block_manager.get())->GetSnapshotId();
-  unique_ptr<FileHandle>& src_handle = dynamic_cast<SingleFileBlockManager *>(block_manager.get())->GetFileHandle();
-   unique_ptr<FileHandle> dst_handle = dynamic_cast<SingleFileBlockManager *>(block_manager.get())->CloneEmptyDatabase();
-  string ret = path;
-  ret += ".";
-  ret += to_string(sid);
-  auto &fs = FileSystem::Get(db);
-  fs.CopyFile(path, ret, src_handle, dst_handle);
-  return ret;
+	uint64_t sid = dynamic_cast<SingleFileBlockManager *>(block_manager.get())->GetSnapshotId();
+	unique_ptr<FileHandle>& src_handle = dynamic_cast<SingleFileBlockManager *>(block_manager.get())->GetFileHandle();
+	string ret = path;
+	ret += ".";
+	ret += to_string(sid);
+	auto &fs = FileSystem::Get(db);
+	fs.CopyFile(path, ret, src_handle);
+	return ret;
 }
  
 BlockManager &SingleFileStorageManager::GetBlockManager() {
