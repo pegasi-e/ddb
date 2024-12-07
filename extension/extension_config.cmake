@@ -9,7 +9,7 @@
 
 # Parquet is loaded by default on every build as its a essential part of DuckDB
 duckdb_extension_load(parquet)
-duckdb_extension_load(kafkaredo)
+#duckdb_extension_load(kafkaredo)
 
 # The Linux allocator has issues so we use jemalloc, but only on x86 because page sizes are fixed at 4KB.
 # Configuring jemalloc properly for 32bit is a hassle, and not worth it so we only enable on 64bit
