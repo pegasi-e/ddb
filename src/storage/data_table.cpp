@@ -1306,6 +1306,9 @@ void DataTable::Merge(TableCatalogEntry &table, ClientContext &context, DataChun
 	if (finalize_on_conflict) {
 		storage.FinalizeLocalAppend(append_state);
 	}
+
+	chunk.Reset();
+	chunk.Reference(insert_chunk);
 }
 
 void DataTable::Merge(TableCatalogEntry &table, ClientContext &context, DataChunk &chunk, const vector<unique_ptr<BoundConstraint>> &bound_constraints,
@@ -1329,6 +1332,9 @@ void DataTable::Merge(TableCatalogEntry &table, ClientContext &context, DataChun
 	}
 
 	storage.FinalizeLocalAppend(append_state);
+
+	chunk.Reset();
+	chunk.Reference(insert_chunk);
 }
 
 void DataTable::Merge(TableCatalogEntry &table, ClientContext &context, DataChunk &chunk, const vector<unique_ptr<BoundConstraint>> &bound_constraints,
