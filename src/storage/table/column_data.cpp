@@ -386,13 +386,6 @@ unique_ptr<BaseStatistics> ColumnData::GetStatistics() {
 	return stats->statistics.ToUnique();
 }
 
-void ColumnData::DidCommitTransaction(transaction_t commit_id) {
-	if (last_commit_id == commit_id) return;
-
-	last_commit_id = commit_id;
-	columnVersion++;
-}
-
 void ColumnData::MergeStatistics(const BaseStatistics &other) {
 	if (!stats) {
 		throw InternalException("ColumnData::MergeStatistics called on a column without stats");

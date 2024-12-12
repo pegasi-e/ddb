@@ -8,6 +8,7 @@
 
 #pragma once
 
+#include "commit_version_manager.hpp"
 #include "duckdb/common/atomic.hpp"
 #include "duckdb/common/common.hpp"
 #include "duckdb/storage/table/table_index_list.hpp"
@@ -52,16 +53,7 @@ public:
 	string GetTableName();
 	void SetTableName(string name);
 
-	void DidCommitTransaction(const transaction_t commit_id) {
-		if (commit_id == last_commit_id) return;
-
-		last_commit_id = commit_id;
-		tableVersion++;
-	}
-
-	idx_t GetTableVersion() const {
-		return tableVersion;
-	}
+	CommitVersionManager commit_version_manager;
 
 private:
 	//! The database instance of the table
@@ -80,9 +72,6 @@ private:
 	vector<IndexStorageInfo> index_storage_infos;
 	//! Lock held while checkpointing
 	StorageLock checkpoint_lock;
-	idx_t tableVersion = 0;
-
-	transaction_t last_commit_id;
 };
 
 } // namespace duckdb

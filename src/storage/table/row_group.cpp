@@ -1040,13 +1040,12 @@ RowGroupPointer RowGroup::Deserialize(Deserializer &deserializer) {
 // GetColumnSegmentInfo
 //===--------------------------------------------------------------------===//
 idx_t RowGroup::GetColumnVersion(const idx_t vector_idx) {
-	return GetColumn(vector_idx).GetColumnVersion();
+	return GetColumn(vector_idx).commit_version_manager.GetVersion();
 }
 
 void RowGroup::UpdateColumnVersions(const transaction_t commit_id) {
 	for (idx_t col_idx = 0; col_idx < GetColumnCount(); col_idx++) {
-		auto &col_data = GetColumn(col_idx);
-		col_data.DidCommitTransaction(commit_id);
+		GetColumn(col_idx).commit_version_manager.DidCommitTransaction(commit_id);
 	}
 }
 

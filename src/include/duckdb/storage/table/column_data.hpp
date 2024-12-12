@@ -18,6 +18,7 @@
 #include "duckdb/common/mutex.hpp"
 #include "duckdb/common/enums/scan_vector_type.hpp"
 #include "duckdb/common/serializer/serialization_traits.hpp"
+#include "duckdb/storage/table/commit_version_manager.hpp"
 
 namespace duckdb {
 class ColumnData;
@@ -67,6 +68,8 @@ public:
 	LogicalType type;
 	//! The parent column (if any)
 	optional_ptr<ColumnData> parent;
+
+	CommitVersionManager commit_version_manager;
 
 public:
 	virtual FilterPropagateResult CheckZonemap(ColumnScanState &state, TableFilter &filter);
@@ -174,12 +177,6 @@ public:
 	void MergeIntoStatistics(BaseStatistics &other);
 	unique_ptr<BaseStatistics> GetStatistics();
 
-	void DidCommitTransaction(transaction_t commit_id);
-	idx_t GetColumnVersion() const
-	{
-		return columnVersion;
-	}
-
 protected:
 	//! Append a transient segment
 	void AppendTransientSegment(SegmentLock &l, idx_t start_row);
@@ -214,8 +211,6 @@ protected:
 	unique_ptr<SegmentStatistics> stats;
 	//! Total transient allocation size
 	idx_t allocation_size;
-	idx_t columnVersion = 0;
-	transaction_t last_commit_id;
 };
 
 struct PersistentColumnData {

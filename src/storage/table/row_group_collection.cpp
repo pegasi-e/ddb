@@ -86,7 +86,7 @@ idx_t RowGroupCollection::GetVersion(const column_t column_idx) const {
 
 	idx_t version = 0;
 	while (row_group) {
-		version = row_group->GetColumnVersion(column_idx);
+		version = std::max(row_group->GetColumnVersion(column_idx), version);
 		row_group = row_groups->GetNextSegment(row_group);
 	}
 

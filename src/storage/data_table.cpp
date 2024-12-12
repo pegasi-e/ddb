@@ -1970,12 +1970,12 @@ idx_t DataTable::GetTotalRows() const {
 }
 
 void DataTable::DidCommitTransaction(const transaction_t commit_id) const {
-	info->DidCommitTransaction(commit_id);
+	info->commit_version_manager.DidCommitTransaction(commit_id);
 	row_groups->UpdateColumnVersions(commit_id);
 }
 
 idx_t DataTable::GetLastCommitId() const {
-	return info->GetTableVersion();
+	return info->commit_version_manager.GetVersion();
 }
 
 idx_t DataTable::GetColumnVersion(const column_t idx) const {
