@@ -450,6 +450,11 @@ string DuckTransactionManager::Snapshot(ClientContext &context) {
 }
 
 uint64_t DuckTransactionManager::GetSnapshotId(ClientContext &context) {
+	auto &storage_manager = db.GetStorageManager();
+	return storage_manager.GetSnapshotId();
+}
+
+uint64_t DuckTransactionManager::CheckpointAndGetSnapshotId(ClientContext &context) {
 	Checkpoint(context, true);
 	auto &storage_manager = db.GetStorageManager();
 	return storage_manager.GetSnapshotId();

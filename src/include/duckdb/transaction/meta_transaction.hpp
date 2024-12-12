@@ -49,6 +49,7 @@ public:
 	void Rollback();
         string Snapshot(optional_ptr<AttachedDatabase> db);
         uint64_t GetSnapshotId(optional_ptr<AttachedDatabase> db);
+        uint64_t CheckpointAndGetSnapshotId(optional_ptr<AttachedDatabase> db);
 	idx_t GetActiveQuery();
 	void SetActiveQuery(transaction_t query_number);
 
