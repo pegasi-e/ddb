@@ -29,7 +29,7 @@ TEST_CASE("Test data frame", "[capi]") {
 	REQUIRE(duckdb_query(con, "Insert INTO FOO.FOO VALUES (3, 5, 22), (4, 5, 22);", NULL) != DuckDBError);
 	REQUIRE(duckdb_query(con, "select * from FOO.FOO", NULL) != DuckDBError);
 	REQUIRE(duckdb_query(con, "INSERT INTO FOO.FOO values (1, 5, 22) on conflict do update set v = 10;", NULL) != DuckDBError);
-	REQUIRE(duckdb_query(con, "INSERT INTO FOO.FOO values (2, 5, 22) on conflict do update set v = 15;", NULL) != DuckDBError);
+	REQUIRE(duckdb_query(con, "INSERT INTO FOO.FOO values (2, 5, 22) on conflict do update set x = 15;", NULL) != DuckDBError);
 
 
 
@@ -56,7 +56,7 @@ TEST_CASE("Test data frame", "[capi]") {
 	xColumnVersion = duckdb_get_column_version(con, "FOO", "FOO", "x");
 	REQUIRE(tableVersion == 2);
 	REQUIRE(iColumnVersion == 2);
-	REQUIRE(vColumnVersion == 3);
+	REQUIRE(vColumnVersion == 2);
 	REQUIRE(xColumnVersion == 2);
 
 	tableVersion = duckdb_get_table_version(con, "FOO", "FOO");
@@ -65,7 +65,7 @@ TEST_CASE("Test data frame", "[capi]") {
 	xColumnVersion = duckdb_get_column_version(con, "FOO", "FOO", "x");
 	REQUIRE(tableVersion == 2);
 	REQUIRE(iColumnVersion == 2);
-	REQUIRE(vColumnVersion == 3);
+	REQUIRE(vColumnVersion == 2);
 	REQUIRE(xColumnVersion == 2);
 }
 

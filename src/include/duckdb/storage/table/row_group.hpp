@@ -179,7 +179,7 @@ public:
 	static RowGroupPointer Deserialize(Deserializer &deserializer);
 
 	idx_t GetColumnVersion(idx_t vector_idx);
-	void UpdateColumnVersions();
+	void UpdateColumnVersions(transaction_t commit_id);
 
 private:
 	optional_ptr<RowVersionManager> GetVersionInfo();

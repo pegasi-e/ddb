@@ -174,7 +174,7 @@ void CommitState::CommitEntry(UndoFlags type, data_ptr_t data) {
 		auto info = reinterpret_cast<UpdateInfo *>(data);
 		info->version_number = commit_id;
 		if (info->column) {
-			info->column->DidCommitTransaction();
+			info->column->DidCommitTransaction(commit_id);
 		}
 		info->column->info.DidCommitTransaction(commit_id);
 		break;

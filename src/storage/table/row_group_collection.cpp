@@ -93,12 +93,12 @@ idx_t RowGroupCollection::GetVersion(const column_t column_idx) const {
 	return version;
 }
 
-void RowGroupCollection::UpdateColumnVersions() const {
+void RowGroupCollection::UpdateColumnVersions(const transaction_t commit_id) const {
 	auto row_group = row_groups->GetSegment(0);
 	D_ASSERT(row_group);
 
 	while (row_group) {
-		row_group->UpdateColumnVersions();
+		row_group->UpdateColumnVersions(commit_id);
 		row_group = row_groups->GetNextSegment(row_group);
 	}
 }

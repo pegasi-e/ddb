@@ -174,7 +174,7 @@ public:
 	void MergeIntoStatistics(BaseStatistics &other);
 	unique_ptr<BaseStatistics> GetStatistics();
 
-	void DidCommitTransaction();
+	void DidCommitTransaction(transaction_t commit_id);
 	idx_t GetColumnVersion() const
 	{
 		return columnVersion;
@@ -215,6 +215,7 @@ protected:
 	//! Total transient allocation size
 	idx_t allocation_size;
 	idx_t columnVersion = 0;
+	transaction_t last_commit_id;
 };
 
 struct PersistentColumnData {

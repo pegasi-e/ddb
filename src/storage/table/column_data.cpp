@@ -386,7 +386,10 @@ unique_ptr<BaseStatistics> ColumnData::GetStatistics() {
 	return stats->statistics.ToUnique();
 }
 
-void ColumnData::DidCommitTransaction() {
+void ColumnData::DidCommitTransaction(transaction_t commit_id) {
+	if (last_commit_id == commit_id) return;
+
+	last_commit_id = commit_id;
 	columnVersion++;
 }
 
