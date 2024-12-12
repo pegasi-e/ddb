@@ -207,6 +207,8 @@ public:
 	DUCKDB_API pair<string, unique_ptr<QueryResult>> CreateSnapshot();
 	DUCKDB_API void RemoveSnapshot(const char *snapshot_file_name);
 	DUCKDB_API void SetActiveResult(ClientContextLock &lock, BaseQueryResult &result);
+	DUCKDB_API idx_t GetTableVersion(const char *schema, const char *table);
+	DUCKDB_API idx_t GetColumnVersion(const char *schema, const char *table, const char *column);
 
 private:
 	//! Parse statements and resolve pragmas from a query

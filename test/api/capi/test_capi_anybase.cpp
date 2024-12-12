@@ -5,6 +5,70 @@
 using namespace duckdb;
 using namespace std;
 
+TEST_CASE("Test data frame", "[capi]") {
+
+	duckdb_database db;
+	duckdb_connection con;
+	duckdb_connection con2;
+	duckdb_result result;
+
+	idx_t tableVersion = 0;
+	idx_t vColumnVersion = 0;
+	idx_t iColumnVersion = 0;
+	idx_t xColumnVersion = 0;
+
+	REQUIRE(duckdb_open(NULL, &db) != DuckDBError);
+	REQUIRE(duckdb_connect(db, &con) != DuckDBError);
+	REQUIRE(duckdb_connect(db, &con2) != DuckDBError);
+
+	REQUIRE(duckdb_query(con, "CREATE SCHEMA FOO;", NULL) != DuckDBError);
+	REQUIRE(duckdb_query(con, "CREATE TABLE FOO.FOO(i INTEGER unique, v INTEGER DEFAULT 5, x INTEGER default 22);", NULL) != DuckDBError);
+	REQUIRE(duckdb_query(con, "Insert INTO FOO.FOO VALUES (1, 5, 22), (2, 5, 22);", NULL) != DuckDBError);
+
+	REQUIRE(duckdb_query(con, "Begin Transaction", NULL) != DuckDBError);
+	REQUIRE(duckdb_query(con, "Insert INTO FOO.FOO VALUES (3, 5, 22), (4, 5, 22);", NULL) != DuckDBError);
+	REQUIRE(duckdb_query(con, "select * from FOO.FOO", NULL) != DuckDBError);
+	REQUIRE(duckdb_query(con, "INSERT INTO FOO.FOO values (1, 5, 22) on conflict do update set v = 10;", NULL) != DuckDBError);
+	REQUIRE(duckdb_query(con, "INSERT INTO FOO.FOO values (2, 5, 22) on conflict do update set v = 15;", NULL) != DuckDBError);
+
+
+
+
+	tableVersion = duckdb_get_table_version(con, "FOO", "FOO");
+	vColumnVersion = duckdb_get_column_version(con, "FOO", "FOO", "v");
+	iColumnVersion = duckdb_get_column_version(con, "FOO", "FOO", "i");
+	xColumnVersion = duckdb_get_column_version(con, "FOO", "FOO", "x");
+	REQUIRE(tableVersion == 1);
+	REQUIRE(iColumnVersion == 1);
+	REQUIRE(vColumnVersion == 1);
+	REQUIRE(xColumnVersion == 1);
+
+
+	REQUIRE(duckdb_query(con, "commit", NULL) != DuckDBError);
+	REQUIRE(duckdb_query(con, "select * from FOO.FOO", &result) != DuckDBError);
+
+
+
+
+	tableVersion = duckdb_get_table_version(con, "FOO", "FOO");
+	vColumnVersion = duckdb_get_column_version(con, "FOO", "FOO", "v");
+	iColumnVersion = duckdb_get_column_version(con, "FOO", "FOO", "i");
+	xColumnVersion = duckdb_get_column_version(con, "FOO", "FOO", "x");
+	REQUIRE(tableVersion == 2);
+	REQUIRE(iColumnVersion == 2);
+	REQUIRE(vColumnVersion == 3);
+	REQUIRE(xColumnVersion == 2);
+
+	tableVersion = duckdb_get_table_version(con, "FOO", "FOO");
+	vColumnVersion = duckdb_get_column_version(con2, "FOO", "FOO", "v");
+	iColumnVersion = duckdb_get_column_version(con, "FOO", "FOO", "i");
+	xColumnVersion = duckdb_get_column_version(con, "FOO", "FOO", "x");
+	REQUIRE(tableVersion == 2);
+	REQUIRE(iColumnVersion == 2);
+	REQUIRE(vColumnVersion == 3);
+	REQUIRE(xColumnVersion == 2);
+}
+
 TEST_CASE("Convert DuckDBResult to Arrow Array in C API", "[cAnybaseApi]") {
 	duckdb_database db;
 	duckdb_connection con;

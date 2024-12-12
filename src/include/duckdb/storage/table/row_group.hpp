@@ -178,6 +178,9 @@ public:
 	static void Serialize(RowGroupPointer &pointer, Serializer &serializer);
 	static RowGroupPointer Deserialize(Deserializer &deserializer);
 
+	idx_t GetColumnVersion(idx_t vector_idx);
+	void UpdateColumnVersions();
+
 private:
 	optional_ptr<RowVersionManager> GetVersionInfo();
 	shared_ptr<RowVersionManager> GetOrCreateVersionInfoPtr();

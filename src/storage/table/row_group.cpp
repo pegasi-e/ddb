@@ -1039,6 +1039,17 @@ RowGroupPointer RowGroup::Deserialize(Deserializer &deserializer) {
 //===--------------------------------------------------------------------===//
 // GetColumnSegmentInfo
 //===--------------------------------------------------------------------===//
+idx_t RowGroup::GetColumnVersion(const idx_t vector_idx) {
+	return GetColumn(vector_idx).GetColumnVersion();
+}
+
+void RowGroup::UpdateColumnVersions() {
+	for (idx_t col_idx = 0; col_idx < GetColumnCount(); col_idx++) {
+		auto &col_data = GetColumn(col_idx);
+		col_data.DidCommitTransaction();
+	}
+}
+
 void RowGroup::GetColumnSegmentInfo(idx_t row_group_index, vector<ColumnSegmentInfo> &result) {
 	for (idx_t col_idx = 0; col_idx < GetColumnCount(); col_idx++) {
 		auto &col_data = GetColumn(col_idx);

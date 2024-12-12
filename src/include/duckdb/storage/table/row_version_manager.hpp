@@ -45,6 +45,14 @@ public:
 	vector<MetaBlockPointer> Checkpoint(MetadataManager &manager);
 	static shared_ptr<RowVersionManager> Deserialize(MetaBlockPointer delete_pointer, MetadataManager &manager,
 	                                                 idx_t start);
+	idx_t GetVersion(const vector<column_t> &columnIds) {
+		for (idx_t i = 0; i < columnIds.size(); i++) {
+			auto verInfo = GetVectorInfo(i).insert_id;
+			return verInfo;
+		}
+
+		return 0;
+	}
 
 private:
 	mutex version_lock;

@@ -1,3 +1,4 @@
+#include "duckdb/catalog/catalog_entry/table_catalog_entry.hpp"
 #include "duckdb/main/capi/capi_internal.hpp"
 #include "duckdb/transaction/timestamp_manager.hpp"
 #include "duckdb/common/arrow/arrow.hpp"
@@ -5,6 +6,7 @@
 #include "duckdb/common/arrow/arrow_appender.hpp"
 #include "duckdb/main/prepared_statement_data.hpp"
 #include "duckdb/common/types.hpp"
+#include "duckdb/storage/data_table.hpp"
 
 using duckdb::ArrowConverter;
 using duckdb::ArrowAppender;
@@ -136,5 +138,17 @@ duckdb_data_chunk duckdb_create_data_chunk_copy(duckdb_data_chunk *chunk) {
 	dchunk->Copy(*new_chunk);
 
 	return reinterpret_cast<duckdb_data_chunk>(new_chunk);
+}
+
+idx_t duckdb_get_table_version(const duckdb_connection connection, const char *schema, const char *table) {
+	auto *ddbConnection = reinterpret_cast<Connection *>(connection);
+
+	return ddbConnection->context->GetTableVersion(schema, table);
+}
+
+idx_t duckdb_get_column_version(const duckdb_connection connection, const char *schema, const char *table, const char *column) {
+	auto *ddbConnection = reinterpret_cast<Connection *>(connection);
+
+	return ddbConnection->context->GetColumnVersion(schema, table, column);
 }
 

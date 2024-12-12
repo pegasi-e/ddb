@@ -174,6 +174,12 @@ public:
 	void MergeIntoStatistics(BaseStatistics &other);
 	unique_ptr<BaseStatistics> GetStatistics();
 
+	void DidCommitTransaction();
+	idx_t GetColumnVersion() const
+	{
+		return columnVersion;
+	}
+
 protected:
 	//! Append a transient segment
 	void AppendTransientSegment(SegmentLock &l, idx_t start_row);
@@ -208,6 +214,7 @@ protected:
 	unique_ptr<SegmentStatistics> stats;
 	//! Total transient allocation size
 	idx_t allocation_size;
+	idx_t columnVersion = 0;
 };
 
 struct PersistentColumnData {

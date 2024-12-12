@@ -244,6 +244,10 @@ public:
 
 	TableStorageInfo GetStorageInfo();
 
+	idx_t GetLastCommitId() const;
+	void DidCommitTransaction(transaction_t commit_id);
+	idx_t GetColumnVersion(column_t idx) const;
+
 public:
 	static void VerifyUniqueIndexes(TableIndexList &indexes, ClientContext &context, DataChunk &chunk,
 	                                optional_ptr<ConflictManager> conflict_manager, bool allow_non_standard_vector_sizes = false);
@@ -279,5 +283,7 @@ private:
 	//! Whether or not the data table is the root DataTable for this table; the root DataTable is the newest version
 	//! that can be appended to
 	atomic<bool> is_root;
+
+	transaction_t last_commit_id;
 };
 } // namespace duckdb

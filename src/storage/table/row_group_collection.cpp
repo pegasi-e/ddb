@@ -80,6 +80,29 @@ MetadataManager &RowGroupCollection::GetMetadataManager() {
 	return GetBlockManager().GetMetadataManager();
 }
 
+idx_t RowGroupCollection::GetVersion(const column_t column_idx) const {
+	auto row_group = row_groups->GetSegment(0);
+	D_ASSERT(row_group);
+
+	idx_t version = 0;
+	while (row_group) {
+		version = row_group->GetColumnVersion(column_idx);
+		row_group = row_groups->GetNextSegment(row_group);
+	}
+
+	return version;
+}
+
+void RowGroupCollection::UpdateColumnVersions() const {
+	auto row_group = row_groups->GetSegment(0);
+	D_ASSERT(row_group);
+
+	while (row_group) {
+		row_group->UpdateColumnVersions();
+		row_group = row_groups->GetNextSegment(row_group);
+	}
+}
+
 //===--------------------------------------------------------------------===//
 // Initialize
 //===--------------------------------------------------------------------===//
@@ -400,6 +423,7 @@ bool RowGroupCollection::Append(DataChunk &chunk, TableAppendState &state) {
 }
 
 void RowGroupCollection::FinalizeAppend(TransactionData transaction, TableAppendState &state) {
+	Printer::Print(StringUtil::Format("Subjects of %d", transaction.transaction->commit_id));
 	auto remaining = state.total_append_count;
 	auto row_group = state.start_row_group;
 	while (remaining > 0) {
