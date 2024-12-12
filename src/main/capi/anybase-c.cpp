@@ -27,6 +27,12 @@ uint64_t duckdb_get_snapshot_id(duckdb_connection connection)
   return conn->GetSnapshotId();
 }
 
+uint64_t duckdb_checkpoint_and_get_snapshot_id(duckdb_connection connection)
+{
+  Connection *conn = reinterpret_cast<Connection *>(connection);
+  return conn->CheckpointAndGetSnapshotId();
+}
+
 duckdb_state duckdb_create_snapshot(duckdb_connection connection, duckdb_result *out_result, char **out_snapshot_file_name)
 {
   Connection *conn = reinterpret_cast<Connection *>(connection);

@@ -333,6 +333,10 @@ uint64_t Connection::GetSnapshotId() {
   return context->GetSnapshotId();
 }
 
+uint64_t Connection::CheckpointAndGetSnapshotId() {
+  return context->CheckpointAndGetSnapshotId();
+}
+
 void Connection::RemoveSnapshot(const char *snapshot_file_name) {
   context->RemoveSnapshot(snapshot_file_name);
 }
