@@ -81,6 +81,11 @@ MetadataManager &RowGroupCollection::GetMetadataManager() {
 }
 
 idx_t RowGroupCollection::GetVersion(const column_t column_idx) const {
+	const auto segmentCount = row_groups->GetSegmentCount();
+	if (segmentCount == 0) {
+		return 0;
+	}
+
 	auto row_group = row_groups->GetSegment(0);
 	D_ASSERT(row_group);
 
@@ -423,7 +428,6 @@ bool RowGroupCollection::Append(DataChunk &chunk, TableAppendState &state) {
 }
 
 void RowGroupCollection::FinalizeAppend(TransactionData transaction, TableAppendState &state) {
-	Printer::Print(StringUtil::Format("Subjects of %d", transaction.transaction->commit_id));
 	auto remaining = state.total_append_count;
 	auto row_group = state.start_row_group;
 	while (remaining > 0) {

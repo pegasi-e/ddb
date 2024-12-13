@@ -23,6 +23,10 @@ namespace duckdb {
         idx_t GetVersion() const {
             return version;
         }
+
+        void SetVersion(idx_t version) {
+            this->version = version;
+        }
     private:
         idx_t version = 0;
         transaction_t last_commit_id = 0;

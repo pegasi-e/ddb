@@ -166,6 +166,8 @@ DuckTableEntry::DuckTableEntry(Catalog &catalog, SchemaCatalogEntry &schema, Bou
 	if (!info.indexes.empty()) {
 		storage->SetIndexStorageInfo(std::move(info.indexes));
 	}
+
+	storage->GetDataTableInfo()->commit_version_manager.SetVersion(info.base->commit_version);
 }
 
 unique_ptr<BaseStatistics> DuckTableEntry::GetStatistics(ClientContext &context, column_t column_id) {
@@ -857,6 +859,12 @@ vector<ColumnSegmentInfo> DuckTableEntry::GetColumnSegmentInfo() {
 
 TableStorageInfo DuckTableEntry::GetStorageInfo(ClientContext &context) {
 	return storage->GetStorageInfo();
+}
+
+unique_ptr<CreateInfo> DuckTableEntry::GetInfo() const {
+	auto result = TableCatalogEntry::GetInfo();
+	result->commit_version = storage->GetDataTableInfo()->commit_version_manager.GetVersion();
+	return result;
 }
 
 } // namespace duckdb

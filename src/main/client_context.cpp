@@ -1475,9 +1475,11 @@ idx_t ClientContext::GetColumnVersion(const char *schema, const char *table, con
 	idx_t version = 0;
 	RunFunctionInTransaction([&]() {
 		auto &table_entry = Catalog::GetEntry<TableCatalogEntry>(*this, INVALID_CATALOG, schema, table);
-		auto &dataTable = table_entry.GetStorage();
-		auto cIndex = table_entry.GetColumn(column).Physical();
-		version = dataTable.GetColumnVersion(cIndex.index);
+		const auto &dataTable = table_entry.GetStorage();
+		if (table_entry.ColumnExists(column)) {
+			const auto cIndex = table_entry.GetColumn(column).Physical();
+			version = dataTable.GetColumnVersion(cIndex.index);
+		}
 	});
 
 	return version;

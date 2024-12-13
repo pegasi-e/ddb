@@ -51,6 +51,8 @@ public:
 	//! Key-value tags with additional metadata
 	unordered_map<string, string> tags;
 
+	idx_t commit_version = 0;
+
 public:
 	void Serialize(Serializer &serializer) const override;
 	static unique_ptr<CreateInfo> Deserialize(Deserializer &deserializer);

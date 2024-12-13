@@ -228,6 +228,7 @@ struct PersistentColumnData {
 	vector<DataPointer> pointers;
 	vector<PersistentColumnData> child_columns;
 	bool has_updates = false;
+	idx_t commit_version = 0;
 
 	void Serialize(Serializer &serializer) const;
 	static PersistentColumnData Deserialize(Deserializer &deserializer);
