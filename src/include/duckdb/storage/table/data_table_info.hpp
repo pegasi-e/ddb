@@ -8,7 +8,7 @@
 
 #pragma once
 
-#include "commit_version_manager.hpp"
+#include "duckdb/storage/table/commit_version_manager.hpp"
 #include "duckdb/common/atomic.hpp"
 #include "duckdb/common/common.hpp"
 #include "duckdb/storage/table/table_index_list.hpp"
