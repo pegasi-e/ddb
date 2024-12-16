@@ -15,6 +15,7 @@
 
 namespace duckdb {
 class UpdateSegment;
+class ColumnData;
 struct DataTableInfo;
 
 struct UpdateInfo {
