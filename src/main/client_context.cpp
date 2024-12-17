@@ -1419,6 +1419,15 @@ uint64_t ClientContext::GetSnapshotId() {
 	return result;
 }
 
+uint64_t ClientContext::CheckpointAndGetSnapshotId() {
+	uint64_t result;
+	RunFunctionInTransaction([&]() {
+	result = transaction.CheckpointAndGetSnapshotId();
+	}, false);
+
+	return result;
+}
+
 pair<string, unique_ptr<QueryResult>> ClientContext::CreateSnapshot() {
 	string snapshot_file;
 	RunFunctionInTransaction([&]() {

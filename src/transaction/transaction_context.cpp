@@ -125,5 +125,16 @@ uint64_t TransactionContext::GetSnapshotId() {
 
   return current_transaction->GetSnapshotId(db);
 }
+
+uint64_t TransactionContext::CheckpointAndGetSnapshotId() {
+  if (!current_transaction) {
+    throw TransactionException("failed to commit: no transaction active");
+  }
+
+  auto &db_manager = DatabaseManager::Get(context);
+  auto db = db_manager.GetDatabase(context, DatabaseManager::GetDefaultDatabase(context));
+
+  return current_transaction->CheckpointAndGetSnapshotId(db);
+}
   
 } // namespace duckdb

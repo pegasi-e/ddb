@@ -45,6 +45,7 @@ public:
 	void ClearTransaction();
         string Snapshot();
         uint64_t GetSnapshotId();
+        uint64_t CheckpointAndGetSnapshotId();
 	void SetAutoCommit(bool value);
 	bool IsAutoCommit() const {
 		return auto_commit;

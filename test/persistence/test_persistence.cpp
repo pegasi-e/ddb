@@ -88,9 +88,9 @@ TEST_CASE("Test snapshot api on persistent db", "[persistence][.]") {
 		Connection con(db);
 		con.Query("CREATE TABLE a (i INTEGER)");
 		con.Query("INSERT INTO a VALUES(42)");
-		uint64_t sid = con.GetSnapshotId();
+		uint64_t sid = con.CheckpointAndGetSnapshotId();
 		con.Query("INSERT INTO a VALUES(44)");
-		uint64_t sid_next = con.GetSnapshotId();
+		uint64_t sid_next = con.CheckpointAndGetSnapshotId();
 		REQUIRE(sid_next == (sid + 1));
 		auto result = con.CreateSnapshot();
 		REQUIRE(result.second->type == QueryResultType::STREAM_RESULT);

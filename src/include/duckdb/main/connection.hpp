@@ -167,6 +167,7 @@ public:
 	DUCKDB_API bool IsAutoCommit();
 	DUCKDB_API bool HasActiveTransaction();
         DUCKDB_API uint64_t GetSnapshotId();
+        DUCKDB_API uint64_t CheckpointAndGetSnapshotId();
         DUCKDB_API pair<string, unique_ptr<QueryResult>> CreateSnapshot();
         DUCKDB_API void RemoveSnapshot(const char *snapshot_file_name);
 	//! Fetch a list of table names that are required for a given query
