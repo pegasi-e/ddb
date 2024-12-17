@@ -170,7 +170,7 @@ idx_t duckdb_get_column_version(const duckdb_connection connection, const char *
 	auto *ddbConnection = reinterpret_cast<Connection *>(connection);
 
 	try {
-		return ddbConnection->context->GetTableVersion(schema, table);
+		return ddbConnection->context->GetColumnVersion(schema, table, column);
 	} catch (std::exception &ex) {
 		if (error) {
 			ErrorData parsed_error(ex);
@@ -183,7 +183,5 @@ idx_t duckdb_get_column_version(const duckdb_connection connection, const char *
 		}
 		return 0;
 	} // LCOV_EXCL_STOP
-
-	return ddbConnection->context->GetColumnVersion(schema, table, column);
 }
 
