@@ -140,14 +140,42 @@ duckdb_data_chunk duckdb_create_data_chunk_copy(duckdb_data_chunk *chunk) {
 	return reinterpret_cast<duckdb_data_chunk>(new_chunk);
 }
 
-idx_t duckdb_get_table_version(const duckdb_connection connection, const char *schema, const char *table) {
+idx_t duckdb_get_table_version(const duckdb_connection connection, const char *schema, const char *table, char **error) {
 	auto *ddbConnection = reinterpret_cast<Connection *>(connection);
 
-	return ddbConnection->context->GetTableVersion(schema, table);
+	try {
+		return ddbConnection->context->GetTableVersion(schema, table);
+	} catch (std::exception &ex) {
+		if (error) {
+			ErrorData parsed_error(ex);
+			*error = strdup(parsed_error.Message().c_str());
+		}
+		return 0;
+	} catch (...) { // LCOV_EXCL_START
+		if (error) {
+			*error = strdup("Unknown error");
+		}
+		return 0;
+	} // LCOV_EXCL_STOP
 }
 
-idx_t duckdb_get_column_version(const duckdb_connection connection, const char *schema, const char *table, const char *column) {
+idx_t duckdb_get_column_version(const duckdb_connection connection, const char *schema, const char *table, const char *column, char **error) {
 	auto *ddbConnection = reinterpret_cast<Connection *>(connection);
+
+	try {
+		return ddbConnection->context->GetTableVersion(schema, table);
+	} catch (std::exception &ex) {
+		if (error) {
+			ErrorData parsed_error(ex);
+			*error = strdup(parsed_error.Message().c_str());
+		}
+		return 0;
+	} catch (...) { // LCOV_EXCL_START
+		if (error) {
+			*error = strdup("Unknown error");
+		}
+		return 0;
+	} // LCOV_EXCL_STOP
 
 	return ddbConnection->context->GetColumnVersion(schema, table, column);
 }

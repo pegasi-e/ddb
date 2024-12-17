@@ -1463,6 +1463,10 @@ void ClientContext::SetActiveResult(ClientContextLock &lock, BaseQueryResult &re
 idx_t ClientContext::GetTableVersion(const char *schema, const char *table) {
 	idx_t version = 0;
 	RunFunctionInTransaction([&]() {
+		if (schema == nullptr) {
+			schema = DEFAULT_SCHEMA;
+		}
+
 		auto &table_entry = Catalog::GetEntry<TableCatalogEntry>(*this, INVALID_CATALOG, schema, table);
 		auto &dataTable = table_entry.GetStorage();
 		version = dataTable.GetLastCommitId();
@@ -1474,6 +1478,10 @@ idx_t ClientContext::GetTableVersion(const char *schema, const char *table) {
 idx_t ClientContext::GetColumnVersion(const char *schema, const char *table, const char *column) {
 	idx_t version = 0;
 	RunFunctionInTransaction([&]() {
+		if (schema == nullptr) {
+			schema = DEFAULT_SCHEMA;
+		}
+
 		auto &table_entry = Catalog::GetEntry<TableCatalogEntry>(*this, INVALID_CATALOG, schema, table);
 		const auto &dataTable = table_entry.GetStorage();
 		if (table_entry.ColumnExists(column)) {

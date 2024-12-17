@@ -2542,9 +2542,6 @@ Creates a new DataChunk that copy a given DataChunk
  */
 DUCKDB_API duckdb_data_chunk duckdb_create_data_chunk_copy(duckdb_data_chunk *chunk);
 
-DUCKDB_API idx_t duckdb_get_table_version(duckdb_connection connection, const char *schema, const char *table);
-DUCKDB_API idx_t duckdb_get_column_version(duckdb_connection connection, const char *schema, const char *table, const char *column);
-
 /*!
 Destroys the data chunk and de-allocates all memory allocated for that chunk.
 
@@ -4195,6 +4192,8 @@ DUCKDB_API void duckdb_set_hlc_timestamp(uint64_t ts);
 DUCKDB_API uint64_t duckdb_get_snapshot_id(duckdb_connection con);
 DUCKDB_API duckdb_state duckdb_create_snapshot(duckdb_connection con, duckdb_result *out_result, char **out_snapshot_file_name);
 DUCKDB_API void duckdb_remove_snapshot(duckdb_connection con, const char *snapshot_file_name);
+DUCKDB_API idx_t duckdb_get_table_version(duckdb_connection connection, const char *schema, const char *table, char **error);
+DUCKDB_API idx_t duckdb_get_column_version(duckdb_connection connection, const char *schema, const char *table, const char *column, char **error);
 
 #ifdef __cplusplus
 }
