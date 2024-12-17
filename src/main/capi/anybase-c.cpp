@@ -14,6 +14,7 @@ using duckdb::ArrowResultWrapper;
 using duckdb::Connection;
 using duckdb::DataChunk;
 using duckdb::LogicalType;
+using duckdb::ErrorData;
 
 uint64_t duckdb_get_hlc_timestamp() {
 	return duckdb::TimestampManager::GetHLCTimestamp();
