@@ -158,6 +158,7 @@ void CommitState::CommitEntry(UndoFlags type, data_ptr_t data) {
 		auto info = reinterpret_cast<AppendInfo *>(data);
 		// mark the tuples as committed
 		info->table->CommitAppend(commit_id, info->start_row, info->count);
+		info->table->DidCommitTransaction(commit_id);
 		break;
 	}
 	case UndoFlags::DELETE_TUPLE: {
@@ -165,12 +166,18 @@ void CommitState::CommitEntry(UndoFlags type, data_ptr_t data) {
 		auto info = reinterpret_cast<DeleteInfo *>(data);
 		// mark the tuples as committed
 		info->version_info->CommitDelete(info->vector_idx, commit_id, *info);
+		info->table->DidCommitTransaction(commit_id);
 		break;
 	}
 	case UndoFlags::UPDATE_TUPLE: {
 		// update:
 		auto info = reinterpret_cast<UpdateInfo *>(data);
 		info->version_number = commit_id;
+		if (info->column) {
+			info->column->commit_version_manager.DidCommitTransaction(commit_id);
+			info->column->info.commit_version_manager.DidCommitTransaction(commit_id);
+		}
+
 		break;
 	}
 	case UndoFlags::SEQUENCE_VALUE: {

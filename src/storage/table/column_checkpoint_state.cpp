@@ -197,6 +197,7 @@ void ColumnCheckpointState::FlushSegment(unique_ptr<ColumnSegment> segment, idx_
 PersistentColumnData ColumnCheckpointState::ToPersistentData() {
 	PersistentColumnData data(column_data.type.InternalType());
 	data.pointers = std::move(data_pointers);
+	data.commit_version = column_data.commit_version_manager.GetVersion();
 	return data;
 }
 

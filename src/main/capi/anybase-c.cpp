@@ -1,3 +1,4 @@
+#include "duckdb/catalog/catalog_entry/table_catalog_entry.hpp"
 #include "duckdb/main/capi/capi_internal.hpp"
 #include "duckdb/transaction/timestamp_manager.hpp"
 #include "duckdb/common/arrow/arrow.hpp"
@@ -5,6 +6,7 @@
 #include "duckdb/common/arrow/arrow_appender.hpp"
 #include "duckdb/main/prepared_statement_data.hpp"
 #include "duckdb/common/types.hpp"
+#include "duckdb/storage/data_table.hpp"
 
 using duckdb::ArrowConverter;
 using duckdb::ArrowAppender;
@@ -12,6 +14,7 @@ using duckdb::ArrowResultWrapper;
 using duckdb::Connection;
 using duckdb::DataChunk;
 using duckdb::LogicalType;
+using duckdb::ErrorData;
 
 uint64_t duckdb_get_hlc_timestamp() {
 	return duckdb::TimestampManager::GetHLCTimestamp();
@@ -142,5 +145,43 @@ duckdb_data_chunk duckdb_create_data_chunk_copy(duckdb_data_chunk *chunk) {
 	dchunk->Copy(*new_chunk);
 
 	return reinterpret_cast<duckdb_data_chunk>(new_chunk);
+}
+
+idx_t duckdb_get_table_version(const duckdb_connection connection, const char *schema, const char *table, char **error) {
+	auto *ddbConnection = reinterpret_cast<Connection *>(connection);
+
+	try {
+		return ddbConnection->context->GetTableVersion(schema, table);
+	} catch (std::exception &ex) {
+		if (error) {
+			ErrorData parsed_error(ex);
+			*error = strdup(parsed_error.Message().c_str());
+		}
+		return 0;
+	} catch (...) { // LCOV_EXCL_START
+		if (error) {
+			*error = strdup("Unknown error");
+		}
+		return 0;
+	} // LCOV_EXCL_STOP
+}
+
+idx_t duckdb_get_column_version(const duckdb_connection connection, const char *schema, const char *table, const char *column, char **error) {
+	auto *ddbConnection = reinterpret_cast<Connection *>(connection);
+
+	try {
+		return ddbConnection->context->GetColumnVersion(schema, table, column);
+	} catch (std::exception &ex) {
+		if (error) {
+			ErrorData parsed_error(ex);
+			*error = strdup(parsed_error.Message().c_str());
+		}
+		return 0;
+	} catch (...) { // LCOV_EXCL_START
+		if (error) {
+			*error = strdup("Unknown error");
+		}
+		return 0;
+	} // LCOV_EXCL_STOP
 }
 

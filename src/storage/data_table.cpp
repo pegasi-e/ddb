@@ -1969,6 +1969,19 @@ idx_t DataTable::GetTotalRows() const {
 	return row_groups->GetTotalRows();
 }
 
+void DataTable::DidCommitTransaction(const transaction_t commit_id) const {
+	info->commit_version_manager.DidCommitTransaction(commit_id);
+	row_groups->UpdateColumnVersions(commit_id);
+}
+
+idx_t DataTable::GetLastCommitId() const {
+	return info->commit_version_manager.GetVersion();
+}
+
+idx_t DataTable::GetColumnVersion(const column_t idx) const {
+	return row_groups->GetVersion(idx);
+}
+
 void DataTable::CommitDropTable() {
 	// commit a drop of this table: mark all blocks as modified, so they can be reclaimed later on
 	row_groups->CommitDropTable();

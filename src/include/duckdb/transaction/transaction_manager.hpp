@@ -40,9 +40,9 @@ public:
 
 	virtual void Checkpoint(ClientContext &context, bool force = false) = 0;
 
-        virtual string Snapshot(ClientContext &context) = 0;
-        virtual uint64_t GetSnapshotId(ClientContext &context) = 0;
-        virtual uint64_t CheckpointAndGetSnapshotId(ClientContext &context) = 0;
+    virtual string Snapshot(ClientContext &context) = 0;
+    virtual uint64_t GetSnapshotId(ClientContext &context) = 0;
+    virtual uint64_t CheckpointAndGetSnapshotId(ClientContext &context) = 0;
 	static TransactionManager &Get(AttachedDatabase &db);
 
 	virtual bool IsDuckTransactionManager() {

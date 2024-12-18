@@ -32,6 +32,7 @@ public:
 	unique_ptr<CatalogEntry> Copy(ClientContext &context) const override;
 
 	void SetAsRoot() override;
+	unique_ptr<CreateInfo> GetInfo() const override;
 
 	void CommitAlter(string &column_name);
 	void CommitDrop();

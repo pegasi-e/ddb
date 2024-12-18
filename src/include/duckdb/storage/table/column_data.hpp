@@ -18,6 +18,7 @@
 #include "duckdb/common/mutex.hpp"
 #include "duckdb/common/enums/scan_vector_type.hpp"
 #include "duckdb/common/serializer/serialization_traits.hpp"
+#include "duckdb/storage/table/commit_version_manager.hpp"
 
 namespace duckdb {
 class ColumnData;
@@ -67,6 +68,8 @@ public:
 	LogicalType type;
 	//! The parent column (if any)
 	optional_ptr<ColumnData> parent;
+
+	CommitVersionManager commit_version_manager;
 
 public:
 	virtual FilterPropagateResult CheckZonemap(ColumnScanState &state, TableFilter &filter);
@@ -225,6 +228,7 @@ struct PersistentColumnData {
 	vector<DataPointer> pointers;
 	vector<PersistentColumnData> child_columns;
 	bool has_updates = false;
+	idx_t commit_version = 0;
 
 	void Serialize(Serializer &serializer) const;
 	static PersistentColumnData Deserialize(Deserializer &deserializer);

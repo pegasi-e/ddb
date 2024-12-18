@@ -135,6 +135,9 @@ public:
 		return allocation_size;
 	}
 
+	idx_t GetVersion(column_t column_idx) const;
+	void UpdateColumnVersions(transaction_t commit_id) const;
+
 private:
 	bool IsEmpty(SegmentLock &) const;
 

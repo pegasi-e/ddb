@@ -591,6 +591,7 @@ void ColumnData::InitializeColumn(PersistentColumnData &column_data, BaseStatist
 	D_ASSERT(type.InternalType() == column_data.physical_type);
 	// construct the segments based on the data pointers
 	this->count = 0;
+	this->commit_version_manager.SetVersion(column_data.commit_version);
 	for (auto &data_pointer : column_data.pointers) {
 		// Update the count and statistics
 		this->count += data_pointer.tuple_count;
@@ -656,6 +657,8 @@ void PersistentColumnData::Serialize(Serializer &serializer) const {
 		serializer.WriteList(102, "sub_columns", child_columns.size() - 1,
 		                     [&](Serializer::List &list, idx_t i) { list.WriteElement(child_columns[i + 1]); });
 	}
+
+	serializer.WriteProperty(103, "commit_version", commit_version);
 }
 
 void PersistentColumnData::DeserializeField(Deserializer &deserializer, field_id_t field_idx, const char *field_name,
@@ -670,6 +673,7 @@ PersistentColumnData PersistentColumnData::Deserialize(Deserializer &deserialize
 	auto physical_type = type.InternalType();
 	PersistentColumnData result(physical_type);
 	deserializer.ReadPropertyWithDefault(100, "data_pointers", static_cast<vector<DataPointer> &>(result.pointers));
+
 	if (result.physical_type == PhysicalType::BIT) {
 		// validity: return
 		return result;
@@ -694,6 +698,7 @@ PersistentColumnData PersistentColumnData::Deserialize(Deserializer &deserialize
 	default:
 		break;
 	}
+	deserializer.ReadPropertyWithDefault(103, "commit_version", result.commit_version);
 	return result;
 }
 
@@ -763,6 +768,7 @@ bool PersistentCollectionData::HasUpdates() const {
 PersistentColumnData ColumnData::Serialize() {
 	PersistentColumnData result(type.InternalType(), GetDataPointers());
 	result.has_updates = HasUpdates();
+	result.commit_version = commit_version_manager.GetVersion();
 	return result;
 }
 

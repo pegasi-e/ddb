@@ -9,6 +9,8 @@
 
 #include <algorithm>
 
+#include "duckdb/main/database.hpp"
+
 namespace duckdb {
 
 static UpdateSegment::initialize_update_function_t GetInitializeUpdateFunction(PhysicalType type);
@@ -1142,6 +1144,7 @@ void UpdateSegment::Update(TransactionData transaction, idx_t column_index, Vect
 			node->vector_index = vector_index;
 			node->N = 0;
 			node->column_index = column_index;
+			node->column = &column_data;
 
 			// insert the new node into the chain
 			node->next = base_info->next;
@@ -1166,6 +1169,7 @@ void UpdateSegment::Update(TransactionData transaction, idx_t column_index, Vect
 		result->info = make_uniq<UpdateInfo>();
 		result->tuples = make_unsafe_uniq_array_uninitialized<sel_t>(STANDARD_VECTOR_SIZE);
 		result->tuple_data = make_unsafe_uniq_array_uninitialized<data_t>(STANDARD_VECTOR_SIZE * type_size);
+		result->info->column = &column_data;
 		result->info->tuples = result->tuples.get();
 		result->info->tuple_data = result->tuple_data.get();
 		result->info->version_number = TRANSACTION_ID_START - 1;
@@ -1191,6 +1195,7 @@ void UpdateSegment::Update(TransactionData transaction, idx_t column_index, Vect
 		transaction_node->next = nullptr;
 		transaction_node->prev = result->info.get();
 		transaction_node->column_index = column_index;
+		transaction_node->column = &column_data;
 
 		transaction_node->Verify();
 		result->info->Verify();

@@ -80,6 +80,34 @@ MetadataManager &RowGroupCollection::GetMetadataManager() {
 	return GetBlockManager().GetMetadataManager();
 }
 
+idx_t RowGroupCollection::GetVersion(const column_t column_idx) const {
+	const auto segmentCount = row_groups->GetSegmentCount();
+	if (segmentCount == 0) {
+		return 0;
+	}
+
+	auto row_group = row_groups->GetSegment(0);
+	D_ASSERT(row_group);
+
+	idx_t version = 0;
+	while (row_group) {
+		version = std::max(row_group->GetColumnVersion(column_idx), version);
+		row_group = row_groups->GetNextSegment(row_group);
+	}
+
+	return version;
+}
+
+void RowGroupCollection::UpdateColumnVersions(const transaction_t commit_id) const {
+	auto row_group = row_groups->GetSegment(0);
+	D_ASSERT(row_group);
+
+	while (row_group) {
+		row_group->UpdateColumnVersions(commit_id);
+		row_group = row_groups->GetNextSegment(row_group);
+	}
+}
+
 //===--------------------------------------------------------------------===//
 // Initialize
 //===--------------------------------------------------------------------===//

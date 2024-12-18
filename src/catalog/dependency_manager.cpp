@@ -661,7 +661,6 @@ static string FormatString(const MangledEntryName &mangled) {
 
 void DependencyManager::PrintSubjects(CatalogTransaction transaction, const CatalogEntryInfo &info) {
 	auto name = MangleName(info);
-	Printer::Print(StringUtil::Format("Subjects of %s", FormatString(name)));
 	auto subjects = DependencyCatalogSet(Subjects(), info);
 	subjects.Scan(transaction, [&](CatalogEntry &dependency) {
 		auto &dep = dependency.Cast<DependencyEntry>();
