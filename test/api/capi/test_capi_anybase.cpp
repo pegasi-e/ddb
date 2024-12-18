@@ -62,6 +62,11 @@ TEST_CASE("Test Insert version isolation", "[capi]") {
 	REQUIRE(iColumnVersion == 2);
 	REQUIRE(vColumnVersion == 2);
 	REQUIRE(xColumnVersion == 2);
+
+	duckdb_destroy_result(&result);
+	duckdb_disconnect(&con);
+	duckdb_disconnect(&con2);
+	duckdb_close(&db);
 }
 
 // TEST_CASE("Test Update version isolation", "[capi]") {
