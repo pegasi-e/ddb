@@ -5,7 +5,7 @@
 using namespace duckdb;
 using namespace std;
 
-TEST_CASE("Test data frame", "[capi]") {
+TEST_CASE("Test Insert version isolation", "[capi]") {
 
 	duckdb_database db;
 	duckdb_connection con;
@@ -17,7 +17,7 @@ TEST_CASE("Test data frame", "[capi]") {
 	idx_t iColumnVersion = 0;
 	idx_t xColumnVersion = 0;
 
-	REQUIRE(duckdb_open("/Users/jeremyosterhoudt/Downloads/Foo_0.db", &db) != DuckDBError);
+	REQUIRE(duckdb_open(nullptr, &db) != DuckDBError);
 	REQUIRE(duckdb_connect(db, &con) != DuckDBError);
 	REQUIRE(duckdb_connect(db, &con2) != DuckDBError);
 
@@ -30,9 +30,6 @@ TEST_CASE("Test data frame", "[capi]") {
 	REQUIRE(duckdb_query(con, "select * from FOO", NULL) != DuckDBError);
 	REQUIRE(duckdb_query(con, "INSERT INTO FOO values (1, 5, 22) on conflict do update set v = 10;", NULL) != DuckDBError);
 	REQUIRE(duckdb_query(con, "INSERT INTO FOO values (2, 5, 22) on conflict do update set x = 15;", NULL) != DuckDBError);
-
-
-
 
 	tableVersion = duckdb_get_table_version(con, "", "FOO", nullptr);
 	vColumnVersion = duckdb_get_column_version(con, "", "FOO", "v", nullptr);
@@ -65,9 +62,62 @@ TEST_CASE("Test data frame", "[capi]") {
 	REQUIRE(iColumnVersion == 2);
 	REQUIRE(vColumnVersion == 2);
 	REQUIRE(xColumnVersion == 2);
-	// REQUIRE(duckdb_query(con, "checkpoint", NULL) != DuckDBError);
 }
 
+// TEST_CASE("Test Update version isolation", "[capi]") {
+//
+// 	duckdb_database db;
+// 	duckdb_connection con;
+// 	duckdb_connection con2;
+// 	duckdb_result result;
+//
+// 	idx_t tableVersion = 0;
+// 	idx_t vColumnVersion = 0;
+// 	idx_t iColumnVersion = 0;
+// 	idx_t xColumnVersion = 0;
+//
+// 	REQUIRE(duckdb_open("/Users/jeremyosterhoudt/Downloads/Foo_0.db", &db) != DuckDBError);
+// 	REQUIRE(duckdb_connect(db, &con) != DuckDBError);
+// 	REQUIRE(duckdb_connect(db, &con2) != DuckDBError);
+//
+// 	// REQUIRE(duckdb_query(con, "CREATE SCHEMA FOO;", NULL) != DuckDBError);
+// 	REQUIRE(duckdb_query(con, "CREATE TABLE FOO(i INTEGER unique, v INTEGER DEFAULT 5, x INTEGER default 22);", NULL) != DuckDBError);
+// 	REQUIRE(duckdb_query(con, "Insert INTO FOO VALUES (1, 5, 22), (2, 5, 22);", NULL) != DuckDBError);
+//
+// 	REQUIRE(duckdb_query(con, "Begin Transaction", NULL) != DuckDBError);
+// 	REQUIRE(duckdb_query(con, "update FOO set v = 22 where i = 1;", NULL) != DuckDBError);
+//
+// 	tableVersion = duckdb_get_table_version(con, "", "FOO", nullptr);
+// 	vColumnVersion = duckdb_get_column_version(con, "", "FOO", "v", nullptr);
+// 	iColumnVersion = duckdb_get_column_version(con, "", "FOO", "i", nullptr);
+// 	xColumnVersion = duckdb_get_column_version(con, "", "FOO", "x", nullptr);
+// 	REQUIRE(tableVersion == 1);
+// 	REQUIRE(iColumnVersion == 1);
+// 	REQUIRE(vColumnVersion == 1);
+// 	REQUIRE(xColumnVersion == 1);
+// 	REQUIRE(duckdb_query(con, "commit", NULL) != DuckDBError);
+// 	REQUIRE(duckdb_query(con, "select * from FOO", &result) != DuckDBError);
+//
+//
+// 	tableVersion = duckdb_get_table_version(con, "", "FOO", nullptr);
+// 	vColumnVersion = duckdb_get_column_version(con, "", "FOO", "v", nullptr);
+// 	iColumnVersion = duckdb_get_column_version(con, "", "FOO", "i", nullptr);
+// 	xColumnVersion = duckdb_get_column_version(con, "", "FOO", "x", nullptr);
+// 	REQUIRE(tableVersion == 2);
+// 	REQUIRE(iColumnVersion == 2);
+// 	REQUIRE(vColumnVersion == 2);
+// 	REQUIRE(xColumnVersion == 2);
+//
+// 	tableVersion = duckdb_get_table_version(con, "", "FOO", nullptr);
+// 	vColumnVersion = duckdb_get_column_version(con2, "", "FOO", "v", nullptr);
+// 	iColumnVersion = duckdb_get_column_version(con, "", "FOO", "i", nullptr);
+// 	xColumnVersion = duckdb_get_column_version(con, "", "FOO", "x", nullptr);
+// 	REQUIRE(tableVersion == 2);
+// 	REQUIRE(iColumnVersion == 2);
+// 	REQUIRE(vColumnVersion == 2);
+// 	REQUIRE(xColumnVersion == 2);
+// }
+//
 // TEST_CASE("Test rollback", "[capi]") {
 // 	duckdb_database db;
 // 	duckdb_connection con;
