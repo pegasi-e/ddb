@@ -1473,7 +1473,7 @@ idx_t ClientContext::GetTableVersion(const char *schema, const char *table) {
 	idx_t version = 0;
 	RunFunctionInTransaction([&]() {
 		if (schema == nullptr) {
-			schema = DEFAULT_SCHEMA;
+			schema = INVALID_SCHEMA;
 		}
 
 		auto &table_entry = Catalog::GetEntry<TableCatalogEntry>(*this, INVALID_CATALOG, schema, table);
@@ -1488,7 +1488,7 @@ idx_t ClientContext::GetColumnVersion(const char *schema, const char *table, con
 	idx_t version = 0;
 	RunFunctionInTransaction([&]() {
 		if (schema == nullptr) {
-			schema = DEFAULT_SCHEMA;
+			schema = INVALID_SCHEMA;
 		}
 
 		auto &table_entry = Catalog::GetEntry<TableCatalogEntry>(*this, INVALID_CATALOG, schema, table);
