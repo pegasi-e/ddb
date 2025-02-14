@@ -94,7 +94,7 @@ public:
 
 	//! Fetch data from the specific row identifiers from the base table
 	void Fetch(DuckTransaction &transaction, DataChunk &result, const vector<column_t> &column_ids,
-	           const Vector &row_ids, idx_t fetch_count, ColumnFetchState &state);
+	           const Vector &row_ids, idx_t fetch_count, ColumnFetchState &state, bool fetch_updates = true);
 
 	//! Initializes an append to transaction-local storage
 	void InitializeLocalAppend(LocalAppendState &state, TableCatalogEntry &table, ClientContext &context,
@@ -143,7 +143,7 @@ public:
 	                                              const vector<unique_ptr<BoundConstraint>> &bound_constraints);
 	//! Update the entries with the specified row identifier from the table
 	void Update(TableUpdateState &state, ClientContext &context, Vector &row_ids,
-	            const vector<PhysicalIndex> &column_ids, DataChunk &data);
+	            const vector<PhysicalIndex> &column_ids, DataChunk &data, const vector<PhysicalIndex> &involved_columns);
 	//! Update a single (sub-)column along a column path
 	//! The column_path vector is a *path* towards a column within the table
 	//! i.e. if we have a table with a single column S STRUCT(A INT, B INT)
@@ -154,7 +154,7 @@ public:
 	//! -> 0 (first subcolumn of INT)
 	//! This method should only be used from the WAL replay. It does not verify update constraints.
 	void UpdateColumn(TableCatalogEntry &table, ClientContext &context, Vector &row_ids,
-	                  const vector<column_t> &column_path, DataChunk &updates);
+	                  const vector<column_t> &column_path, DataChunk &updates, const vector<PhysicalIndex> &involved_columns);
 
 	//! Fetches an append lock
 	void AppendLock(TableAppendState &state);
@@ -244,8 +244,8 @@ public:
 
 	TableStorageInfo GetStorageInfo();
 
-	idx_t GetLastCommitId() const;
-	void DidCommitTransaction(transaction_t commit_id) const;
+	idx_t GetVersion() const;
+	void DidCommitTransaction(transaction_t commit_id, bool update_all_columns = true) const;
 	idx_t GetColumnVersion(column_t idx) const;
 
 public:

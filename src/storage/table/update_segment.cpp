@@ -1074,8 +1074,8 @@ UpdateInfo *CreateEmptyUpdateInfo(TransactionData transaction, idx_t type_size, 
 	return update_info;
 }
 
-void UpdateSegment::Update(TransactionData transaction, idx_t column_index, Vector &update, row_t *ids, idx_t count,
-                           Vector &base_data) {
+void UpdateSegment::Update(TransactionData transaction, DataTable &table, idx_t column_index, Vector &update, row_t *ids, idx_t count,
+                           Vector &base_data, const vector<PhysicalIndex> &involved_columns) {
 	// obtain an exclusive lock
 	auto write_lock = lock.GetExclusiveLock();
 
@@ -1145,6 +1145,8 @@ void UpdateSegment::Update(TransactionData transaction, idx_t column_index, Vect
 			node->N = 0;
 			node->column_index = column_index;
 			node->column = &column_data;
+			node->table = &table;
+			node->involved_columns = involved_columns;
 
 			// insert the new node into the chain
 			node->next = base_info->next;
@@ -1170,10 +1172,12 @@ void UpdateSegment::Update(TransactionData transaction, idx_t column_index, Vect
 		result->tuples = make_unsafe_uniq_array_uninitialized<sel_t>(STANDARD_VECTOR_SIZE);
 		result->tuple_data = make_unsafe_uniq_array_uninitialized<data_t>(STANDARD_VECTOR_SIZE * type_size);
 		result->info->column = &column_data;
+		result->info->table = &table;
 		result->info->tuples = result->tuples.get();
 		result->info->tuple_data = result->tuple_data.get();
 		result->info->version_number = TRANSACTION_ID_START - 1;
 		result->info->column_index = column_index;
+		result->info->involved_columns = involved_columns;
 		InitializeUpdateInfo(*result->info, ids, sel, count, vector_index, vector_offset);
 
 		// now create the transaction level update info in the undo log
@@ -1196,6 +1200,8 @@ void UpdateSegment::Update(TransactionData transaction, idx_t column_index, Vect
 		transaction_node->prev = result->info.get();
 		transaction_node->column_index = column_index;
 		transaction_node->column = &column_data;
+		transaction_node->table = &table;
+		transaction_node->is_transaction = true;
 
 		transaction_node->Verify();
 		result->info->Verify();

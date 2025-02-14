@@ -4,6 +4,7 @@
 #include "duckdb/common/types/column/column_data_collection.hpp"
 #include "duckdb/common/vector_operations/vector_operations.hpp"
 #include "duckdb/execution/expression_executor.hpp"
+#include "duckdb/execution/operator/scan/physical_table_scan.hpp"
 #include "duckdb/main/client_context.hpp"
 #include "duckdb/parallel/thread_context.hpp"
 #include "duckdb/planner/expression/bound_reference_expression.hpp"
@@ -89,6 +90,14 @@ SinkResultType PhysicalUpdate::Sink(ExecutionContext &context, DataChunk &chunk,
 	chunk.Flatten();
 	lstate.default_executor.SetChunk(chunk);
 
+	vector<PhysicalIndex> involved_columns;
+	if (context.pipeline->GetSource()->type == PhysicalOperatorType::TABLE_SCAN) {
+		auto table_scan = &context.pipeline->GetSource()->Cast<PhysicalTableScan>();
+		for (idx_t i = 0; i < table_scan->column_ids.size() - 1; i++) {
+			involved_columns.emplace_back(PhysicalIndex(table_scan->column_ids[i]));
+		}
+	}
+
 	// update data in the base table
 	// the row ids are given to us as the last column of the child chunk
 	auto &row_ids = chunk.data[chunk.ColumnCount() - 1];
@@ -144,7 +153,7 @@ SinkResultType PhysicalUpdate::Sink(ExecutionContext &context, DataChunk &chunk,
 			}
 		}
 		auto &update_state = lstate.GetUpdateState(table, tableref, context.client);
-		table.Update(update_state, context.client, row_ids, columns, update_chunk);
+		table.Update(update_state, context.client, row_ids, columns, update_chunk, involved_columns);
 	}
 
 	if (return_chunk) {

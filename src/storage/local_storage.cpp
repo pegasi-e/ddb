@@ -427,12 +427,12 @@ idx_t LocalStorage::Delete(DataTable &table, Vector &row_ids, idx_t count) {
 }
 
 void LocalStorage::Update(DataTable &table, Vector &row_ids, const vector<PhysicalIndex> &column_ids,
-                          DataChunk &updates) {
+                          DataChunk &updates, const vector<PhysicalIndex> &involved_columns) {
 	auto storage = table_manager.GetStorage(table);
 	D_ASSERT(storage);
 
 	auto ids = FlatVector::GetData<row_t>(row_ids);
-	storage->row_groups->Update(TransactionData(0, 0), ids, column_ids, updates);
+	storage->row_groups->Update(TransactionData(0, 0), table, ids, column_ids, updates, involved_columns);
 }
 
 void LocalStorage::Flush(DataTable &table, LocalTableStorage &storage, optional_ptr<StorageCommitState> commit_state) {

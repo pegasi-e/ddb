@@ -11,13 +11,15 @@
 #include "duckdb/transaction/commit_state.hpp"
 #include "duckdb/transaction/rollback_state.hpp"
 #include "duckdb/execution/index/bound_index.hpp"
+#include "duckdb/transaction/cdc_write_state.hpp"
 #include "duckdb/transaction/wal_write_state.hpp"
 #include "duckdb/transaction/delete_info.hpp"
 
 namespace duckdb {
 constexpr uint32_t UNDO_ENTRY_HEADER_SIZE = sizeof(UndoFlags) + sizeof(uint32_t);
 
-UndoBuffer::UndoBuffer(ClientContext &context_p) : allocator(BufferAllocator::Get(context_p)) {
+UndoBuffer::UndoBuffer(DuckTransaction &transaction_p, ClientContext &context_p)
+	: transaction(transaction_p), allocator(BufferAllocator::Get(context_p)) {
 }
 
 data_ptr_t UndoBuffer::CreateEntry(UndoFlags type, idx_t len) {
@@ -183,6 +185,27 @@ void UndoBuffer::WriteToWAL(WriteAheadLog &wal, optional_ptr<StorageCommitState>
 	IterateEntries(iterator_state, [&](UndoFlags type, data_ptr_t data) { state.CommitEntry(type, data); });
 }
 
+// void UndoBuffer::WriteToWAL(WriteAheadLog &wal, optional_ptr<StorageCommitState> commit_state) {
+// 	WALWriteState state(transaction, wal, commit_state);
+// 	UndoBuffer::IteratorState iterator_state;
+//
+// 	// Create the Change Data Capture State if it's enabled
+// 	unique_ptr<CDCWriteState> cdcState;
+// 	if (!transaction.context.expired() && transaction.context.lock()->db != nullptr) {
+// 		const auto context = transaction.context.lock();
+// 		if (context && context->db && context->db->config.change_data_capture.IsEnabled()) {
+// 			cdcState = make_uniq<CDCWriteState>(transaction, commit_state);
+// 		}
+// 	}
+//
+// 	IterateEntries(iterator_state, [&](UndoFlags type, data_ptr_t data) {
+// 		state.CommitEntry(type, data);
+// 		if (cdcState) {
+// 			cdcState->EmitEntry(type, data);
+// 		}
+// 	});
+// }
+
 void UndoBuffer::Commit(UndoBuffer::IteratorState &iterator_state, transaction_t commit_id) {
 	CommitState state(commit_id);
 	IterateEntries(iterator_state, [&](UndoFlags type, data_ptr_t data) { state.CommitEntry(type, data); });
@@ -199,4 +222,15 @@ void UndoBuffer::Rollback() noexcept {
 	RollbackState state;
 	ReverseIterateEntries([&](UndoFlags type, data_ptr_t data) { state.RollbackEntry(type, data); });
 }
+
+// Anybase additions
+void UndoBuffer::PublishCdCEvent(optional_ptr<StorageCommitState> commit_state) {
+	CDCWriteState state(transaction, commit_state);
+	UndoBuffer::IteratorState iterator_state;
+
+	IterateEntries(iterator_state, [&](UndoFlags type, data_ptr_t data) {
+		state.EmitEntry(type, data);
+	});
+}
+
 } // namespace duckdb

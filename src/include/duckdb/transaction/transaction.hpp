@@ -63,6 +63,12 @@ public:
 		return false;
 	}
 
+	// Anybase Additions
+	virtual bool ShouldPublishCDCEvent() {
+		return false;
+	}
+	// end Anybase Additions
+
 public:
 	template <class TARGET>
 	TARGET &Cast() {

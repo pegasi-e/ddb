@@ -381,9 +381,10 @@ TableStorageInfo DataTable::GetStorageInfo() {
 // Fetch
 //===--------------------------------------------------------------------===//
 void DataTable::Fetch(DuckTransaction &transaction, DataChunk &result, const vector<column_t> &column_ids,
-                      const Vector &row_identifiers, idx_t fetch_count, ColumnFetchState &state) {
+                      const Vector &row_identifiers, idx_t fetch_count, ColumnFetchState &state,
+                      bool fetch_updates) {
 	auto lock = info->checkpoint_lock.GetSharedLock();
-	row_groups->Fetch(transaction, result, column_ids, row_identifiers, fetch_count, state);
+	row_groups->Fetch(transaction, result, column_ids, row_identifiers, fetch_count, state, fetch_updates);
 }
 
 //===--------------------------------------------------------------------===//
@@ -1000,7 +1001,9 @@ static void CreateUpdateChunk(ClientContext &context, DataChunk &chunk, TableCat
   
 template <bool GLOBAL>
 static idx_t PerformOnConflictAction(ClientContext &context, DataChunk &chunk, TableCatalogEntry &table,
-                                     Vector &row_ids, const vector<PhysicalIndex>& set_columns, const vector<unique_ptr<BoundConstraint>> &bound_constraints,
+                                     Vector &row_ids, const vector<PhysicalIndex>& set_columns,
+                                     const vector<PhysicalIndex> &involved_columns,
+                                     const vector<unique_ptr<BoundConstraint>> &bound_constraints,
                                      const vector<LogicalType> &set_types,
                                      const optional_ptr<const vector<unique_ptr<Expression>>> &set_expressions,
                                      const optional_ptr<const unique_ptr<Expression>> &do_update_condition) {
@@ -1011,11 +1014,11 @@ static idx_t PerformOnConflictAction(ClientContext &context, DataChunk &chunk, T
 	// Perform the update, using the results of the SET expressions
 	if (GLOBAL) {
 	  	auto update_state = data_table.InitializeUpdate(table, context, bound_constraints);
-	  	data_table.Update(*update_state, context, row_ids, set_columns, update_chunk);
+	  	data_table.Update(*update_state, context, row_ids, set_columns, update_chunk, involved_columns);
 	} else {
 		auto &local_storage = LocalStorage::Get(context, data_table.db);
 		// Perform the update, using the results of the SET expressions
-		local_storage.Update(data_table, row_ids, set_columns, update_chunk);
+		local_storage.Update(data_table, row_ids, set_columns, update_chunk, involved_columns);
 	}
 	return update_chunk.size();
 }
@@ -1024,6 +1027,7 @@ template <bool GLOBAL>
 static idx_t PerformOrderedUpdate(TableCatalogEntry &table, ClientContext &context,
                                   const vector<unique_ptr<BoundConstraint>> &bound_constraints,
                                   const vector<PhysicalIndex> &set_columns,
+                                  const vector<PhysicalIndex> &involved_columns,
                                   Vector &row_ids, DataChunk &conflict_chunk,
                                   const vector<LogicalType> &set_types,
                                   const optional_ptr<const vector<unique_ptr<Expression>>> &set_expressions,
@@ -1042,7 +1046,7 @@ static idx_t PerformOrderedUpdate(TableCatalogEntry &table, ClientContext &conte
 		Vector group_row_ids(row_ids);
 		group_row_ids.Slice(row_ids, offset, offset + chunk_size);
 
-		updated_tuples += PerformOnConflictAction<GLOBAL>(context, data_chunk, table, group_row_ids, set_columns, bound_constraints, set_types, set_expressions, do_update_condition);
+		updated_tuples += PerformOnConflictAction<GLOBAL>(context, data_chunk, table, group_row_ids, set_columns, involved_columns, bound_constraints, set_types, set_expressions, do_update_condition);
 	}
 
 	return updated_tuples;
@@ -1094,6 +1098,7 @@ template <bool GLOBAL>
 static idx_t PerformUnOrderedUpdate(TableCatalogEntry &table, ClientContext &context,
                                     const vector<unique_ptr<BoundConstraint>> &bound_constraints,
                                     const vector<PhysicalIndex> &set_columns,
+                                    const vector<PhysicalIndex> &involved_columns,
                                     Vector &row_ids, DataChunk &conflict_chunk, const shared_ptr<RowGroupCollection> &row_groups,
                                     const vector<LogicalType> &set_types,
                                     const optional_ptr<const vector<unique_ptr<Expression>>> &set_expressions,
@@ -1112,7 +1117,7 @@ static idx_t PerformUnOrderedUpdate(TableCatalogEntry &table, ClientContext &con
 		row_group_ids.Slice(kvp.second.sel, kvp.second.count);
 
 		updated_tuples += PerformOnConflictAction<GLOBAL>(context, data_chunk, table, row_group_ids,
-		                                                  set_columns, bound_constraints, set_types, set_expressions, do_update_condition);
+		                                                  set_columns, involved_columns, bound_constraints, set_types, set_expressions, do_update_condition);
 	}
 
 	return updated_tuples;
@@ -1163,6 +1168,17 @@ static idx_t HandleInsertConflicts(TableCatalogEntry &table, ClientContext &cont
 	conflict_chunk.Reference(insert_chunk);
 	conflict_chunk.Slice(conflicts.Selection(), conflicts.Count());
 	conflict_chunk.SetCardinality(conflicts.Count());
+
+	auto involved_column_set = unordered_set<column_t>();
+	involved_column_set.insert(conflict_target.begin(), conflict_target.end());
+	for (idx_t i = 0; i < set_columns.size(); ++i) {
+		involved_column_set.insert(set_columns[i].index);
+	}
+
+	vector<PhysicalIndex> involved_columns;
+	for (auto itr = involved_column_set.begin(); itr != involved_column_set.end(); itr++) {
+		involved_columns.push_back(PhysicalIndex(*itr));
+	}
 
 	// Holds the pins for the fetched rows
 	unique_ptr<ColumnFetchState> fetch_state;
@@ -1218,11 +1234,11 @@ static idx_t HandleInsertConflicts(TableCatalogEntry &table, ClientContext &cont
 	if (!set_types.empty()) {
 		if (is_sorted || row_groups == nullptr) {
 			// fast path for sorted updates
-			updated_tuples = PerformOrderedUpdate<GLOBAL>(table, context, bound_constraints, set_columns, row_ids,
+			updated_tuples = PerformOrderedUpdate<GLOBAL>(table, context, bound_constraints, set_columns, involved_columns, row_ids,
 														  combined_chunk, set_types, set_expressions, do_update_condition);
 		} else {
 			// fast path for non-sorted updates
-			updated_tuples = PerformUnOrderedUpdate<GLOBAL>(table, context, bound_constraints, set_columns, row_ids,
+			updated_tuples = PerformUnOrderedUpdate<GLOBAL>(table, context, bound_constraints, set_columns, involved_columns, row_ids,
 															combined_chunk, *row_groups,
 															set_types, set_expressions, do_update_condition);
 		}
@@ -1845,7 +1861,8 @@ unique_ptr<TableUpdateState> DataTable::InitializeUpdate(TableCatalogEntry &tabl
 }
 
 void DataTable::Update(TableUpdateState &state, ClientContext &context, Vector &row_ids,
-                       const vector<PhysicalIndex> &column_ids, DataChunk &updates) {
+                       const vector<PhysicalIndex> &column_ids, DataChunk &updates,
+                       const vector<PhysicalIndex> &involved_columns) {
 	D_ASSERT(row_ids.GetType().InternalType() == ROW_TYPE);
 	D_ASSERT(column_ids.size() == updates.ColumnCount());
 	updates.Verify();
@@ -1880,7 +1897,7 @@ void DataTable::Update(TableUpdateState &state, ClientContext &context, Vector &
 		row_ids_slice.Slice(row_ids, sel_local_update, n_local_update);
 		row_ids_slice.Flatten(n_local_update);
 
-		LocalStorage::Get(context, db).Update(*this, row_ids_slice, column_ids, updates_slice);
+		LocalStorage::Get(context, db).Update(*this, row_ids_slice, column_ids, updates_slice, involved_columns);
 	}
 
 	// otherwise global storage
@@ -1892,12 +1909,13 @@ void DataTable::Update(TableUpdateState &state, ClientContext &context, Vector &
 		row_ids_slice.Flatten(n_global_update);
 
 		transaction.UpdateCollection(row_groups);
-		row_groups->Update(transaction, FlatVector::GetData<row_t>(row_ids_slice), column_ids, updates_slice);
+		row_groups->Update(transaction, *this, FlatVector::GetData<row_t>(row_ids_slice), column_ids, updates_slice, involved_columns);
 	}
 }
 
 void DataTable::UpdateColumn(TableCatalogEntry &table, ClientContext &context, Vector &row_ids,
-                             const vector<column_t> &column_path, DataChunk &updates) {
+                             const vector<column_t> &column_path, DataChunk &updates,
+                             const vector<PhysicalIndex> &involved_columns) {
 	D_ASSERT(row_ids.GetType().InternalType() == ROW_TYPE);
 	D_ASSERT(updates.ColumnCount() == 1);
 	updates.Verify();
@@ -1914,7 +1932,7 @@ void DataTable::UpdateColumn(TableCatalogEntry &table, ClientContext &context, V
 
 	updates.Flatten();
 	row_ids.Flatten(updates.size());
-	row_groups->UpdateColumn(transaction, row_ids, column_path, updates);
+	row_groups->UpdateColumn(transaction, *this, row_ids, column_path, updates, involved_columns);
 }
 
 //===--------------------------------------------------------------------===//
@@ -1969,19 +1987,6 @@ idx_t DataTable::GetTotalRows() const {
 	return row_groups->GetTotalRows();
 }
 
-void DataTable::DidCommitTransaction(const transaction_t commit_id) const {
-	info->commit_version_manager.DidCommitTransaction(commit_id);
-	row_groups->UpdateColumnVersions(commit_id);
-}
-
-idx_t DataTable::GetLastCommitId() const {
-	return info->commit_version_manager.GetVersion();
-}
-
-idx_t DataTable::GetColumnVersion(const column_t idx) const {
-	return row_groups->GetVersion(idx);
-}
-
 void DataTable::CommitDropTable() {
 	// commit a drop of this table: mark all blocks as modified, so they can be reclaimed later on
 	row_groups->CommitDropTable();
@@ -2000,6 +2005,22 @@ void DataTable::CommitDropTable() {
 vector<ColumnSegmentInfo> DataTable::GetColumnSegmentInfo() {
 	auto lock = GetSharedCheckpointLock();
 	return row_groups->GetColumnSegmentInfo();
+}
+
+// Anybase additions
+void DataTable::DidCommitTransaction(const transaction_t commit_id, bool update_all_columns) const {
+	info->commit_version_manager.DidCommitTransaction(commit_id);
+	if (update_all_columns) {
+		row_groups->UpdateColumnVersions(commit_id);
+	}
+}
+
+	idx_t DataTable::GetVersion() const {
+	return info->commit_version_manager.GetVersion();
+}
+
+	idx_t DataTable::GetColumnVersion(const column_t idx) const {
+	return row_groups->GetVersion(idx);
 }
 
 } // namespace duckdb

@@ -33,6 +33,7 @@
 #include "duckdb/storage/compression/bitpacking.hpp"
 #include "duckdb/main/client_properties.hpp"
 #include "duckdb/execution/index/index_type_set.hpp"
+#include "duckdb/function/change_data_capature_function.hpp"
 
 namespace duckdb {
 
@@ -384,6 +385,10 @@ private:
 	unique_ptr<CollationBinding> collation_bindings;
 	unique_ptr<IndexTypeSet> index_types;
 	bool is_user_config = true;
+
+// Anybase additions
+public:
+	ChangeDataCapture change_data_capture;
 };
 
 } // namespace duckdb
