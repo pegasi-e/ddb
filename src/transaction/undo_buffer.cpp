@@ -185,27 +185,6 @@ void UndoBuffer::WriteToWAL(WriteAheadLog &wal, optional_ptr<StorageCommitState>
 	IterateEntries(iterator_state, [&](UndoFlags type, data_ptr_t data) { state.CommitEntry(type, data); });
 }
 
-// void UndoBuffer::WriteToWAL(WriteAheadLog &wal, optional_ptr<StorageCommitState> commit_state) {
-// 	WALWriteState state(transaction, wal, commit_state);
-// 	UndoBuffer::IteratorState iterator_state;
-//
-// 	// Create the Change Data Capture State if it's enabled
-// 	unique_ptr<CDCWriteState> cdcState;
-// 	if (!transaction.context.expired() && transaction.context.lock()->db != nullptr) {
-// 		const auto context = transaction.context.lock();
-// 		if (context && context->db && context->db->config.change_data_capture.IsEnabled()) {
-// 			cdcState = make_uniq<CDCWriteState>(transaction, commit_state);
-// 		}
-// 	}
-//
-// 	IterateEntries(iterator_state, [&](UndoFlags type, data_ptr_t data) {
-// 		state.CommitEntry(type, data);
-// 		if (cdcState) {
-// 			cdcState->EmitEntry(type, data);
-// 		}
-// 	});
-// }
-
 void UndoBuffer::Commit(UndoBuffer::IteratorState &iterator_state, transaction_t commit_id) {
 	CommitState state(commit_id);
 	IterateEntries(iterator_state, [&](UndoFlags type, data_ptr_t data) { state.CommitEntry(type, data); });

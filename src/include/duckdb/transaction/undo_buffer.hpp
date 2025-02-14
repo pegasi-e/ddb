@@ -57,7 +57,9 @@ public:
 	//! rollback
 	void Rollback() noexcept;
 
+	// Anybase additions
 	void PublishCdCEvent();
+	// end Anybase additions
 
 private:
 	DuckTransaction &transaction;
