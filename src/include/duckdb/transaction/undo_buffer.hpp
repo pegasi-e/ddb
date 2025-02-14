@@ -57,7 +57,7 @@ public:
 	//! rollback
 	void Rollback() noexcept;
 
-	void PublishCdCEvent(optional_ptr<StorageCommitState> commit_state);
+	void PublishCdCEvent();
 
 private:
 	DuckTransaction &transaction;

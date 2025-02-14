@@ -111,7 +111,7 @@ private:
 
 public:
 	// Anybase Additions
-	void PublishCdcMessages(unique_ptr<StorageCommitState> &commit_state);
+	void PublishCdcMessages();
 	bool ShouldPublishCDCEvent() override;
 	// end Anybase Additions
 };

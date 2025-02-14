@@ -20,7 +20,7 @@ struct AppendInfo;
 
 class CDCWriteState {
 public:
-    explicit CDCWriteState(DuckTransaction &transaction, optional_ptr<StorageCommitState> commit_state);
+    explicit CDCWriteState(DuckTransaction &transaction);
 
 public:
     void EmitEntry(UndoFlags type, data_ptr_t data);
@@ -32,7 +32,6 @@ private:
 
 private:
     DuckTransaction &transaction;
-    optional_ptr<StorageCommitState> commit_state;
 };
 
 } // namespace duckdb

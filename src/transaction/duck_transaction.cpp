@@ -308,8 +308,8 @@ bool DuckTransaction::ShouldPublishCDCEvent() {
 	return true;
 }
 
-void DuckTransaction::PublishCdcMessages(unique_ptr<StorageCommitState> &commit_state) {
-	undo_buffer.PublishCdCEvent(commit_state.get());
+void DuckTransaction::PublishCdcMessages() {
+	undo_buffer.PublishCdCEvent();
 }
 // end Anybase Additions
 

@@ -48,9 +48,8 @@ void ChangeDataCapture::EmitChange(
 	}
 }
 
-CDCWriteState::CDCWriteState(DuckTransaction &transaction_p,
-                             optional_ptr<StorageCommitState> commit_state)
-    : transaction(transaction_p),  commit_state(commit_state) {
+CDCWriteState::CDCWriteState(DuckTransaction &transaction_p)
+    : transaction(transaction_p) {
 }
 
 void CDCWriteState::EmitDelete(DeleteInfo &info) {

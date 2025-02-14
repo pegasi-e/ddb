@@ -224,8 +224,8 @@ void UndoBuffer::Rollback() noexcept {
 }
 
 // Anybase additions
-void UndoBuffer::PublishCdCEvent(optional_ptr<StorageCommitState> commit_state) {
-	CDCWriteState state(transaction, commit_state);
+void UndoBuffer::PublishCdCEvent() {
+	CDCWriteState state(transaction);
 	UndoBuffer::IteratorState iterator_state;
 
 	IterateEntries(iterator_state, [&](UndoFlags type, data_ptr_t data) {

@@ -257,7 +257,7 @@ ErrorData DuckTransactionManager::CommitTransaction(ClientContext &context, Tran
 	// commit the UndoBuffer of the transaction
 	if (!error.HasError()) {
 		if (transaction.ShouldPublishCDCEvent()) {
-			transaction.PublishCdcMessages(commit_state);
+			transaction.PublishCdcMessages();
 		}
 		error = transaction.Commit(db, commit_id, std::move(commit_state));
 	}
