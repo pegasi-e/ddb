@@ -167,17 +167,16 @@ idx_t StructColumnData::Fetch(ColumnScanState &state, row_t row_id, Vector &resu
 }
 
 void StructColumnData::Update(TransactionData transaction, DataTable &table, idx_t column_index, Vector &update_vector, row_t *row_ids,
-                              idx_t update_count, const vector<PhysicalIndex> &involved_columns) {
-	validity.Update(transaction, table, column_index, update_vector, row_ids, update_count, involved_columns);
+                              idx_t update_count) {
+	validity.Update(transaction, table, column_index, update_vector, row_ids, update_count);
 	auto &child_entries = StructVector::GetEntries(update_vector);
 	for (idx_t i = 0; i < child_entries.size(); i++) {
-		sub_columns[i]->Update(transaction, table, column_index, *child_entries[i], row_ids, update_count, involved_columns);
+		sub_columns[i]->Update(transaction, table, column_index, *child_entries[i], row_ids, update_count);
 	}
 }
 
 void StructColumnData::UpdateColumn(TransactionData transaction, DataTable &table, const vector<column_t> &column_path,
-                                    Vector &update_vector, row_t *row_ids, idx_t update_count, idx_t depth,
-                                    const vector<PhysicalIndex> &involved_columns) {
+                                    Vector &update_vector, row_t *row_ids, idx_t update_count, idx_t depth) {
 	// we can never DIRECTLY update a struct column
 	if (depth >= column_path.size()) {
 		throw InternalException("Attempting to directly update a struct column - this should not be possible");
@@ -185,13 +184,13 @@ void StructColumnData::UpdateColumn(TransactionData transaction, DataTable &tabl
 	auto update_column = column_path[depth];
 	if (update_column == 0) {
 		// update the validity column
-		validity.UpdateColumn(transaction, table, column_path, update_vector, row_ids, update_count, depth + 1, involved_columns);
+		validity.UpdateColumn(transaction, table, column_path, update_vector, row_ids, update_count, depth + 1);
 	} else {
 		if (update_column > sub_columns.size()) {
 			throw InternalException("Update column_path out of range");
 		}
 		sub_columns[update_column - 1]->UpdateColumn(transaction, table, column_path, update_vector, row_ids, update_count,
-		                                             depth + 1, involved_columns);
+		                                             depth + 1);
 	}
 }
 

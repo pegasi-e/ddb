@@ -63,12 +63,6 @@ public:
 		return false;
 	}
 
-	// Anybase Additions
-	virtual bool ShouldPublishCDCEvent() {
-		return false;
-	}
-	// end Anybase Additions
-
 public:
 	template <class TARGET>
 	TARGET &Cast() {
@@ -83,6 +77,15 @@ public:
 
 private:
 	bool is_read_only;
+
+// Anybase Additions
+public:
+	virtual bool ShouldPublishCDCEvent() {
+		return false;
+	}
+	// table -> column indexes -> [involved column indexes]
+	unordered_map<string, unordered_map<idx_t, vector<idx_t>>> involved_columns;
+// end Anybase Additions
 };
 
 } // namespace duckdb

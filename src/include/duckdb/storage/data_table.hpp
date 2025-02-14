@@ -143,7 +143,7 @@ public:
 	                                              const vector<unique_ptr<BoundConstraint>> &bound_constraints);
 	//! Update the entries with the specified row identifier from the table
 	void Update(TableUpdateState &state, ClientContext &context, Vector &row_ids,
-	            const vector<PhysicalIndex> &column_ids, DataChunk &data, const vector<PhysicalIndex> &involved_columns);
+	            const vector<PhysicalIndex> &column_ids, DataChunk &data);
 	//! Update a single (sub-)column along a column path
 	//! The column_path vector is a *path* towards a column within the table
 	//! i.e. if we have a table with a single column S STRUCT(A INT, B INT)
@@ -154,7 +154,7 @@ public:
 	//! -> 0 (first subcolumn of INT)
 	//! This method should only be used from the WAL replay. It does not verify update constraints.
 	void UpdateColumn(TableCatalogEntry &table, ClientContext &context, Vector &row_ids,
-	                  const vector<column_t> &column_path, DataChunk &updates, const vector<PhysicalIndex> &involved_columns);
+	                  const vector<column_t> &column_path, DataChunk &updates);
 
 	//! Fetches an append lock
 	void AppendLock(TableAppendState &state);

@@ -1075,7 +1075,7 @@ UpdateInfo *CreateEmptyUpdateInfo(TransactionData transaction, idx_t type_size, 
 }
 
 void UpdateSegment::Update(TransactionData transaction, DataTable &table, idx_t column_index, Vector &update, row_t *ids, idx_t count,
-                           Vector &base_data, const vector<PhysicalIndex> &involved_columns) {
+                           Vector &base_data) {
 	// obtain an exclusive lock
 	auto write_lock = lock.GetExclusiveLock();
 
@@ -1146,7 +1146,6 @@ void UpdateSegment::Update(TransactionData transaction, DataTable &table, idx_t 
 			node->column_index = column_index;
 			node->column = &column_data;
 			node->table = &table;
-			node->involved_columns = involved_columns;
 
 			// insert the new node into the chain
 			node->next = base_info->next;
@@ -1177,7 +1176,6 @@ void UpdateSegment::Update(TransactionData transaction, DataTable &table, idx_t 
 		result->info->tuple_data = result->tuple_data.get();
 		result->info->version_number = TRANSACTION_ID_START - 1;
 		result->info->column_index = column_index;
-		result->info->involved_columns = involved_columns;
 		InitializeUpdateInfo(*result->info, ids, sel, count, vector_index, vector_offset);
 
 		// now create the transaction level update info in the undo log
@@ -1201,7 +1199,6 @@ void UpdateSegment::Update(TransactionData transaction, DataTable &table, idx_t 
 		transaction_node->column_index = column_index;
 		transaction_node->column = &column_data;
 		transaction_node->table = &table;
-		transaction_node->is_transaction = true;
 
 		transaction_node->Verify();
 		result->info->Verify();

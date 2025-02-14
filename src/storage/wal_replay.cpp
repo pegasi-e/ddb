@@ -750,7 +750,7 @@ void WriteAheadLogDeserializer::ReplayUpdate() {
 	chunk.data.pop_back();
 
 	// now perform the update
-	state.current_table->GetStorage().UpdateColumn(*state.current_table, context, row_ids, column_path, chunk, vector<PhysicalIndex>());
+	state.current_table->GetStorage().UpdateColumn(*state.current_table, context, row_ids, column_path, chunk);
 }
 
 void WriteAheadLogDeserializer::ReplayCheckpoint() {

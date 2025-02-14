@@ -824,7 +824,7 @@ void RowGroup::CleanupAppend(transaction_t lowest_transaction, idx_t start, idx_
 }
 
 void RowGroup::Update(TransactionData transaction, DataTable &table, DataChunk &update_chunk, row_t *ids, idx_t offset, idx_t count,
-                      const vector<PhysicalIndex> &column_ids, const vector<PhysicalIndex> &involved_columns) {
+                      const vector<PhysicalIndex> &column_ids) {
 #ifdef DEBUG
 	for (size_t i = offset; i < offset + count; i++) {
 		D_ASSERT(ids[i] >= row_t(this->start) && ids[i] < row_t(this->start + this->count));
@@ -838,16 +838,16 @@ void RowGroup::Update(TransactionData transaction, DataTable &table, DataChunk &
 		if (offset > 0) {
 			Vector sliced_vector(update_chunk.data[i], offset, offset + count);
 			sliced_vector.Flatten(count);
-			col_data.Update(transaction, table, column.index, sliced_vector, ids + offset, count, involved_columns);
+			col_data.Update(transaction, table, column.index, sliced_vector, ids + offset, count);
 		} else {
-			col_data.Update(transaction, table, column.index, update_chunk.data[i], ids, count, involved_columns);
+			col_data.Update(transaction, table, column.index, update_chunk.data[i], ids, count);
 		}
 		MergeStatistics(column.index, *col_data.GetUpdateStatistics());
 	}
 }
 
 void RowGroup::UpdateColumn(TransactionData transaction, DataTable &table, DataChunk &updates, Vector &row_ids,
-                            const vector<column_t> &column_path, const vector<PhysicalIndex> &involved_columns) {
+                            const vector<column_t> &column_path) {
 	D_ASSERT(updates.ColumnCount() == 1);
 	auto ids = FlatVector::GetData<row_t>(row_ids);
 
@@ -855,7 +855,7 @@ void RowGroup::UpdateColumn(TransactionData transaction, DataTable &table, DataC
 	D_ASSERT(primary_column_idx != COLUMN_IDENTIFIER_ROW_ID);
 	D_ASSERT(primary_column_idx < columns.size());
 	auto &col_data = GetColumn(primary_column_idx);
-	col_data.UpdateColumn(transaction, table, column_path, updates.data[0], ids, updates.size(), 1, involved_columns);
+	col_data.UpdateColumn(transaction, table, column_path, updates.data[0], ids, updates.size(), 1);
 	MergeStatistics(primary_column_idx, *col_data.GetUpdateStatistics());
 }
 

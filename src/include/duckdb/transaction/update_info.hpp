@@ -44,8 +44,6 @@ struct UpdateInfo {
 	// Anybase additions
 	ColumnData *column;
 	DataTable *table;
-	vector<PhysicalIndex> involved_columns;
-	bool is_transaction;
 	// end Anybase additions
 
 	//! Loop over the update chain and execute the specified callback on all UpdateInfo's that are relevant for that

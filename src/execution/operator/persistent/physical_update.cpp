@@ -90,13 +90,22 @@ SinkResultType PhysicalUpdate::Sink(ExecutionContext &context, DataChunk &chunk,
 	chunk.Flatten();
 	lstate.default_executor.SetChunk(chunk);
 
-	vector<PhysicalIndex> involved_columns;
+	//Extract the involved columns for CDC
+	auto &transaction = DuckTransaction::Get(context.client, table.db);
+	auto columnMap = unordered_map<column_t, vector<column_t>>();
+	vector<column_t> involved_columns;
 	if (context.pipeline->GetSource()->type == PhysicalOperatorType::TABLE_SCAN) {
 		auto table_scan = &context.pipeline->GetSource()->Cast<PhysicalTableScan>();
 		for (idx_t i = 0; i < table_scan->column_ids.size() - 1; i++) {
-			involved_columns.emplace_back(PhysicalIndex(table_scan->column_ids[i]));
+			involved_columns.emplace_back(table_scan->column_ids[i]);
 		}
 	}
+
+	for (idx_t i = 0; i < columns.size(); i++) {
+		columnMap[columns[i].index] = involved_columns;
+	}
+	transaction.involved_columns[table.GetTableName()] = columnMap;
+	//End extract the involved columns for CDC
 
 	// update data in the base table
 	// the row ids are given to us as the last column of the child chunk
@@ -153,7 +162,7 @@ SinkResultType PhysicalUpdate::Sink(ExecutionContext &context, DataChunk &chunk,
 			}
 		}
 		auto &update_state = lstate.GetUpdateState(table, tableref, context.client);
-		table.Update(update_state, context.client, row_ids, columns, update_chunk, involved_columns);
+		table.Update(update_state, context.client, row_ids, columns, update_chunk);
 	}
 
 	if (return_chunk) {

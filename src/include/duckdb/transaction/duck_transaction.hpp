@@ -85,11 +85,6 @@ public:
 	//! Get a shared lock on a table
 	shared_ptr<CheckpointLock> SharedLockTable(DataTableInfo &info);
 
-	// Anybase Additions
-	void PublishCdcMessages(unique_ptr<StorageCommitState> &commit_state);
-	bool ShouldPublishCDCEvent() override;
-	// end Anybase Additions
-
 private:
 	DuckTransactionManager &transaction_manager;
 	//! The undo buffer is used to store old versions of rows that are updated
@@ -113,6 +108,12 @@ private:
 	};
 	//! Active locks on tables
 	reference_map_t<DataTableInfo, unique_ptr<ActiveTableLock>> active_locks;
+
+public:
+	// Anybase Additions
+	void PublishCdcMessages(unique_ptr<StorageCommitState> &commit_state);
+	bool ShouldPublishCDCEvent() override;
+	// end Anybase Additions
 };
 
 } // namespace duckdb

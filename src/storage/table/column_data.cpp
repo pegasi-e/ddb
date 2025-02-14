@@ -222,12 +222,12 @@ void ColumnData::FetchUpdateRow(TransactionData transaction, row_t row_id, Vecto
 }
 
 void ColumnData::UpdateInternal(TransactionData transaction, DataTable &table, idx_t column_index, Vector &update_vector, row_t *row_ids,
-                                idx_t update_count, Vector &base_vector, const vector<PhysicalIndex> &involved_columns) {
+                                idx_t update_count, Vector &base_vector) {
 	lock_guard<mutex> update_guard(update_lock);
 	if (!updates) {
 		updates = make_uniq<UpdateSegment>(*this);
 	}
-	updates->Update(transaction, table, column_index, update_vector, row_ids, update_count, base_vector, involved_columns);
+	updates->Update(transaction, table, column_index, update_vector, row_ids, update_count, base_vector);
 }
 
 template <bool SCAN_COMMITTED, bool ALLOW_UPDATES>
@@ -496,20 +496,20 @@ void ColumnData::FetchRow(TransactionData transaction, ColumnFetchState &state, 
 }
 
 void ColumnData::Update(TransactionData transaction, DataTable &table, idx_t column_index, Vector &update_vector, row_t *row_ids,
-                        idx_t update_count, const vector<PhysicalIndex> &involved_columns) {
+                        idx_t update_count) {
 	Vector base_vector(type);
 	ColumnScanState state;
 	auto fetch_count = Fetch(state, row_ids[0], base_vector);
 
 	base_vector.Flatten(fetch_count);
-	UpdateInternal(transaction, table, column_index, update_vector, row_ids, update_count, base_vector, involved_columns);
+	UpdateInternal(transaction, table, column_index, update_vector, row_ids, update_count, base_vector);
 }
 
 void ColumnData::UpdateColumn(TransactionData transaction, DataTable &table, const vector<column_t> &column_path, Vector &update_vector,
-                              row_t *row_ids, idx_t update_count, idx_t depth, const vector<PhysicalIndex> &involved_columns) {
+                              row_t *row_ids, idx_t update_count, idx_t depth) {
 	// this method should only be called at the end of the path in the base column case
 	D_ASSERT(depth >= column_path.size());
-	ColumnData::Update(transaction, table, column_path[0], update_vector, row_ids, update_count, involved_columns);
+	ColumnData::Update(transaction, table, column_path[0], update_vector, row_ids, update_count);
 }
 
 void ColumnData::AppendTransientSegment(SegmentLock &l, idx_t start_row) {

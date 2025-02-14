@@ -108,20 +108,19 @@ idx_t StandardColumnData::Fetch(ColumnScanState &state, row_t row_id, Vector &re
 }
 
 void StandardColumnData::Update(TransactionData transaction, DataTable &table, idx_t column_index, Vector &update_vector, row_t *row_ids,
-                                idx_t update_count, const vector<PhysicalIndex> &involved_columns) {
-	ColumnData::Update(transaction, table, column_index, update_vector, row_ids, update_count, involved_columns);
-	validity.Update(transaction, table, column_index, update_vector, row_ids, update_count, involved_columns);
+                                idx_t update_count) {
+	ColumnData::Update(transaction, table, column_index, update_vector, row_ids, update_count);
+	validity.Update(transaction, table, column_index, update_vector, row_ids, update_count);
 }
 
 void StandardColumnData::UpdateColumn(TransactionData transaction, DataTable &table, const vector<column_t> &column_path,
-                                      Vector &update_vector, row_t *row_ids, idx_t update_count, idx_t depth,
-                                      const vector<PhysicalIndex> &involved_columns) {
+                                      Vector &update_vector, row_t *row_ids, idx_t update_count, idx_t depth) {
 	if (depth >= column_path.size()) {
 		// update this column
-		ColumnData::Update(transaction, table, column_path[0], update_vector, row_ids, update_count, involved_columns);
+		ColumnData::Update(transaction, table, column_path[0], update_vector, row_ids, update_count);
 	} else {
 		// update the child column (i.e. the validity column)
-		validity.UpdateColumn(transaction, table, column_path, update_vector, row_ids, update_count, depth + 1, involved_columns);
+		validity.UpdateColumn(transaction, table, column_path, update_vector, row_ids, update_count, depth + 1);
 	}
 }
 

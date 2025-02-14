@@ -138,9 +138,9 @@ public:
 	                      idx_t result_idx, bool fetch_updates = true);
 
 	virtual void Update(TransactionData transaction, DataTable &table, idx_t column_index, Vector &update_vector, row_t *row_ids,
-	                    idx_t update_count, const vector<PhysicalIndex> &involved_columns);
+	                    idx_t update_count);
 	virtual void UpdateColumn(TransactionData transaction, DataTable &table, const vector<column_t> &column_path, Vector &update_vector,
-	                          row_t *row_ids, idx_t update_count, idx_t depth, const vector<PhysicalIndex> &involved_columns);
+	                          row_t *row_ids, idx_t update_count, idx_t depth);
 	virtual unique_ptr<BaseStatistics> GetUpdateStatistics();
 
 	virtual void CommitDropColumn();
@@ -194,7 +194,7 @@ protected:
 	                  bool allow_updates, bool scan_committed);
 	void FetchUpdateRow(TransactionData transaction, row_t row_id, Vector &result, idx_t result_idx);
 	void UpdateInternal(TransactionData transaction, DataTable &table, idx_t column_index, Vector &update_vector, row_t *row_ids,
-	                    idx_t update_count, Vector &base_vector, const vector<PhysicalIndex> &involved_columns);
+	                    idx_t update_count, Vector &base_vector);
 
 	idx_t GetVectorCount(idx_t vector_index) const;
 

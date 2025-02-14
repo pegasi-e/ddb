@@ -260,13 +260,12 @@ idx_t ListColumnData::Fetch(ColumnScanState &state, row_t row_id, Vector &result
 }
 
 void ListColumnData::Update(TransactionData transaction, DataTable &table, idx_t column_index, Vector &update_vector, row_t *row_ids,
-                            idx_t update_count, const vector<PhysicalIndex> &involved_columns) {
+                            idx_t update_count) {
 	throw NotImplementedException("List Update is not supported.");
 }
 
 void ListColumnData::UpdateColumn(TransactionData transaction, DataTable &table, const vector<column_t> &column_path,
-                                  Vector &update_vector, row_t *row_ids, idx_t update_count, idx_t depth,
-                                  const vector<PhysicalIndex> &involved_columns) {
+                                  Vector &update_vector, row_t *row_ids, idx_t update_count, idx_t depth) {
 	throw NotImplementedException("List Update Column is not supported");
 }
 

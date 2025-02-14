@@ -140,13 +140,12 @@ idx_t ArrayColumnData::Fetch(ColumnScanState &state, row_t row_id, Vector &resul
 }
 
 void ArrayColumnData::Update(TransactionData transaction, DataTable &table, idx_t column_index, Vector &update_vector, row_t *row_ids,
-                             idx_t update_count, const vector<PhysicalIndex> &involved_columns) {
+                             idx_t update_count) {
 	throw NotImplementedException("Array Update is not supported.");
 }
 
 void ArrayColumnData::UpdateColumn(TransactionData transaction, DataTable &table, const vector<column_t> &column_path,
-                                   Vector &update_vector, row_t *row_ids, idx_t update_count, idx_t depth,
-                                   const vector<PhysicalIndex> &involved_columns) {
+                                   Vector &update_vector, row_t *row_ids, idx_t update_count, idx_t depth) {
 	throw NotImplementedException("Array Update Column is not supported");
 }
 

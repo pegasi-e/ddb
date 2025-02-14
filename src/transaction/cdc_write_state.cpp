@@ -108,16 +108,23 @@ void CDCWriteState::EmitUpdate(UpdateInfo &info) {
 	auto table_types = table->GetTypes();
 	auto &column_definitions = table->Columns();
 	idx_t start = info.column->start + info.vector_index * STANDARD_VECTOR_SIZE;
-	auto involved_columns = info.is_transaction ? info.prev->involved_columns : info.involved_columns;
 	auto table_version = table->GetVersion();
+
+	vector<column_t> column_ids;
+	if (transaction.involved_columns.find(table->GetTableName()) != transaction.involved_columns.end()) {
+		auto column_map = transaction.involved_columns[table->GetTableName()];
+		if (column_map.find(info.column_index) != column_map.end()) {
+			column_ids = column_map[info.column_index];
+		}
+	}
 
 	vector<const char*> column_names;
 	vector<uint64_t> column_versions;
 	vector<LogicalType> update_types;
 	vector<column_t> column_indexes;
 	auto did_add_target = false;
-	for (idx_t i = 0; i < involved_columns.size(); i++) {
-		auto column_index = involved_columns[i].index;
+	for (idx_t i = 0; i < column_ids.size(); i++) {
+		auto column_index = column_ids[i];
 		column_names.push_back(strdup(column_definitions[column_index].GetName().c_str()));
 		column_versions.push_back(table->GetColumnVersion(column_index));
 		update_types.emplace_back(table_types[column_index]);
