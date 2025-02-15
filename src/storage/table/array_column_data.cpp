@@ -154,7 +154,7 @@ unique_ptr<BaseStatistics> ArrayColumnData::GetUpdateStatistics() {
 }
 
 void ArrayColumnData::FetchRow(TransactionData transaction, ColumnFetchState &state, row_t row_id, Vector &result,
-                               idx_t result_idx, bool fetch_updates) {
+                               idx_t result_idx, bool fetch_current_update) {
 
 	// Create state for validity & child column
 	if (state.child_states.empty()) {

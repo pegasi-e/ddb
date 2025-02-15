@@ -94,7 +94,7 @@ public:
 
 	//! Fetch data from the specific row identifiers from the base table
 	void Fetch(DuckTransaction &transaction, DataChunk &result, const vector<column_t> &column_ids,
-	           const Vector &row_ids, idx_t fetch_count, ColumnFetchState &state, bool fetch_updates = true);
+	           const Vector &row_ids, idx_t fetch_count, ColumnFetchState &state, bool fetch_current_update = true);
 
 	//! Initializes an append to transaction-local storage
 	void InitializeLocalAppend(LocalAppendState &state, TableCatalogEntry &table, ClientContext &context,

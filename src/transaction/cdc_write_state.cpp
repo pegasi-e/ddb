@@ -128,7 +128,7 @@ void CDCWriteState::EmitUpdate(UpdateInfo &info) {
 		column_versions.push_back(table->GetColumnVersion(column_index));
 		update_types.emplace_back(table_types[column_index]);
 		column_indexes.push_back(column_index);
-		if (i == info.column_index) {
+		if (column_index == info.column_index) {
 			did_add_target = true;
 		}
 	}

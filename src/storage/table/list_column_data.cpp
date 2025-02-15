@@ -274,7 +274,7 @@ unique_ptr<BaseStatistics> ListColumnData::GetUpdateStatistics() {
 }
 
 void ListColumnData::FetchRow(TransactionData transaction, ColumnFetchState &state, row_t row_id, Vector &result,
-                              idx_t result_idx, bool fetch_updates) {
+                              idx_t result_idx, bool fetch_current_update) {
 	// insert any child states that are required
 	// we need two (validity & list child)
 	// note that we need a scan state for the child vector

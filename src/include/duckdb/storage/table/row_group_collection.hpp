@@ -71,7 +71,7 @@ public:
 	bool Scan(DuckTransaction &transaction, const std::function<bool(DataChunk &chunk)> &fun);
 
 	void Fetch(TransactionData transaction, DataChunk &result, const vector<column_t> &column_ids,
-	           const Vector &row_identifiers, idx_t fetch_count, ColumnFetchState &state, bool fetch_updates = true);
+	           const Vector &row_identifiers, idx_t fetch_count, ColumnFetchState &state, bool fetch_current_update = true);
 
 	//! Initialize an append of a variable number of rows. FinalizeAppend must be called after appending is done.
 	void InitializeAppend(TableAppendState &state);

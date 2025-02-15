@@ -140,14 +140,14 @@ unique_ptr<BaseStatistics> StandardColumnData::GetUpdateStatistics() {
 }
 
 void StandardColumnData::FetchRow(TransactionData transaction, ColumnFetchState &state, row_t row_id, Vector &result,
-                                  idx_t result_idx, bool fetch_updates) {
+                                  idx_t result_idx, bool fetch_current_update) {
 	// find the segment the row belongs to
 	if (state.child_states.empty()) {
 		auto child_state = make_uniq<ColumnFetchState>();
 		state.child_states.push_back(std::move(child_state));
 	}
 	validity.FetchRow(transaction, *state.child_states[0], row_id, result, result_idx);
-	ColumnData::FetchRow(transaction, state, row_id, result, result_idx, fetch_updates);
+	ColumnData::FetchRow(transaction, state, row_id, result, result_idx, fetch_current_update);
 }
 
 void StandardColumnData::CommitDropColumn() {

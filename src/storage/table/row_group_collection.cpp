@@ -305,7 +305,7 @@ bool RowGroupCollection::Scan(DuckTransaction &transaction, const std::function<
 //===--------------------------------------------------------------------===//
 void RowGroupCollection::Fetch(TransactionData transaction, DataChunk &result, const vector<column_t> &column_ids,
                                const Vector &row_identifiers, idx_t fetch_count, ColumnFetchState &state,
-                               bool fetch_updates) {
+                               bool fetch_current_update) {
 	// figure out which row_group to fetch from
 	auto row_ids = FlatVector::GetData<row_t>(row_identifiers);
 	idx_t count = 0;
@@ -321,10 +321,10 @@ void RowGroupCollection::Fetch(TransactionData transaction, DataChunk &result, c
 			}
 			row_group = row_groups->GetSegmentByIndex(l, UnsafeNumericCast<int64_t>(segment_index));
 		}
-		if (!row_group->Fetch(transaction, UnsafeNumericCast<idx_t>(row_id) - row_group->start) && fetch_updates) {
+		if (!row_group->Fetch(transaction, UnsafeNumericCast<idx_t>(row_id) - row_group->start) && fetch_current_update) {
 			continue;
 		}
-		row_group->FetchRow(transaction, state, column_ids, row_id, result, count, fetch_updates);
+		row_group->FetchRow(transaction, state, column_ids, row_id, result, count, fetch_current_update);
 		count++;
 	}
 	result.SetCardinality(count);

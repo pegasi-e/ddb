@@ -748,7 +748,7 @@ bool RowGroup::Fetch(TransactionData transaction, idx_t row) {
 }
 
 void RowGroup::FetchRow(TransactionData transaction, ColumnFetchState &state, const vector<column_t> &column_ids,
-                        row_t row_id, DataChunk &result, idx_t result_idx, bool fetch_updates) {
+                        row_t row_id, DataChunk &result, idx_t result_idx, bool fetch_current_update) {
 	for (idx_t col_idx = 0; col_idx < column_ids.size(); col_idx++) {
 		auto column = column_ids[col_idx];
 		auto &result_vector = result.data[col_idx];
@@ -763,7 +763,7 @@ void RowGroup::FetchRow(TransactionData transaction, ColumnFetchState &state, co
 		} else {
 			// regular column: fetch data from the base column
 			auto &col_data = GetColumn(column);
-			col_data.FetchRow(transaction, state, row_id, result_vector, result_idx, fetch_updates);
+			col_data.FetchRow(transaction, state, row_id, result_vector, result_idx, fetch_current_update);
 		}
 	}
 }
