@@ -24,6 +24,7 @@ public:
 
 public:
     void EmitEntry(UndoFlags type, data_ptr_t data);
+    void EmitTransactionEntry(CDC_EVENT_TYPE type);
 
 private:
     void EmitDelete(DeleteInfo &info);

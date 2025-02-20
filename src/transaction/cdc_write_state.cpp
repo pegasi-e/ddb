@@ -27,6 +27,7 @@ namespace duckdb {
 
 void ChangeDataCapture::EmitChange(
 			const cdc_event_type type,
+			const idx_t transactionId,
 			const idx_t column_count,
 			const idx_t table_version,
 			idx_t *updated_column_index,
@@ -38,7 +39,7 @@ void ChangeDataCapture::EmitChange(
 
 	if (function != nullptr) {
 
-		function(type, column_count, table_version, updated_column_index, table_name, column_names, column_versions, values, previous_values);
+		function(type, transactionId, column_count, table_version, updated_column_index, table_name, column_names, column_versions, values, previous_values);
 
 		if (column_count > 0 && column_names != nullptr) {
 			for (idx_t i = 0; i < column_count; i++) {
@@ -90,7 +91,8 @@ void CDCWriteState::EmitDelete(DeleteInfo &info) {
 
 	auto &config = DBConfig::GetConfig(info.table->db.GetDatabase());
 	config.change_data_capture.EmitChange(
-		DUCKDB_CDD_EVENT_DELETE,
+		DUCKDB_CDC_EVENT_DELETE,
+		transaction.transaction_id,
 		columnCount,
 		table_version,
 		nullptr,
@@ -160,7 +162,8 @@ void CDCWriteState::EmitUpdate(UpdateInfo &info) {
 	auto &config = DBConfig::GetConfig(info.table->db.GetDatabase());
 
 	config.change_data_capture.EmitChange(
-		DUCKDB_CDD_EVENT_UPDATE,
+		DUCKDB_CDC_EVENT_UPDATE,
+		transaction.transaction_id,
 		column_indexes.size(),
 		table_version,
 		&info.column_index,
@@ -206,7 +209,8 @@ void CDCWriteState::EmitInsert(AppendInfo &info) {
 
 	auto &config = DBConfig::GetConfig(info.table->db.GetDatabase());
 	config.change_data_capture.EmitChange(
-		DUCKDB_CDD_EVENT_INSERT,
+		DUCKDB_CDC_EVENT_INSERT,
+		transaction.transaction_id,
 		columnCount,
 		table_version,
 		nullptr,
@@ -255,5 +259,26 @@ void CDCWriteState::EmitEntry(UndoFlags type, data_ptr_t data) {
 		default:
 			throw InternalException("UndoBuffer - don't know how to commit this type!");
 	}
+}
+
+void CDCWriteState::EmitTransactionEntry(CDC_EVENT_TYPE type){
+	if (transaction.context.expired()) {
+		return;
+	}
+
+	auto context = transaction.context.lock();
+	auto &config = DBConfig::GetConfig(*context);
+	config.change_data_capture.EmitChange(
+		type,
+		transaction.transaction_id,
+		0,
+		0,
+		nullptr,
+		nullptr,
+		nullptr,
+		nullptr,
+		nullptr,
+		nullptr
+		);
 }
 } // namespace duckdb

@@ -4197,13 +4197,16 @@ DUCKDB_API void duckdb_destroy_cast_function(duckdb_cast_function *cast_function
 // Always add enums at the END of the enum
 //! An enum over DuckDB's internal types.
 typedef enum CDC_EVENT_TYPE {
-	DUCKDB_CDD_EVENT_INSERT = 0,
-	DUCKDB_CDD_EVENT_UPDATE = 1,
-	DUCKDB_CDD_EVENT_DELETE = 2,
+	DUCKDB_CDC_EVENT_INSERT = 0,
+	DUCKDB_CDC_EVENT_UPDATE = 1,
+	DUCKDB_CDC_EVENT_DELETE = 2,
+	DUCKDB_CDC_EVENT_BEGIN_TRANSACTION = 3,
+	DUCKDB_CDC_EVENT_END_TRANSACTION = 4,
 } cdc_event_type;
 
 typedef void (*duckdb_change_data_capture_callback_t)(
 	cdc_event_type type,
+	idx_t transactionId,
 	idx_t column_count,
 	idx_t table_version,
 	idx_t *updated_column_index,

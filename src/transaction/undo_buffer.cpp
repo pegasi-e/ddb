@@ -206,10 +206,30 @@ void UndoBuffer::Rollback() noexcept {
 void UndoBuffer::PublishCdCEvent() {
 	CDCWriteState state(transaction);
 	UndoBuffer::IteratorState iterator_state;
+	auto has_non_catalog_changes = false;
+	auto last_entry_was_update = false;
 
 	IterateEntries(iterator_state, [&](UndoFlags type, data_ptr_t data) {
-		state.EmitEntry(type, data);
+		if (type != UndoFlags::CATALOG_ENTRY && type != UndoFlags::SEQUENCE_VALUE && type != UndoFlags::EMPTY_ENTRY) {
+			if (!has_non_catalog_changes) {
+				has_non_catalog_changes = true;
+				state.EmitTransactionEntry(DUCKDB_CDC_EVENT_BEGIN_TRANSACTION);
+			}
+
+			if (!last_entry_was_update || (last_entry_was_update && type != UndoFlags::UPDATE_TUPLE)) {
+				state.EmitEntry(type, data);
+			}
+			last_entry_was_update = false;
+
+			if (type == UndoFlags::UPDATE_TUPLE) {
+				last_entry_was_update = true;
+			}
+		}
 	});
+
+	if (has_non_catalog_changes) {
+		state.EmitTransactionEntry(DUCKDB_CDC_EVENT_END_TRANSACTION);
+	}
 }
 
 } // namespace duckdb
