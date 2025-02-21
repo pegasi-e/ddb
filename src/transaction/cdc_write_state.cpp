@@ -182,9 +182,9 @@ void CDCWriteState::EmitInsert(AppendInfo &info) {
 
 	auto insert_chunk = make_uniq<DataChunk>();
 	auto ptr = transaction.context.lock();
-	insert_chunk->Initialize(*ptr, table->GetTypes());
+	insert_chunk->Initialize(*ptr, table->GetTypes(), info.count);
 
-	Vector row_ids(LogicalType::ROW_TYPE);
+	Vector row_ids(LogicalType::ROW_TYPE, info.count);
 	for (idx_t i = 0; i < info.count; i++) {
 		row_ids.SetValue(i, UnsafeNumericCast<int64_t>(info.start_row + i));
 	}
