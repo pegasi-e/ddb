@@ -40,12 +40,6 @@ void ChangeDataCapture::EmitChange(
 	if (function != nullptr) {
 
 		function(type, transactionId, column_count, table_version, updated_column_index, table_name, column_names, column_versions, values, previous_values);
-
-		if (column_count > 0 && column_names != nullptr) {
-			for (idx_t i = 0; i < column_count; i++) {
-				free((void *) column_names[i]);
-			}
-		}
 	}
 }
 
@@ -55,27 +49,6 @@ CDCWriteState::CDCWriteState(DuckTransaction &transaction_p)
 
 void CDCWriteState::EmitDelete(DeleteInfo &info) {
 	auto &table = info.table;
-	vector<column_t> column_ids;
-	for (idx_t i = 0; i < table->ColumnCount(); i++) {
-		column_ids.emplace_back(i);
-	}
-
-	auto delete_chunk = make_uniq<DataChunk>();
-	auto ptr = transaction.context.lock();
-	delete_chunk->Initialize(*ptr, table->GetTypes());
-
-	Vector row_ids(LogicalType::ROW_TYPE);
-	if (info.is_consecutive) {
-		for (idx_t i = 0; i < info.count; i++) {
-			row_ids.SetValue(i, UnsafeNumericCast<int64_t>(info.base_row + i));
-		}
-	} else {
-		auto delete_rows = info.GetRows();
-		for (idx_t i = 0; i < info.count; i++) {
-			row_ids.SetValue(i, UnsafeNumericCast<int64_t>(info.base_row) + delete_rows[i]);
-		}
-	}
-	auto cfs = ColumnFetchState();
 
 	auto table_version = table->GetVersion();
 	auto &column_definitions = table->Columns();
@@ -87,21 +60,42 @@ void CDCWriteState::EmitDelete(DeleteInfo &info) {
 		column_versions[i] = table->GetColumnVersion(i);
 	}
 
-	table->Fetch(transaction, *delete_chunk, column_ids, row_ids, info.count, cfs, false);
-
+	auto ptr = transaction.context.lock();
 	auto &config = DBConfig::GetConfig(info.table->db.GetDatabase());
-	config.change_data_capture.EmitChange(
-		DUCKDB_CDC_EVENT_DELETE,
-		transaction.transaction_id,
-		columnCount,
-		table_version,
-		nullptr,
-		table->GetTableName().c_str(),
-		column_names.data(),
-		column_versions.data(),
-		nullptr,
-		reinterpret_cast<duckdb_data_chunk>(delete_chunk.release())
-		);
+	table->ScanTableSegment(info.base_row, info.count, [&](DataChunk &chunk) {
+		auto delete_chunk = make_uniq<DataChunk>();
+		delete_chunk->Initialize(*ptr, chunk.GetTypes(), chunk.size());
+		delete_chunk->Reference(chunk);
+		delete_chunk->Flatten();
+
+		if (!info.is_consecutive) {
+			ManagedSelection sel(info.count);
+			auto delete_rows = info.GetRows();
+			for (idx_t i = 0; i < info.count; i++) {
+				sel.Append(delete_rows[i]);
+			}
+			delete_chunk->Slice(sel.Selection(), sel.Count());
+		}
+
+		config.change_data_capture.EmitChange(
+			DUCKDB_CDC_EVENT_DELETE,
+			transaction.transaction_id,
+			columnCount,
+			table_version,
+			nullptr,
+			table->GetTableName().c_str(),
+			column_names.data(),
+			column_versions.data(),
+			nullptr,
+			reinterpret_cast<duckdb_data_chunk>(delete_chunk.release())
+			);
+	});
+
+	if (columnCount > 0) {
+		for (idx_t i = 0; i < columnCount; i++) {
+			free((void *) column_names[i]);
+		}
+	}
 }
 
 void CDCWriteState::EmitUpdate(UpdateInfo &info) {
@@ -178,23 +172,6 @@ void CDCWriteState::EmitUpdate(UpdateInfo &info) {
 void CDCWriteState::EmitInsert(AppendInfo &info) {
 	auto &table = info.table;
 	auto table_version = table->GetVersion();
-	auto table_types = table->GetTypes();
-
-	auto insert_chunk = make_uniq<DataChunk>();
-	auto ptr = transaction.context.lock();
-	insert_chunk->Initialize(*ptr, table->GetTypes(), info.count);
-
-	Vector row_ids(LogicalType::ROW_TYPE, info.count);
-	for (idx_t i = 0; i < info.count; i++) {
-		row_ids.SetValue(i, UnsafeNumericCast<int64_t>(info.start_row + i));
-	}
-
-	vector<column_t> column_ids;
-	for (idx_t i = 0; i < table->ColumnCount(); i++) {
-		column_ids.emplace_back(i);
-	}
-
-	auto cfs = ColumnFetchState();
 
 	auto &column_definitions = table->Columns();
 	auto columnCount = table->ColumnCount();
@@ -204,22 +181,34 @@ void CDCWriteState::EmitInsert(AppendInfo &info) {
 		column_names[i] = strdup(column_definitions[i].GetName().c_str());
 		column_versions[i] = table->GetColumnVersion(i);
 	}
+	auto ptr = transaction.context.lock();
 
-	table->Fetch(transaction, *insert_chunk, column_ids, row_ids, info.count, cfs);
+	table->ScanTableSegment(info.start_row, info.count, [&](DataChunk &chunk) {
+		auto insert_chunk = make_uniq<DataChunk>();
+		insert_chunk->Initialize(*ptr, chunk.GetTypes(), chunk.size());
+		insert_chunk->Reference(chunk);
+		insert_chunk->Flatten();
 
-	auto &config = DBConfig::GetConfig(info.table->db.GetDatabase());
-	config.change_data_capture.EmitChange(
-		DUCKDB_CDC_EVENT_INSERT,
-		transaction.transaction_id,
-		columnCount,
-		table_version,
-		nullptr,
-		table->GetTableName().c_str(),
-		column_names.data(),
-		column_versions.data(),
-		reinterpret_cast<duckdb_data_chunk>(insert_chunk.release()),
-		nullptr
-		);
+		auto &config = DBConfig::GetConfig(info.table->db.GetDatabase());
+		config.change_data_capture.EmitChange(
+			DUCKDB_CDC_EVENT_INSERT,
+			transaction.transaction_id,
+			columnCount,
+			table_version,
+			nullptr,
+			table->GetTableName().c_str(),
+			column_names.data(),
+			column_versions.data(),
+			reinterpret_cast<duckdb_data_chunk>(insert_chunk.release()),
+			nullptr
+			);
+	});
+
+	if (columnCount > 0) {
+		for (idx_t i = 0; i < columnCount; i++) {
+			free((void *) column_names[i]);
+		}
+	}
 }
 
 void CDCWriteState::EmitEntry(UndoFlags type, data_ptr_t data) {
