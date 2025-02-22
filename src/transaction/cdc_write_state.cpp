@@ -117,6 +117,7 @@ void CDCWriteState::EmitUpdate(UpdateInfo &info) {
 	vector<uint64_t> column_versions;
 	vector<LogicalType> update_types;
 	vector<column_t> column_indexes;
+	idx_t update_column_index = info.column_index;
 	auto did_add_target = false;
 	for (idx_t i = 0; i < column_ids.size(); i++) {
 		auto column_index = column_ids[i];
@@ -125,48 +126,90 @@ void CDCWriteState::EmitUpdate(UpdateInfo &info) {
 		update_types.emplace_back(table_types[column_index]);
 		column_indexes.push_back(column_index);
 		if (column_index == info.column_index) {
+			update_column_index = i;
 			did_add_target = true;
 		}
 	}
 
 	if (!did_add_target) {
+		update_column_index = column_names.size();
 		column_names.push_back(strdup(column_definitions[info.column_index].GetName().c_str()));
 		column_versions.push_back(table->GetColumnVersion(info.column_index));
 		update_types.emplace_back(table_types[info.column_index]);
 		column_indexes.push_back(info.column_index);
 	}
 
-	auto update_chunk = make_uniq<DataChunk>();
 	auto ptr = transaction.context.lock();
-	update_chunk->Initialize(*ptr, update_types);
+	// auto update_chunk = make_uniq<DataChunk>();
+	// update_chunk->Initialize(*ptr, update_types);
 
-	auto previous_chunk = make_uniq<DataChunk>();
-	previous_chunk->Initialize(*ptr, update_types);
+	// auto previous_chunk = make_uniq<DataChunk>();
+	// previous_chunk->Initialize(*ptr, update_types);
 
-	auto cfs = ColumnFetchState();
-	Vector row_ids(LogicalType::ROW_TYPE);
+	// auto cfs = ColumnFetchState();
+	// Vector row_ids(LogicalType::ROW_TYPE);
 
+	auto firstIndex = info.tuples[info.N - 1];
+	auto start_offset = info.vector_index * STANDARD_VECTOR_SIZE + firstIndex;
+	ManagedSelection sel(info.N);
 	for (idx_t i = 0; i < info.N; i++) {
-		row_ids.SetValue(i, UnsafeNumericCast<int64_t>(start + info.tuples[i]));
+		// row_ids.SetValue(i, UnsafeNumericCast<int64_t>(start + info.tuples[i]));
+		sel.Append(info.tuples[i]);
+		// sel.Append(info.tuples[i] - start_offset);
 	}
 
-	table->Fetch(transaction, *update_chunk, column_indexes, row_ids, info.N, cfs);
-	table->Fetch(transaction, *previous_chunk, column_indexes, row_ids, info.N, cfs, false);
+	auto len = info.tuples[info.N - 1] + 1 - firstIndex;
 
 	auto &config = DBConfig::GetConfig(info.table->db.GetDatabase());
+	// table->ScanTableSegment(start_offset, len, column_indexes, update_types, [&](DataChunk &chunk) {
+	table->ScanTableSegment(info.vector_index * STANDARD_VECTOR_SIZE, STANDARD_VECTOR_SIZE, column_indexes, update_types, [&](DataChunk &chunk) {
+		auto current_chunk = make_uniq<DataChunk>();
+		current_chunk->Initialize(*ptr, update_types, chunk.size());
+		current_chunk->Reference(chunk);
+		auto previous_chunk = make_uniq<DataChunk>();
+		previous_chunk->Initialize(*ptr, update_types, chunk.size());
+		previous_chunk->Append(chunk);
+		//TODO: pass the start offset here so we can fetch only the rows we need.
+		info.segment->FetchLastCommitted(&info, info.vector_index, previous_chunk->data[update_column_index]);
+		previous_chunk->Slice(sel.Selection(), sel.Count());
+		previous_chunk->Flatten();
+		current_chunk->Slice(sel.Selection(), sel.Count());
+		current_chunk->Flatten();
 
-	config.change_data_capture.EmitChange(
-		DUCKDB_CDC_EVENT_UPDATE,
-		transaction.transaction_id,
-		column_indexes.size(),
-		table_version,
-		&info.column_index,
-		table->GetTableName().c_str(),
-		column_names.data(),
-		column_versions.data(),
-		reinterpret_cast<duckdb_data_chunk>(update_chunk.release()),
-		reinterpret_cast<duckdb_data_chunk>(previous_chunk.release())
-		);
+
+		config.change_data_capture.EmitChange(
+			DUCKDB_CDC_EVENT_UPDATE,
+			transaction.transaction_id,
+			column_indexes.size(),
+			table_version,
+			&info.column_index,
+			table->GetTableName().c_str(),
+			column_names.data(),
+			column_versions.data(),
+			reinterpret_cast<duckdb_data_chunk>(current_chunk.release()),
+			reinterpret_cast<duckdb_data_chunk>(previous_chunk.release())
+			);
+	});
+
+
+
+	// table->Fetch(transaction, *update_chunk, column_indexes, row_ids, info.N, cfs);
+	// table->Fetch(transaction, *previous_chunk, column_indexes, row_ids, info.N, cfs, false);
+	//
+	// auto &config = DBConfig::GetConfig(info.table->db.GetDatabase());
+	//
+	// config.change_data_capture.EmitChange(
+	// 	DUCKDB_CDC_EVENT_UPDATE,
+	// 	transaction.transaction_id,
+	// 	column_indexes.size(),
+	// 	table_version,
+	// 	&info.column_index,
+	// 	table->GetTableName().c_str(),
+	// 	column_names.data(),
+	// 	column_versions.data(),
+	// 	reinterpret_cast<duckdb_data_chunk>(update_chunk.release()),
+	// 	reinterpret_cast<duckdb_data_chunk>(previous_chunk.release())
+	// 	);
 }
 
 void CDCWriteState::EmitInsert(AppendInfo &info) {

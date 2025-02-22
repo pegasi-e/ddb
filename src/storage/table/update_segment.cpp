@@ -93,6 +93,13 @@ static void MergeValidityInfo(UpdateInfo *current, ValidityMask &result_mask) {
 	}
 }
 
+static void MergeValidityInfoToLastCommit(UpdateInfo *current, ValidityMask &result_mask) {
+	auto info_data = reinterpret_cast<bool *>(current->tuple_data);
+	for (idx_t i = 0; i < current->N - 1; i++) {
+		result_mask.Set(current->tuples[i], info_data[i]);
+	}
+}
+
 static void UpdateMergeValidity(transaction_t start_time, transaction_t transaction_id, UpdateInfo *info,
                                 Vector &result) {
 	auto &result_mask = FlatVector::Validity(result);
@@ -110,6 +117,21 @@ static void MergeUpdateInfo(UpdateInfo *current, T *result_data) {
 		memcpy(result_data, info_data, sizeof(T) * current->N);
 	} else {
 		for (idx_t i = 0; i < current->N; i++) {
+			result_data[current->tuples[i]] = info_data[i];
+		}
+	}
+}
+
+template <class T>
+	static void MergeUpdateInfoToLastCommit(UpdateInfo *current, T *result_data) {
+	auto info_data = reinterpret_cast<T *>(current->tuple_data);
+	if (current->N - 1 == STANDARD_VECTOR_SIZE) {
+		// special case: update touches ALL tuples of this vector
+		// in this case we can just memcpy the data
+		// since the layout of the update info is guaranteed to be [0, 1, 2, 3, ...]
+		memcpy(result_data, info_data, sizeof(T) * current->N - 1);
+	} else {
+		for (idx_t i = 0; i < current->N - 1; i++) {
 			result_data[current->tuples[i]] = info_data[i];
 		}
 	}
@@ -240,6 +262,21 @@ void UpdateSegment::FetchCommitted(idx_t vector_index, Vector &result) {
 	D_ASSERT(result.GetVectorType() == VectorType::FLAT_VECTOR);
 
 	fetch_committed_function(root->info[vector_index]->info.get(), result);
+}
+
+void UpdateSegment::FetchLastCommitted(UpdateInfo *info, idx_t vector_index, Vector &result) {
+	auto lock_handle = lock.GetSharedLock();
+
+	// if (!root) {
+	// 	return;
+	// }
+	// if (!root->info[vector_index]) {
+	// 	return;
+	// }
+	// // FIXME: normalify if this is not the case... need to pass in count?
+	// D_ASSERT(result.GetVectorType() == VectorType::FLAT_VECTOR);
+
+	fetch_committed_function(info, result);
 }
 
 //===--------------------------------------------------------------------===//

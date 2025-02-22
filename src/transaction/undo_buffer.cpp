@@ -219,10 +219,11 @@ void UndoBuffer::PublishCdCEvent() {
 			if (!last_entry_was_update || (last_entry_was_update && type != UndoFlags::UPDATE_TUPLE)) {
 				state.EmitEntry(type, data);
 			}
-			last_entry_was_update = false;
 
-			if (type == UndoFlags::UPDATE_TUPLE) {
+			if (!last_entry_was_update && type == UndoFlags::UPDATE_TUPLE) {
 				last_entry_was_update = true;
+			} else {
+				last_entry_was_update = false;
 			}
 		}
 	});

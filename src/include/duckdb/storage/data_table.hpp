@@ -283,5 +283,10 @@ private:
 	//! Whether or not the data table is the root DataTable for this table; the root DataTable is the newest version
 	//! that can be appended to
 	atomic<bool> is_root;
+
+// start Anybase additions
+public:
+	void ScanTableSegment(idx_t row_start, idx_t count, vector<column_t> &column_ids, vector<LogicalType> types, const std::function<void(DataChunk &chunk)> &function);
+// end Anybase additions
 };
 } // namespace duckdb

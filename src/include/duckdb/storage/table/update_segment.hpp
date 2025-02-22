@@ -92,6 +92,11 @@ private:
 private:
 	void InitializeUpdateInfo(UpdateInfo &info, row_t *ids, const SelectionVector &sel, idx_t count, idx_t vector_index,
 	                          idx_t vector_offset);
+
+// Anybase additions
+public:
+	void FetchLastCommitted(UpdateInfo *info, idx_t vector_index, Vector &result);
+// Anybase additions
 };
 
 struct UpdateNodeData {
