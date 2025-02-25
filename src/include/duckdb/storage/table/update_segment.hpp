@@ -95,7 +95,7 @@ private:
 
 // Anybase additions
 public:
-	void FetchLastCommitted(UpdateInfo *info, idx_t vector_index, Vector &result);
+	void FetchAndApplyUpdate(UpdateInfo *info, Vector &result);
 // Anybase additions
 };
 
