@@ -33,6 +33,9 @@ private:
 
 private:
     DuckTransaction &transaction;
+    unique_ptr<DataChunk> scanned_chunk;
+    string_t last_table;
+    idx_t last_vector_index;
 };
 
 } // namespace duckdb

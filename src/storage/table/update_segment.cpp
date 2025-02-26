@@ -123,21 +123,6 @@ static void MergeUpdateInfo(UpdateInfo *current, T *result_data) {
 }
 
 template <class T>
-	static void MergeUpdateInfoToLastCommit(UpdateInfo *current, T *result_data) {
-	auto info_data = reinterpret_cast<T *>(current->tuple_data);
-	if (current->N - 1 == STANDARD_VECTOR_SIZE) {
-		// special case: update touches ALL tuples of this vector
-		// in this case we can just memcpy the data
-		// since the layout of the update info is guaranteed to be [0, 1, 2, 3, ...]
-		memcpy(result_data, info_data, sizeof(T) * current->N - 1);
-	} else {
-		for (idx_t i = 0; i < current->N - 1; i++) {
-			result_data[current->tuples[i]] = info_data[i];
-		}
-	}
-}
-
-template <class T>
 static void UpdateMergeFetch(transaction_t start_time, transaction_t transaction_id, UpdateInfo *info, Vector &result) {
 	auto result_data = FlatVector::GetData<T>(result);
 	UpdateInfo::UpdatesForTransaction(info, start_time, transaction_id, true,
