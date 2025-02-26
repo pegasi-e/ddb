@@ -66,7 +66,6 @@ void CDCWriteState::EmitDelete(DeleteInfo &info) {
 		auto delete_chunk = make_uniq<DataChunk>();
 		delete_chunk->Initialize(*ptr, chunk.GetTypes(), chunk.size());
 		delete_chunk->Reference(chunk);
-		delete_chunk->Flatten();
 
 		if (!info.is_consecutive) {
 			ManagedSelection sel(info.count);
@@ -76,6 +75,8 @@ void CDCWriteState::EmitDelete(DeleteInfo &info) {
 			}
 			delete_chunk->Slice(sel.Selection(), sel.Count());
 		}
+
+		delete_chunk->Flatten();
 
 		config.change_data_capture.EmitChange(
 			DUCKDB_CDC_EVENT_DELETE,
@@ -107,10 +108,10 @@ void handle_update(const DuckTransaction &transaction, UpdateInfo &info, DataTab
 	auto previous_chunk = make_uniq<DataChunk>();
 
 	// current_chunk->Initialize(*ptr, update_types, chunk.size());//Initialize(*ptr, update_types, chunk.size());
-	current_chunk->InitializeEmpty(update_types);
+	current_chunk->Initialize(*ptr, update_types, chunk.size());
 	previous_chunk->Initialize(*ptr, update_types, chunk.size());
 
-	current_chunk->Reference(chunk);
+	current_chunk->Append(chunk);
 	previous_chunk->Append(chunk);
 	// previous_chunk->data[update_column_index].Initialize(true, chunk.size());
 	adjusted_info.segment->FetchAndApplyUpdate(&adjusted_info, previous_chunk->data[update_column_index]);
