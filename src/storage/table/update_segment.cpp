@@ -93,13 +93,6 @@ static void MergeValidityInfo(UpdateInfo *current, ValidityMask &result_mask) {
 	}
 }
 
-static void MergeValidityInfoToLastCommit(UpdateInfo *current, ValidityMask &result_mask) {
-	auto info_data = reinterpret_cast<bool *>(current->tuple_data);
-	for (idx_t i = 0; i < current->N - 1; i++) {
-		result_mask.Set(current->tuples[i], info_data[i]);
-	}
-}
-
 static void UpdateMergeValidity(transaction_t start_time, transaction_t transaction_id, UpdateInfo *info,
                                 Vector &result) {
 	auto &result_mask = FlatVector::Validity(result);
