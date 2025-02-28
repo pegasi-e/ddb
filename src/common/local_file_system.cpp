@@ -1388,8 +1388,9 @@ void LocalFileSystem::CopyFile(const string &source, const string &target, uniqu
 	{
 		perror("fstat");
 	}
-	len = stat.st_size;
 
+#if defined(__USE_SENDFILE__)
+        len = stat.st_size;
 	do
 	{
 		ret = sendfile(dst_fd, src_fd, NULL, len);
@@ -1401,8 +1402,32 @@ void LocalFileSystem::CopyFile(const string &source, const string &target, uniqu
 		len -= ret;
 	}
 	while (len > 0 && ret > 0);
+#else
+        char buf[4096];
+        ssize_t nread;
+        while (nread = read(src_fd, buf, sizeof buf), nread > 0)
+        {
+          char *out_ptr = buf;
+          ssize_t nwritten;
 
-	if (close(dst_fd) == -1)
+          do
+          {
+            nwritten = write(dst_fd, out_ptr, nread);
+
+            if (nwritten >= 0)
+            {
+                nread -= nwritten;
+                out_ptr += nwritten;
+            }
+            else if (errno != EINTR)
+            {
+              perror("write");
+            }
+          } while (nread > 0);
+        }
+#endif        
+        fsync(dst_fd);
+        if (close(dst_fd) == -1)
 	{
 		perror("close");
 	}
