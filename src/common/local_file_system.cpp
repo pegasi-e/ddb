@@ -1381,7 +1381,6 @@ void LocalFileSystem::CopyFile(const string &source, const string &target, uniqu
 void LocalFileSystem::CopyFile(const string &source, const string &target, unique_ptr<FileHandle>& src_handle) {
 	int dst_fd = open(target.c_str(), O_CREAT | O_WRONLY | O_TRUNC, 0644);;
 	int src_fd = src_handle->Cast<UnixFileHandle>().fd;
-	off_t len, ret;
 	struct stat stat;
 
 	if (fstat(src_fd, &stat) == -1)
@@ -1390,6 +1389,7 @@ void LocalFileSystem::CopyFile(const string &source, const string &target, uniqu
 	}
 
 #if defined(__USE_SENDFILE__)
+        off_t len, ret;
         len = stat.st_size;
 	do
 	{
