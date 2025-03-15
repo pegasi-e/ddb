@@ -99,115 +99,78 @@ void CDCWriteState::EmitDelete(DeleteInfo &info) {
 	}
 }
 
-void handle_update(const DuckTransaction &transaction, UpdateInfo &info, DataTable *&table, const idx_t table_version, vector<const char *> column_names,
-	vector<uint64_t> column_versions, const vector<LogicalType> &update_types, const vector<column_t> &column_indexes,
-	const idx_t update_column_index, const shared_ptr<ClientContext> &ptr,
-	UpdateInfo &adjusted_info, const SelectionVector &sel, const DBConfig &config, DataChunk &chunk) {
+// void handle_update(const DuckTransaction &transaction, UpdateInfo &info, DataTable *&table, const idx_t table_version, vector<const char *> column_names,
+// 	vector<uint64_t> column_versions, const vector<LogicalType> &update_types, const vector<column_t> &column_indexes,
+// 	const idx_t update_column_index, const shared_ptr<ClientContext> &ptr,
+// 	UpdateInfo &adjusted_info, const SelectionVector &sel, const DBConfig &config, DataChunk &chunk) {
+//
+// 	auto current_chunk = make_uniq<DataChunk>();
+// 	auto previous_chunk = make_uniq<DataChunk>();
+//
+// 	current_chunk->Initialize(*ptr, update_types, chunk.size());
+// 	previous_chunk->Initialize(*ptr, update_types, chunk.size());
+//
+// 	current_chunk->Append(chunk);
+// 	previous_chunk->Append(chunk);
+// 	adjusted_info.segment->FetchAndApplyUpdate(&adjusted_info, previous_chunk->data[update_column_index]);
+//
+// 	if (current_chunk->size() != adjusted_info.N) {
+// 		current_chunk->Slice(sel, adjusted_info.N);
+// 		previous_chunk->Slice(sel, adjusted_info.N);
+// 	}
+//
+// 	current_chunk->Flatten();
+// 	previous_chunk->Flatten();
+//
+// 	config.change_data_capture.EmitChange(
+// 		DUCKDB_CDC_EVENT_UPDATE,
+// 		transaction.transaction_id,
+// 		column_indexes.size(),
+// 		table_version,
+// 		&info.column_index,
+// 		table->GetTableName().c_str(),
+// 		column_names.data(),
+// 		column_versions.data(),
+// 		reinterpret_cast<duckdb_data_chunk>(current_chunk.release()),
+// 		reinterpret_cast<duckdb_data_chunk>(previous_chunk.release())
+// 	);
+// }
 
-	auto current_chunk = make_uniq<DataChunk>();
-	auto previous_chunk = make_uniq<DataChunk>();
+bool CDCWriteState::CanApplyUpdate(UpdateInfo &info) {
+	if (current_update_chunk == nullptr || previous_update_chunk == nullptr) {
+		return false;
+	}
 
-	// current_chunk->Initialize(*ptr, update_types, chunk.size());//Initialize(*ptr, update_types, chunk.size());
-	current_chunk->Initialize(*ptr, update_types, chunk.size());
-	previous_chunk->Initialize(*ptr, update_types, chunk.size());
+	if (info.N != last_update_info.N ||
+		info.vector_index != last_update_info.vector_index ||
+		info.table->GetTableName() != last_update_info.table->GetTableName()) {
 
-	current_chunk->Append(chunk);
-	previous_chunk->Append(chunk);
-	// previous_chunk->data[update_column_index].Initialize(true, chunk.size());
-	adjusted_info.segment->FetchAndApplyUpdate(&adjusted_info, previous_chunk->data[update_column_index]);
-	// for (idx_t i = 0; i < column_indexes.size(); i++) {
-	// 	if (column_indexes[i] == update_column_index) {
-	// 		// previous_chunk->data[i].Initialize(true, chunk.size());
-	// 		adjusted_info.segment->FetchAndApplyUpdate(&adjusted_info, previous_chunk->data[i]);
-	// 		break;
-	// 	}
-	// }
-	// // previous_chunk->Reference(chunk);
-	// //
-	// // // Reference columns that did not change
-	// for (auto i = 0; i < column_indexes.size(); i++) {
-	// 	if (column_indexes[i] != update_column_index) {
-	// 		previous_chunk->data[i].Reference(chunk.data[i]);
-	// 	} else {
-	// 		previous_chunk->data[i].Initialize(true, chunk.size());
-	// 		Printer::Print("Cache post init");
-	// 		// VectorOperations::Copy(chunk.data[i], previous_chunk->data[i], chunk.size(), 0, previous_chunk->size());
-	// 		// memcpy(previous_chunk->data[i].GetData(), chunk.data[i].GetData(), chunk.size());
-	//
-	// 		if (adjusted_info.N == STANDARD_VECTOR_SIZE) {
-	// 			// special case: update touches ALL tuples of this vector
-	// 			// in this case we can just memcpy the data
-	// 			// since the layout of the update info is guaranteed to be [0, 1, 2, 3, ...]
-	// 			memcpy(previous_chunk->data[i].GetData(), info.tuple_data, sizeof(GetTypeIdSize(update_types[i].InternalType())) * adjusted_info.N);
-	// 		} else {
-	// 			for (idx_t x = 0; x < adjusted_info.N; x++) {
-	// 				previous_chunk->data[i].SetValue(info.tuples[x], info.tuple_data[x]);
-	// 				// result_data[current->tuples[i]] = info_data[i];
-	// 			}
-	// 		}
-	//
-	//
-	//
-	// 		// adjusted_info.segment->FetchAndApplyUpdate(&adjusted_info, previous_chunk->data[i]);
-	// 		Printer::Print("Cache apply update");
-	// 		// previous_chunk->data[i].Initialize(false, chunk.size());
-	// 		// break;
-	// 		// previous_chunk->data[i].CopyBuffer(chunk.data[i]);
-	// 		// memcpy(previous_chunk->data[i].GetData(), chunk.data[i].GetData(), chunk.size());
-	// 	}
-	// }
-	// previous_chunk->SetCapacity(chunk);
-	// previous_chunk->SetCardinality(chunk);
+		return false;
+	}
 
+	for (auto i = 0; i < info.N; i++) {
+		if (info.tuples[i] != last_update_info.tuples[i]) {
+			return false;
+		}
+	}
 
-	// previous_chunk->Append(chunk);
-	// previous_chunk->SetCapacity(chunk);
-	// previous_chunk->SetCardinality(chunk);
-
-	// Reference columns that did not change
-	// for (auto i = 0; i < column_indexes.size(); i++) {
-	// if (column_indexes[i] != update_column_index) {
-	// previous_chunk->data[i].Reference(chunk.data[i]);
-	// } else {
-	// previous_chunk->data[i].Initialize();
-	// }
-	// }
-
-
-	current_chunk->Slice(sel, adjusted_info.N);
-	previous_chunk->Slice(sel, adjusted_info.N);
-	// Printer::Print("Cache post slice");
-	// previous_chunk->SetCardinality(adjusted_info.N);
-	// current_chunk->SetCardinality(adjusted_info.N);
-
-	current_chunk->Flatten();
-	previous_chunk->Flatten();
-	// Printer::Print("Cache post flatten");
-
-
-	// previous_chunk->Verify();
-
-	config.change_data_capture.EmitChange(
-		DUCKDB_CDC_EVENT_UPDATE,
-		transaction.transaction_id,
-		column_indexes.size(),
-		table_version,
-		&info.column_index,
-		table->GetTableName().c_str(),
-		column_names.data(),
-		column_versions.data(),
-		reinterpret_cast<duckdb_data_chunk>(current_chunk.release()),
-		reinterpret_cast<duckdb_data_chunk>(previous_chunk.release())
-	);
+	return true;
 }
 
 void CDCWriteState::EmitUpdate(UpdateInfo &info) {
+	// auto start_time_ = std::chrono::high_resolution_clock::now();
 	auto &table = info.table;
+
 	auto table_types = table->GetTypes();
 	auto &column_definitions = table->Columns();
-	auto table_version = table->GetVersion();
-
 	vector<column_t> column_ids;
+	vector<string> column_names;
+	vector<uint64_t> column_versions;
+	vector<LogicalType> update_types;
+	vector<column_t> column_indexes;
+	idx_t update_column_index = info.column_index;
+	auto did_add_target = false;
+
 	if (transaction.involved_columns.find(table->GetTableName()) != transaction.involved_columns.end()) {
 		auto column_map = transaction.involved_columns[table->GetTableName()];
 		if (column_map.find(info.column_index) != column_map.end()) {
@@ -215,15 +178,9 @@ void CDCWriteState::EmitUpdate(UpdateInfo &info) {
 		}
 	}
 
-	vector<const char*> column_names;
-	vector<uint64_t> column_versions;
-	vector<LogicalType> update_types;
-	vector<column_t> column_indexes;
-	idx_t update_column_index = info.column_index;
-	auto did_add_target = false;
 	for (idx_t i = 0; i < column_ids.size(); i++) {
 		auto column_index = column_ids[i];
-		column_names.push_back(strdup(column_definitions[column_index].GetName().c_str()));
+		column_names.push_back(std::move(column_definitions[column_index].GetName()));
 		column_versions.push_back(table->GetColumnVersion(column_index));
 		update_types.emplace_back(table_types[column_index]);
 		column_indexes.push_back(column_index);
@@ -234,156 +191,115 @@ void CDCWriteState::EmitUpdate(UpdateInfo &info) {
 	}
 
 	if (!did_add_target) {
-		update_column_index = column_names.size();
-		column_names.push_back(strdup(column_definitions[info.column_index].GetName().c_str()));
+		update_column_index = update_column_names.size();
+		update_column_names.push_back(strdup(column_definitions[info.column_index].GetName().c_str()));
 		column_versions.push_back(table->GetColumnVersion(info.column_index));
 		update_types.emplace_back(table_types[info.column_index]);
 		column_indexes.push_back(info.column_index);
 	}
 
-	auto ptr = transaction.context.lock();
-	// auto firstIndex = info.tuples[0];
-	// auto count = info.tuples[info.N - 1] + 1 - firstIndex;
-	// auto start_offset = info.vector_index * STANDARD_VECTOR_SIZE + firstIndex;
-	//
-	// // Create a modified update info
-	// UpdateInfo adjusted_info;
-	// adjusted_info.N = info.N;
-	//
-	// // for some reason the unique pointer causes a segmentation fault, so we allocate for ourselves
-	// // adjusted_info.tuples = make_uniq_array_uninitialized<sel_t>(info.N).get();
-	// adjusted_info.tuples = new sel_t[info.N];
-	// memcpy(adjusted_info.tuples, info.tuples, info.N * sizeof(sel_t));
-	// adjusted_info.tuple_data = info.tuple_data;
-	// adjusted_info.version_number.store(info.version_number.load());
-	// adjusted_info.vector_index = info.vector_index;
-	// adjusted_info.segment = info.segment;
-	//
-	// // ManagedSelection sel(info.N);
-	// for (idx_t i = 0; i < info.N; i++) {
-	// 	adjusted_info.tuples[i] = info.tuples[i] - firstIndex;
-	// 	// sel.Append(adjusted_info.tuples[i]);
-	// }
+	// UpdateInfo &adjusted_info = info;
+	// SelectionVector sel(info.tuples);
 
-	UpdateInfo &adjusted_info = info;
-	SelectionVector sel(adjusted_info.tuples);
-	auto &config = DBConfig::GetConfig(info.table->db.GetDatabase());
 
-	if (last_table == table->GetTableName() && last_vector_index == info.vector_index && scanned_chunk != nullptr) {
-		auto &chunk = *(scanned_chunk.get());
-		handle_update(transaction, info, table, table_version, column_names, column_versions, update_types, column_indexes,
-		              update_column_index, ptr, adjusted_info, sel, config, chunk);
+	if (CanApplyUpdate(info)) {
+		// auto &chunk = *(scanned_chunk.get());
+		auto update_offset = info.column_index;
+		for (idx_t i = 0; i < this->column_indexes.size(); i++) {
+			if (column_indexes[i] == info.column_index) {
+				update_offset = i;
+				break;
+			}
+		}
+		info.segment->FetchAndApplyUpdate(&info, previous_update_chunk->data[update_offset]);
+		// handle_update(transaction, info, table, table_version, column_names, column_versions, update_types, column_indexes,
+		              // update_column_index, ptr, adjusted_info, sel, config, chunk);
 	} else {
+		Flush();
+
+		update_column_names.clear();
+		this->column_versions.clear();
+		this->column_indexes.clear();
+
+		last_update_info.tuples = info.tuples;
+		last_update_info.vector_index = info.vector_index;
+		last_update_info.N = info.N;
+		last_update_info.table = info.table;
+		update_table_version = table->GetVersion();
+		this->column_indexes = column_indexes;
+		this->column_versions = column_versions;
+		this->update_column_names = column_names;
+
+
+		auto ptr = transaction.context.lock();
+
 		// table->ScanTableSegment(start_offset, count, column_indexes, update_types, [&](DataChunk &chunk) {
 		table->ScanTableSegment(info.vector_index * STANDARD_VECTOR_SIZE, STANDARD_VECTOR_SIZE, column_indexes, update_types, [&](DataChunk &chunk) {
-			last_table = table->GetTableName();
-			last_vector_index = info.vector_index;
-			scanned_chunk = make_uniq<DataChunk>();
-			scanned_chunk->InitializeEmpty(update_types);
-			// scanned_chunk->Initialize(*ptr, update_types, chunk.size());
-			scanned_chunk->Reference(chunk);
+			// last_table_name = table->GetTableName();
+			// last_vector_index = info.vector_index;
+			current_update_chunk = make_uniq<DataChunk>();
+			previous_update_chunk = make_uniq<DataChunk>();
+			current_update_chunk->Initialize(*ptr, update_types, chunk.size());
+			previous_update_chunk->Initialize(*ptr, update_types, chunk.size());
 
-			handle_update(transaction, info, table, table_version, column_names, column_versions, update_types, column_indexes,
-					  update_column_index, ptr, adjusted_info, sel, config, chunk);
+			current_update_chunk->Append(chunk);
+			previous_update_chunk->Append(chunk);
+			info.segment->FetchAndApplyUpdate(&info, previous_update_chunk->data[update_column_index]);
+			// scanned_chunk = make_uniq<DataChunk>();
+			// scanned_chunk->InitializeEmpty(update_types);
+			// scanned_chunk->Reference(chunk);
 
-			// auto current_chunk = make_uniq<DataChunk>();
-			// auto previous_chunk = make_uniq<DataChunk>();
-			//
-			// current_chunk->Initialize(*ptr, update_types, chunk.size());//Initialize(*ptr, update_types, chunk.size());
-			// previous_chunk->Initialize(*ptr, update_types, chunk.size());//Initialize(*ptr, update_types, chunk.size());
-			//
-			// current_chunk->Reference(chunk);
-			// previous_chunk->Append(chunk);
-			// for (idx_t i = 0; i < column_indexes.size(); i++) {
-			// 	if (column_indexes[i] == update_column_index) {
-			// 		// previous_chunk->data[i].Initialize(true, chunk.size());
-			// 		adjusted_info.segment->FetchAndApplyUpdate(&adjusted_info, previous_chunk->data[i]);
-			// 		break;
-			// 	}
-			// }
-			// // previous_chunk->Reference(chunk);
-			// //
-			// // // Reference columns that did not change
-			// // for (auto i = 0; i < column_indexes.size(); i++) {
-			// // 	if (column_indexes[i] != update_column_index) {
-			// // 		previous_chunk->data[i].Reference(chunk.data[i]);
-			// // 	} else {
-			// // 		previous_chunk->data[i].Initialize(true, chunk.size());
-			// // 		Printer::Print("Cache post init");
-			// // 		// VectorOperations::Copy(chunk.data[i], previous_chunk->data[i], chunk.size(), 0, previous_chunk->size());
-			// // 		// memcpy(previous_chunk->data[i].GetData(), chunk.data[i].GetData(), chunk.size());
-			// //
-			// // 		if (adjusted_info.N == STANDARD_VECTOR_SIZE) {
-			// // 			// special case: update touches ALL tuples of this vector
-			// // 			// in this case we can just memcpy the data
-			// // 			// since the layout of the update info is guaranteed to be [0, 1, 2, 3, ...]
-			// // 			memcpy(previous_chunk->data[i].GetData(), info.tuple_data, sizeof(GetTypeIdSize(update_types[i].InternalType())) * adjusted_info.N);
-			// // 		} else {
-			// // 			for (idx_t x = 0; x < adjusted_info.N; x++) {
-			// // 				previous_chunk->data[i].SetValue(info.tuples[x], info.tuple_data[x]);
-			// // 				// result_data[current->tuples[i]] = info_data[i];
-			// // 			}
-			// // 		}
-			// // 		Printer::Print("post apply update");
-			// // 		// previous_chunk->data[i].Initialize(false, chunk.size());
-			// // 		// break;
-			// // 		// previous_chunk->data[i].CopyBuffer(chunk.data[i]);
-			// // 		// memcpy(previous_chunk->data[i].GetData(), chunk.data[i].GetData(), chunk.size());
-			// // 	}
-			// // }
-			// // previous_chunk->SetCapacity(chunk);
-			// // previous_chunk->SetCardinality(chunk);
-			//
-			//
-			// // previous_chunk->Append(chunk);
-			// // previous_chunk->SetCapacity(chunk);
-			// // previous_chunk->SetCardinality(chunk);
-			//
-			// // Reference columns that did not change
-			// // for (auto i = 0; i < column_indexes.size(); i++) {
-			// 	// if (column_indexes[i] != update_column_index) {
-			// 		// previous_chunk->data[i].Reference(chunk.data[i]);
-			// 	// } else {
-			// 		// previous_chunk->data[i].Initialize();
-			// 	// }
-			// // }
-			//
-			//
-			// current_chunk->Slice(sel, adjusted_info.N);
-			// previous_chunk->Slice(sel, adjusted_info.N);
-			// // Printer::Print("post slice");
-			// // previous_chunk->SetCardinality(adjusted_info.N);
-			// // current_chunk->SetCardinality(adjusted_info.N);
-			//
-			// current_chunk->Flatten();
-			// previous_chunk->Flatten();
-			// // Printer::Print("post flatten");
-			//
-			//
-			// // previous_chunk->Verify();
-			//
-			// config.change_data_capture.EmitChange(
-			// 	DUCKDB_CDC_EVENT_UPDATE,
-			// 	transaction.transaction_id,
-			// 	column_indexes.size(),
-			// 	table_version,
-			// 	&info.column_index,
-			// 	table->GetTableName().c_str(),
-			// 	column_names.data(),
-			// 	column_versions.data(),
-			// 	reinterpret_cast<duckdb_data_chunk>(current_chunk.release()),
-			// 	reinterpret_cast<duckdb_data_chunk>(previous_chunk.release())
-			// 	);
+			// handle_update(transaction, info, table, table_version, column_names, column_versions, update_types, column_indexes,
+			// 		  update_column_index, ptr, adjusted_info, sel, config, chunk);
 		});
 	}
 
 	// delete[] adjusted_info.tuples;
-	if (!column_names.empty()) {
-		for (idx_t i = 0; i < column_names.size(); i++) {
-			free((void *) column_names[i]);
+
+	// auto end_time_ = std::chrono::high_resolution_clock::now();
+	// auto total_time = std::chrono::duration_cast<std::chrono::milliseconds>(end_time_ - start_time_).count();
+	// Printer::Print(StringUtil::Format("%d", total_time));
+}
+
+void CDCWriteState::Flush() {
+	if (current_update_chunk != nullptr && previous_update_chunk != nullptr) {
+		SelectionVector sel(last_update_info.tuples);
+		auto &config = DBConfig::GetConfig(last_update_info.table->db.GetDatabase());
+
+		if (current_update_chunk->size() != last_update_info.N) {
+			current_update_chunk->Slice(sel, last_update_info.N);
+			previous_update_chunk->Slice(sel, last_update_info.N);
+		}
+
+		current_update_chunk->Flatten();
+		previous_update_chunk->Flatten();
+
+		vector<const char*> column_names_cstrings;
+		for (const auto &column_name : update_column_names) {
+			column_names_cstrings.push_back(strdup(column_name.c_str()));
+		}
+
+		config.change_data_capture.EmitChange(
+			DUCKDB_CDC_EVENT_UPDATE,
+			transaction.transaction_id,
+			column_names_cstrings.size(),
+			update_table_version,
+			0,
+			last_update_info.table->GetTableName().c_str(),
+			column_names_cstrings.data(),
+			this->column_versions.data(),
+			reinterpret_cast<duckdb_data_chunk>(current_update_chunk.release()),
+			reinterpret_cast<duckdb_data_chunk>(previous_update_chunk.release())
+		);
+
+		if (!column_names_cstrings.empty()) {
+			for (idx_t i = 0; i < column_names_cstrings.size(); i++) {
+				free((void *) column_names_cstrings[i]);
+			}
 		}
 	}
 }
+
 
 void CDCWriteState::EmitInsert(AppendInfo &info) {
 	auto &table = info.table;
@@ -428,6 +344,10 @@ void CDCWriteState::EmitInsert(AppendInfo &info) {
 }
 
 void CDCWriteState::EmitEntry(UndoFlags type, data_ptr_t data) {
+	if (type != UndoFlags::UPDATE_TUPLE) {
+		Flush(); //Flush existing updates if they exist
+	}
+
 	switch (type) {
 		case UndoFlags::CATALOG_ENTRY: {
 			//Not supported

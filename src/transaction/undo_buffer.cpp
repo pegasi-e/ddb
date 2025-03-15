@@ -227,6 +227,7 @@ void UndoBuffer::PublishCdCEvent() {
 			}
 		}
 	});
+	state.Flush();
 
 	if (has_non_catalog_changes) {
 		state.EmitTransactionEntry(DUCKDB_CDC_EVENT_END_TRANSACTION);

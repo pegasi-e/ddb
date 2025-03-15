@@ -2061,11 +2061,11 @@ void DataTable::DidCommitTransaction(const transaction_t commit_id, bool update_
 	}
 }
 
-	idx_t DataTable::GetVersion() const {
+idx_t DataTable::GetVersion() const {
 	return info->commit_version_manager.GetVersion();
 }
 
-	idx_t DataTable::GetColumnVersion(const column_t idx) const {
+idx_t DataTable::GetColumnVersion(const column_t idx) const {
 	return row_groups->GetVersion(idx);
 }
 
