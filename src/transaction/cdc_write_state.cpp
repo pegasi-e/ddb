@@ -60,13 +60,22 @@ void CDCWriteState::EmitDelete(DeleteInfo &info) {
 		column_versions[i] = table->GetColumnVersion(i);
 	}
 
+	auto number_of_rows = info.count;
+	if (!info.is_consecutive) {
+		for (idx_t i = 0; i < info.count; i++) {
+			const auto row_offset = info.GetRows()[i] + 1;
+			if (row_offset > number_of_rows) {
+				number_of_rows = row_offset;
+			}
+		}
+	}
+
 	auto ptr = transaction.context.lock();
 	auto &config = DBConfig::GetConfig(info.table->db.GetDatabase());
-	table->ScanTableSegment(info.base_row, info.count, [&](DataChunk &chunk) {
+	table->ScanTableSegment(info.base_row, number_of_rows, [&](DataChunk &chunk) {
 		auto delete_chunk = make_uniq<DataChunk>();
 		delete_chunk->Initialize(*ptr, chunk.GetTypes(), chunk.size());
 		delete_chunk->Append(chunk);
-		delete_chunk->Flatten();
 
 		if (!info.is_consecutive) {
 			ManagedSelection sel(info.count);
@@ -213,6 +222,7 @@ void CDCWriteState::EmitUpdate(UpdateInfo &info) {
 			}
 		}
 		info.segment->FetchAndApplyUpdate(&info, previous_update_chunk->data[update_offset]);
+		info.segment->FetchCommitted(info.vector_index, current_update_chunk->data[update_column_index]);
 	} else {
 		Flush();
 
@@ -236,13 +246,17 @@ void CDCWriteState::EmitUpdate(UpdateInfo &info) {
 			current_update_chunk = make_uniq<DataChunk>();
 			previous_update_chunk = make_uniq<DataChunk>();
 			current_update_chunk->Initialize(*ptr, update_types, chunk.size());
+			// previous_update_chunk->Initialize(*ptr, update_types, chunk.size());
+			// current_update_chunk->InitializeEmpty(chunk.GetTypes());
 			previous_update_chunk->Initialize(*ptr, update_types, chunk.size());
-			current_update_chunk->Reference(chunk);
-			previous_update_chunk->Reference(chunk);
-			// current_update_chunk->Append(chunk);
-			// previous_update_chunk->Append(chunk);
+			// current_update_chunk->Copy(chunk, 0);
+			// current_update_chunk->Copy(chunk);
+			// previous_update_chunk->Move(chunk);
+			current_update_chunk->Append(chunk);
+			previous_update_chunk->Append(chunk);
 
 			info.segment->FetchAndApplyUpdate(&info, previous_update_chunk->data[update_column_index]);
+			info.segment->FetchCommitted(info.vector_index, current_update_chunk->data[update_column_index]);
 		});
 	}
 }

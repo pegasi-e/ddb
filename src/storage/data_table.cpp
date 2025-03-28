@@ -1431,53 +1431,6 @@ void DataTable::FinalizeAppend(DuckTransaction &transaction, TableAppendState &s
 	row_groups->FinalizeAppend(transaction, state);
 }
 
-void DataTable::ScanTableSegment(idx_t row_start, idx_t count, vector<column_t> &column_ids, vector<LogicalType> types, const std::function<void(DataChunk &chunk)> &function) {
-	if (count == 0) {
-		return;
-	}
-	idx_t end = row_start + count;
-
-	DataChunk chunk;
-	chunk.Initialize(Allocator::Get(db), types);
-
-	CreateIndexScanState state;
-
-	InitializeScanWithOffset(state, column_ids, row_start, row_start + count);
-	auto row_start_aligned = state.table_state.row_group->start + state.table_state.vector_index * STANDARD_VECTOR_SIZE;
-
-	idx_t current_row = row_start_aligned;
-	while (current_row < end) {
-		state.table_state.ScanCommitted(chunk, TableScanType::TABLE_SCAN_COMMITTED_ROWS);
-		if (chunk.size() == 0) {
-			break;
-		}
-		idx_t end_row = current_row + chunk.size();
-		// start of chunk is current_row
-		// end of chunk is end_row
-		// figure out if we need to write the entire chunk or just part of it
-		idx_t chunk_start = MaxValue<idx_t>(current_row, row_start);
-		idx_t chunk_end = MinValue<idx_t>(end_row, end);
-		D_ASSERT(chunk_start < chunk_end);
-		idx_t chunk_count = chunk_end - chunk_start;
-		if (chunk_count != chunk.size()) {
-			D_ASSERT(chunk_count <= chunk.size());
-			// need to slice the chunk before insert
-			idx_t start_in_chunk;
-			if (current_row >= row_start) {
-				start_in_chunk = 0;
-			} else {
-				start_in_chunk = row_start - current_row;
-			}
-			SelectionVector sel(start_in_chunk, chunk_count);
-			chunk.Slice(sel, chunk_count);
-			chunk.Verify();
-		}
-		function(chunk);
-		chunk.Reset();
-		current_row = end_row;
-	}
-}
-
 void DataTable::ScanTableSegment(idx_t row_start, idx_t count, const std::function<void(DataChunk &chunk)> &function) {
 	if (count == 0) {
 		return;
@@ -2069,4 +2022,55 @@ idx_t DataTable::GetColumnVersion(const column_t idx) const {
 	return row_groups->GetVersion(idx);
 }
 
+// Anybase changes
+void DataTable::ScanTableSegment(idx_t row_start, idx_t count, vector<column_t> &column_ids, vector<LogicalType> types, const std::function<void(DataChunk &chunk)> &function) {
+	if (count == 0) {
+		return;
+	}
+	idx_t end = row_start + count;
+
+	DataChunk chunk;
+	chunk.Initialize(Allocator::Get(db), types);
+
+	CreateIndexScanState state;
+
+	InitializeScanWithOffset(state, column_ids, row_start, row_start + count);
+	auto row_start_aligned = state.table_state.row_group->start + state.table_state.vector_index * STANDARD_VECTOR_SIZE;
+
+	idx_t current_row = row_start_aligned;
+	while (current_row < end) {
+		state.table_state.ScanCommitted(chunk, TableScanType::TABLE_SCAN_COMMITTED_ROWS);
+		if (chunk.size() == 0) {
+			break;
+		}
+		idx_t end_row = current_row + chunk.size();
+		// start of chunk is current_row
+		// end of chunk is end_row
+		// figure out if we need to write the entire chunk or just part of it
+		idx_t chunk_start = MaxValue<idx_t>(current_row, row_start);
+		idx_t chunk_end = MinValue<idx_t>(end_row, end);
+		D_ASSERT(chunk_start < chunk_end);
+		idx_t chunk_count = chunk_end - chunk_start;
+		if (chunk_count != chunk.size()) {
+			D_ASSERT(chunk_count <= chunk.size());
+			// need to slice the chunk before insert
+			idx_t start_in_chunk;
+			if (current_row >= row_start) {
+				start_in_chunk = 0;
+			} else {
+				start_in_chunk = row_start - current_row;
+			}
+			SelectionVector sel(start_in_chunk, chunk_count);
+			chunk.Slice(sel, chunk_count);
+			chunk.Verify();
+		}
+		function(chunk);
+		chunk.Reset();
+		current_row = end_row;
+	}
+}
+// End Anybase changes
+
 } // namespace duckdb
+
+
