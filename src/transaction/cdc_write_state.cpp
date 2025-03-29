@@ -212,17 +212,18 @@ void CDCWriteState::EmitUpdate(UpdateInfo &info) {
 		column_indexes.push_back(info.column_index);
 	}
 
+	auto update_offset = info.column_index;
+	for (idx_t i = 0; i < column_indexes.size(); i++) {
+		if (column_indexes[i] == info.column_index) {
+			update_offset = i;
+			break;
+		}
+	}
+
 
 	if (CanApplyUpdate(info)) {
-		auto update_offset = info.column_index;
-		for (idx_t i = 0; i < this->column_indexes.size(); i++) {
-			if (column_indexes[i] == info.column_index) {
-				update_offset = i;
-				break;
-			}
-		}
 		info.segment->FetchAndApplyUpdate(&info, previous_update_chunk->data[update_offset]);
-		info.segment->FetchCommitted(info.vector_index, current_update_chunk->data[update_column_index]);
+		info.segment->FetchCommitted(info.vector_index, current_update_chunk->data[update_offset]);
 	} else {
 		Flush();
 
@@ -239,25 +240,20 @@ void CDCWriteState::EmitUpdate(UpdateInfo &info) {
 		this->column_versions = column_versions;
 		this->update_column_names = column_names;
 
-
 		auto ptr = transaction.context.lock();
 
+		current_update_chunk = make_uniq<DataChunk>();
+		previous_update_chunk = make_uniq<DataChunk>();
+		current_update_chunk->Initialize(*ptr, update_types, STANDARD_VECTOR_SIZE);
+		previous_update_chunk->Initialize(*ptr, update_types, STANDARD_VECTOR_SIZE);
+
 		table->ScanTableSegment(info.vector_index * STANDARD_VECTOR_SIZE, STANDARD_VECTOR_SIZE, column_indexes, update_types, [&](DataChunk &chunk) {
-			current_update_chunk = make_uniq<DataChunk>();
-			previous_update_chunk = make_uniq<DataChunk>();
-			current_update_chunk->Initialize(*ptr, update_types, chunk.size());
-			// previous_update_chunk->Initialize(*ptr, update_types, chunk.size());
-			// current_update_chunk->InitializeEmpty(chunk.GetTypes());
-			previous_update_chunk->Initialize(*ptr, update_types, chunk.size());
-			// current_update_chunk->Copy(chunk, 0);
-			// current_update_chunk->Copy(chunk);
-			// previous_update_chunk->Move(chunk);
 			current_update_chunk->Append(chunk);
 			previous_update_chunk->Append(chunk);
-
-			info.segment->FetchAndApplyUpdate(&info, previous_update_chunk->data[update_column_index]);
-			info.segment->FetchCommitted(info.vector_index, current_update_chunk->data[update_column_index]);
 		});
+
+		info.segment->FetchAndApplyUpdate(&info, previous_update_chunk->data[update_offset]);
+		info.segment->FetchCommitted(info.vector_index, current_update_chunk->data[update_offset]);
 	}
 }
 
@@ -277,7 +273,8 @@ void CDCWriteState::Flush() {
 		current_chunk->Append(*current_update_chunk.get());
 		previous_chunk->Append(*previous_update_chunk.get());
 
-		if (current_chunk->size() != last_update_info.N) {
+
+		if (current_chunk->size() > last_update_info.N) {
 			current_chunk->Slice(sel, last_update_info.N);
 			previous_chunk->Slice(sel, last_update_info.N);
 		}
@@ -286,7 +283,8 @@ void CDCWriteState::Flush() {
 		previous_chunk->Flatten();
 
 		vector<const char*> column_names_cstrings;
-		for (const auto &column_name : update_column_names) {
+		auto updated_columns = update_column_names;
+		for (const auto &column_name : updated_columns) {
 			column_names_cstrings.push_back(strdup(column_name.c_str()));
 		}
 

@@ -286,6 +286,7 @@ private:
 
 // start Anybase additions
 public:
+	void ScanFullTableSegment(idx_t row_start, idx_t count, const std::function<void(DataChunk &chunk)> &function);
 	void ScanTableSegment(idx_t row_start, idx_t count, vector<column_t> &column_ids, vector<LogicalType> types, const std::function<void(DataChunk &chunk)> &function);
 // end Anybase additions
 };
