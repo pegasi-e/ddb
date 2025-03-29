@@ -269,10 +269,9 @@ void CDCWriteState::Flush() {
 		current_chunk->Initialize(*ptr, current_update_chunk->GetTypes(), current_update_chunk->size());
 		previous_chunk->Initialize(*ptr, previous_update_chunk->GetTypes(), previous_update_chunk->size());
 
-		// We can't reference the chunks here because their life cycle extends beyond the scanned chunks life cycles
-		current_chunk->Append(*current_update_chunk.get());
-		previous_chunk->Append(*previous_update_chunk.get());
-
+		// We can't reference the chunks here because their life cycle extends beyond the life cycle of this class
+		current_chunk->Move(*current_update_chunk.release());
+		previous_chunk->Move(*previous_update_chunk.release());
 
 		if (current_chunk->size() > last_update_info.N) {
 			current_chunk->Slice(sel, last_update_info.N);

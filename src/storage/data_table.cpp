@@ -2089,9 +2089,10 @@ void DataTable::ScanTableSegment(idx_t row_start, idx_t count, vector<column_t> 
 	CreateIndexScanState state;
 
 	InitializeScanWithOffset(state, column_ids, row_start, row_start + count);
-	// auto row_start_aligned = state.table_state.row_group->start + state.table_state.vector_index * STANDARD_VECTOR_SIZE;
+	auto row_start_aligned = state.table_state.row_group->start + state.table_state.vector_index * STANDARD_VECTOR_SIZE;
 
-	idx_t current_row = row_start;//row_start_aligned;
+	// idx_t current_row = row_start;//row_start_aligned;
+	idx_t current_row = row_start_aligned;
 	while (current_row < end) {
 		state.table_state.ScanCommitted(chunk, TableScanType::TABLE_SCAN_COMMITTED_ROWS);
 		if (chunk.size() == 0) {
