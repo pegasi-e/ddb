@@ -242,10 +242,16 @@ void CDCWriteState::EmitUpdate(UpdateInfo &info) {
 
 		auto ptr = transaction.context.lock();
 
-		current_update_chunk = make_uniq<DataChunk>();
-		previous_update_chunk = make_uniq<DataChunk>();
-		current_update_chunk->Initialize(*ptr, update_types, STANDARD_VECTOR_SIZE);
-		previous_update_chunk->Initialize(*ptr, update_types, STANDARD_VECTOR_SIZE);
+		if (current_update_chunk == nullptr || previous_update_chunk == nullptr) {
+			current_update_chunk = make_uniq<DataChunk>();
+			previous_update_chunk = make_uniq<DataChunk>();
+			current_update_chunk->Initialize(*ptr, update_types, STANDARD_VECTOR_SIZE);
+			previous_update_chunk->Initialize(*ptr, update_types, STANDARD_VECTOR_SIZE);
+		}
+		else {
+			current_update_chunk->Reset();
+			previous_update_chunk->Reset();
+		}
 
 		table->ScanTableSegment(info.vector_index * STANDARD_VECTOR_SIZE, STANDARD_VECTOR_SIZE, column_indexes, update_types, [&](DataChunk &chunk) {
 			current_update_chunk->Append(chunk);
@@ -270,8 +276,8 @@ void CDCWriteState::Flush() {
 		previous_chunk->Initialize(*ptr, previous_update_chunk->GetTypes(), previous_update_chunk->size());
 
 		// We can't reference the chunks here because their life cycle extends beyond the life cycle of this class
-		current_chunk->Move(*current_update_chunk.release());
-		previous_chunk->Move(*previous_update_chunk.release());
+		current_chunk->Append(*current_update_chunk);
+		previous_chunk->Append(*previous_update_chunk);
 
 		if (current_chunk->size() > last_update_info.N) {
 			current_chunk->Slice(sel, last_update_info.N);
