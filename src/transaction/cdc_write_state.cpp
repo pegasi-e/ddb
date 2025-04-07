@@ -182,7 +182,6 @@ void CDCWriteState::EmitUpdate(UpdateInfo &info) {
 	vector<uint64_t> column_versions;
 	vector<LogicalType> update_types;
 	vector<column_t> column_indexes;
-	idx_t update_column_index = info.column_index;
 	auto did_add_target = false;
 
 	if (transaction.involved_columns.find(table->GetTableName()) != transaction.involved_columns.end()) {
@@ -199,13 +198,11 @@ void CDCWriteState::EmitUpdate(UpdateInfo &info) {
 		update_types.emplace_back(table_types[column_index]);
 		column_indexes.push_back(column_index);
 		if (column_index == info.column_index) {
-			update_column_index = i;
 			did_add_target = true;
 		}
 	}
 
 	if (!did_add_target) {
-		update_column_index = column_names.size();
 		column_names.push_back(std::move(column_definitions[info.column_index].GetName()));
 		column_versions.push_back(table->GetColumnVersion(info.column_index));
 		update_types.emplace_back(table_types[info.column_index]);
