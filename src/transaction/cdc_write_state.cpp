@@ -22,6 +22,7 @@
 #include "duckdb/transaction/duck_transaction.hpp"
 #include "duckdb/transaction/update_info.hpp"
 #include "duckdb/function/change_data_capature_function.hpp"
+#include "duckdb/common/unique_ptr.hpp"
 
 namespace duckdb {
 
