@@ -250,7 +250,7 @@ void CDCWriteState::EmitUpdate(UpdateInfo &info) {
 }
 
 void CDCWriteState::Flush() {
-	if (current_update_chunk != nullptr && previous_update_chunk != nullptr) {
+	if (current_update_chunk && previous_update_chunk) {
 		SelectionVector sel(last_update_info.tuples);
 		auto &config = DBConfig::GetConfig(last_update_info.table->db.GetDatabase());
 

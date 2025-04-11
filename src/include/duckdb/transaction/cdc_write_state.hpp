@@ -8,10 +8,13 @@
 
 #pragma once
 
+#include "duckdb/catalog/catalog_entry/sequence_catalog_entry.hpp"
+#include "duckdb/common/types/data_chunk.hpp"
 #include "duckdb/common/unique_ptr.hpp"
 
 namespace duckdb {
 class DuckTransaction;
+class DataChunk;
 struct DeleteInfo;
 struct UpdateInfo;
 struct AppendInfo;
