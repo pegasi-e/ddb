@@ -13,6 +13,7 @@
 #include "duckdb/storage/arena_allocator.hpp"
 
 namespace duckdb {
+struct UpdateInfo;
 class StorageCommitState;
 class WriteAheadLog;
 class Transaction;

@@ -14,6 +14,8 @@
 #include "duckdb/common/types/data_chunk.hpp"
 #include "duckdb/main/client_context.hpp"
 #include "duckdb/main/config.hpp"
+#include "duckdb/common/types/selection_vector.hpp"
+#include "duckdb/function/change_data_capature_function.hpp"
 
 namespace duckdb {
 
