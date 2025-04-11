@@ -11,10 +11,11 @@
 #include "duckdb/catalog/catalog_entry/sequence_catalog_entry.hpp"
 #include "duckdb/common/types/data_chunk.hpp"
 #include "duckdb/common/unique_ptr.hpp"
+#include "duckdb.h"
 
 namespace duckdb {
-class DuckTransaction;
 class DataChunk;
+class DuckTransaction;
 struct DeleteInfo;
 struct UpdateInfo;
 struct AppendInfo;

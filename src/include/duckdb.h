@@ -4196,7 +4196,7 @@ DUCKDB_API void duckdb_destroy_cast_function(duckdb_cast_function *cast_function
 // WARNING: the numbers of these enums should not be changed, as changing the numbers breaks ABI compatibility
 // Always add enums at the END of the enum
 //! An enum over DuckDB's internal types.
-typedef enum CDC_EVENT_TYPE {
+typedef enum CDC_EVENT_TYPE : int32_t {
 	DUCKDB_CDC_EVENT_INSERT = 0,
 	DUCKDB_CDC_EVENT_UPDATE = 1,
 	DUCKDB_CDC_EVENT_DELETE = 2,

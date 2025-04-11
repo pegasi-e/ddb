@@ -16,6 +16,7 @@ namespace duckdb {
 class StorageCommitState;
 class WriteAheadLog;
 class Transaction;
+class DuckTransaction;
 
 struct UndoBufferProperties {
 	idx_t estimated_size = 0;
