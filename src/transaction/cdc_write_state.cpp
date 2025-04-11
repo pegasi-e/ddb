@@ -12,7 +12,6 @@
 #include "duckdb/function/change_data_capature_function.hpp"
 #include "duckdb/common/unique_ptr.hpp"
 #include "duckdb/common/types/data_chunk.hpp"
-#include "duckdb/transaction/update_info.hpp"
 #include "duckdb/main/client_context.hpp"
 #include "duckdb/main/config.hpp"
 
