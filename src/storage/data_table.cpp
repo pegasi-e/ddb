@@ -381,9 +381,10 @@ TableStorageInfo DataTable::GetStorageInfo() {
 // Fetch
 //===--------------------------------------------------------------------===//
 void DataTable::Fetch(DuckTransaction &transaction, DataChunk &result, const vector<column_t> &column_ids,
-                      const Vector &row_identifiers, idx_t fetch_count, ColumnFetchState &state) {
+                      const Vector &row_identifiers, idx_t fetch_count, ColumnFetchState &state,
+                      bool fetch_current_update) {
 	auto lock = info->checkpoint_lock.GetSharedLock();
-	row_groups->Fetch(transaction, result, column_ids, row_identifiers, fetch_count, state);
+	row_groups->Fetch(transaction, result, column_ids, row_identifiers, fetch_count, state, fetch_current_update);
 }
 
 //===--------------------------------------------------------------------===//
@@ -1000,7 +1001,8 @@ static void CreateUpdateChunk(ClientContext &context, DataChunk &chunk, TableCat
   
 template <bool GLOBAL>
 static idx_t PerformOnConflictAction(ClientContext &context, DataChunk &chunk, TableCatalogEntry &table,
-                                     Vector &row_ids, const vector<PhysicalIndex>& set_columns, const vector<unique_ptr<BoundConstraint>> &bound_constraints,
+                                     Vector &row_ids, const vector<PhysicalIndex>& set_columns,
+                                     const vector<unique_ptr<BoundConstraint>> &bound_constraints,
                                      const vector<LogicalType> &set_types,
                                      const optional_ptr<const vector<unique_ptr<Expression>>> &set_expressions,
                                      const optional_ptr<const unique_ptr<Expression>> &do_update_condition) {
@@ -1163,6 +1165,21 @@ static idx_t HandleInsertConflicts(TableCatalogEntry &table, ClientContext &cont
 	conflict_chunk.Reference(insert_chunk);
 	conflict_chunk.Slice(conflicts.Selection(), conflicts.Count());
 	conflict_chunk.SetCardinality(conflicts.Count());
+
+	// Start CDC changes
+	auto &current_transaction = DuckTransaction::Get(context, table.catalog);
+	auto columnMap = unordered_map<column_t, vector<column_t>>();
+	auto involved_columns = vector<idx_t>(conflict_target.begin(), conflict_target.end());
+	for (idx_t i = 0; i < set_columns.size(); ++i) {
+		involved_columns.push_back(set_columns[i].index);
+	}
+
+	for (auto &t : set_columns) {
+		columnMap[t.index] = involved_columns;
+	}
+
+	current_transaction.involved_columns[data_table.GetTableName()] = columnMap;
+	// End CDC changes
 
 	// Holds the pins for the fetched rows
 	unique_ptr<ColumnFetchState> fetch_state;
@@ -1892,7 +1909,7 @@ void DataTable::Update(TableUpdateState &state, ClientContext &context, Vector &
 		row_ids_slice.Flatten(n_global_update);
 
 		transaction.UpdateCollection(row_groups);
-		row_groups->Update(transaction, FlatVector::GetData<row_t>(row_ids_slice), column_ids, updates_slice);
+		row_groups->Update(transaction, *this, FlatVector::GetData<row_t>(row_ids_slice), column_ids, updates_slice);
 	}
 }
 
@@ -1914,7 +1931,7 @@ void DataTable::UpdateColumn(TableCatalogEntry &table, ClientContext &context, V
 
 	updates.Flatten();
 	row_ids.Flatten(updates.size());
-	row_groups->UpdateColumn(transaction, row_ids, column_path, updates);
+	row_groups->UpdateColumn(transaction, *this, row_ids, column_path, updates);
 }
 
 //===--------------------------------------------------------------------===//
@@ -1969,19 +1986,6 @@ idx_t DataTable::GetTotalRows() const {
 	return row_groups->GetTotalRows();
 }
 
-void DataTable::DidCommitTransaction(const transaction_t commit_id) const {
-	info->commit_version_manager.DidCommitTransaction(commit_id);
-	row_groups->UpdateColumnVersions(commit_id);
-}
-
-idx_t DataTable::GetLastCommitId() const {
-	return info->commit_version_manager.GetVersion();
-}
-
-idx_t DataTable::GetColumnVersion(const column_t idx) const {
-	return row_groups->GetVersion(idx);
-}
-
 void DataTable::CommitDropTable() {
 	// commit a drop of this table: mark all blocks as modified, so they can be reclaimed later on
 	row_groups->CommitDropTable();
@@ -2002,4 +2006,126 @@ vector<ColumnSegmentInfo> DataTable::GetColumnSegmentInfo() {
 	return row_groups->GetColumnSegmentInfo();
 }
 
+// Anybase additions
+void DataTable::DidCommitTransaction(const transaction_t commit_id, bool update_all_columns) const {
+	info->commit_version_manager.DidCommitTransaction(commit_id);
+	if (update_all_columns) {
+		row_groups->UpdateColumnVersions(commit_id);
+	}
+}
+
+idx_t DataTable::GetVersion() const {
+	return info->commit_version_manager.GetVersion();
+}
+
+idx_t DataTable::GetColumnVersion(const column_t idx) const {
+	return row_groups->GetVersion(idx);
+}
+
+// Anybase changes
+void DataTable::ScanFullTableSegment(idx_t row_start, idx_t count, const std::function<void(DataChunk &chunk)> &function) {
+	if (count == 0) {
+		return;
+	}
+	idx_t end = row_start + count;
+
+	vector<column_t> column_ids;
+	vector<LogicalType> types;
+	for (idx_t i = 0; i < this->column_definitions.size(); i++) {
+		auto &col = this->column_definitions[i];
+		column_ids.push_back(i);
+		types.push_back(col.Type());
+	}
+	DataChunk chunk;
+	chunk.Initialize(Allocator::Get(db), types);
+
+	CreateIndexScanState state;
+
+	InitializeScanWithOffset(state, column_ids, row_start, row_start + count);
+	// auto row_start_aligned = state.table_state.row_group->start + state.table_state.vector_index * STANDARD_VECTOR_SIZE;
+
+	idx_t current_row = row_start;
+	while (current_row < end) {
+		state.table_state.ScanCommitted(chunk, TableScanType::TABLE_SCAN_COMMITTED_ROWS);
+		if (chunk.size() == 0) {
+			break;
+		}
+		idx_t end_row = current_row + chunk.size();
+		// start of chunk is current_row
+		// end of chunk is end_row
+		// figure out if we need to write the entire chunk or just part of it
+		idx_t chunk_start = MaxValue<idx_t>(current_row, row_start);
+		idx_t chunk_end = MinValue<idx_t>(end_row, end);
+		D_ASSERT(chunk_start < chunk_end);
+		idx_t chunk_count = chunk_end - chunk_start;
+		if (chunk_count != chunk.size()) {
+			D_ASSERT(chunk_count <= chunk.size());
+			// need to slice the chunk before insert
+			idx_t start_in_chunk;
+			if (current_row >= row_start) {
+				start_in_chunk = 0;
+			} else {
+				start_in_chunk = row_start - current_row;
+			}
+			SelectionVector sel(start_in_chunk, chunk_count);
+			chunk.Slice(sel, chunk_count);
+			chunk.Verify();
+		}
+		function(chunk);
+		chunk.Reset();
+		current_row = end_row;
+	}
+}
+
+void DataTable::ScanTableSegment(idx_t row_start, idx_t count, vector<column_t> &column_ids, vector<LogicalType> types, const std::function<void(DataChunk &chunk)> &function) {
+	if (count == 0) {
+		return;
+	}
+	idx_t end = row_start + count;
+
+	DataChunk chunk;
+	chunk.Initialize(Allocator::Get(db), types);
+
+	CreateIndexScanState state;
+
+	InitializeScanWithOffset(state, column_ids, row_start, row_start + count);
+	auto row_start_aligned = state.table_state.row_group->start + state.table_state.vector_index * STANDARD_VECTOR_SIZE;
+
+	// idx_t current_row = row_start;//row_start_aligned;
+	idx_t current_row = row_start_aligned;
+	while (current_row < end) {
+		state.table_state.ScanCommitted(chunk, TableScanType::TABLE_SCAN_COMMITTED_ROWS);
+		if (chunk.size() == 0) {
+			break;
+		}
+		idx_t end_row = current_row + chunk.size();
+		// start of chunk is current_row
+		// end of chunk is end_row
+		// figure out if we need to write the entire chunk or just part of it
+		idx_t chunk_start = MaxValue<idx_t>(current_row, row_start);
+		idx_t chunk_end = MinValue<idx_t>(end_row, end);
+		D_ASSERT(chunk_start < chunk_end);
+		idx_t chunk_count = chunk_end - chunk_start;
+		if (chunk_count != chunk.size()) {
+			D_ASSERT(chunk_count <= chunk.size());
+			// need to slice the chunk before insert
+			idx_t start_in_chunk;
+			if (current_row >= row_start) {
+				start_in_chunk = 0;
+			} else {
+				start_in_chunk = row_start - current_row;
+			}
+			SelectionVector sel(start_in_chunk, chunk_count);
+			chunk.Slice(sel, chunk_count);
+			chunk.Verify();
+		}
+		function(chunk);
+		chunk.Reset();
+		current_row = end_row;
+	}
+}
+// End Anybase changes
+
 } // namespace duckdb
+
+

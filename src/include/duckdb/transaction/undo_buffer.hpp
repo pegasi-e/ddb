@@ -13,8 +13,11 @@
 #include "duckdb/storage/arena_allocator.hpp"
 
 namespace duckdb {
+struct UpdateInfo;
 class StorageCommitState;
 class WriteAheadLog;
+class Transaction;
+class DuckTransaction;
 
 struct UndoBufferProperties {
 	idx_t estimated_size = 0;
@@ -36,7 +39,7 @@ public:
 	};
 
 public:
-	explicit UndoBuffer(ClientContext &context);
+	explicit UndoBuffer(DuckTransaction &transaction, ClientContext &context);
 
 	//! Reserve space for an entry of the specified type and length in the undo
 	//! buffer
@@ -59,6 +62,13 @@ public:
 
 private:
 	ArenaAllocator allocator;
+
+//Anybase Changes
+private:
+	DuckTransaction &transaction;
+public:
+	void PublishCdCEvent();
+//Anybase Changes
 
 private:
 	template <class T>

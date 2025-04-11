@@ -1,7 +1,7 @@
 #pragma once
 #include "duckdb/common/file_system.hpp"
 #include <string>
-#include <librdkafka/rdkafka.h>
+// #include <librdkafka/rdkafka.h>
  
 namespace duckdb {
   class KafkaFileHandle : public FileHandle {
@@ -11,8 +11,8 @@ namespace duckdb {
     void Close() override {
     }
     //private:
-    rd_kafka_conf_t *conf;
-    rd_kafka_t *rk;
+    // rd_kafka_conf_t *conf;
+    // rd_kafka_t *rk;
   };
   class KafkaFileSystem : public FileSystem {
     string bootstrap_server;

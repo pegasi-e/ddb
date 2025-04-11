@@ -96,7 +96,7 @@ static void MergeValidityInfo(UpdateInfo *current, ValidityMask &result_mask) {
 static void UpdateMergeValidity(transaction_t start_time, transaction_t transaction_id, UpdateInfo *info,
                                 Vector &result) {
 	auto &result_mask = FlatVector::Validity(result);
-	UpdateInfo::UpdatesForTransaction(info, start_time, transaction_id,
+	UpdateInfo::UpdatesForTransaction(info, start_time, transaction_id, true,
 	                                  [&](UpdateInfo *current) { MergeValidityInfo(current, result_mask); });
 }
 
@@ -118,7 +118,7 @@ static void MergeUpdateInfo(UpdateInfo *current, T *result_data) {
 template <class T>
 static void UpdateMergeFetch(transaction_t start_time, transaction_t transaction_id, UpdateInfo *info, Vector &result) {
 	auto result_data = FlatVector::GetData<T>(result);
-	UpdateInfo::UpdatesForTransaction(info, start_time, transaction_id,
+	UpdateInfo::UpdatesForTransaction(info, start_time, transaction_id, true,
 	                                  [&](UpdateInfo *current) { MergeUpdateInfo<T>(current, result_data); });
 }
 
@@ -357,9 +357,9 @@ void UpdateSegment::FetchCommittedRange(idx_t start_row, idx_t count, Vector &re
 // Fetch Row
 //===--------------------------------------------------------------------===//
 static void FetchRowValidity(transaction_t start_time, transaction_t transaction_id, UpdateInfo *info, idx_t row_idx,
-                             Vector &result, idx_t result_idx) {
+                             Vector &result, idx_t result_idx, bool fetch_current_update) {
 	auto &result_mask = FlatVector::Validity(result);
-	UpdateInfo::UpdatesForTransaction(info, start_time, transaction_id, [&](UpdateInfo *current) {
+	UpdateInfo::UpdatesForTransaction(info, start_time, transaction_id, fetch_current_update, [&](UpdateInfo *current) {
 		auto info_data = reinterpret_cast<bool *>(current->tuple_data);
 		// FIXME: we could do a binary search in here
 		for (idx_t i = 0; i < current->N; i++) {
@@ -375,9 +375,9 @@ static void FetchRowValidity(transaction_t start_time, transaction_t transaction
 
 template <class T>
 static void TemplatedFetchRow(transaction_t start_time, transaction_t transaction_id, UpdateInfo *info, idx_t row_idx,
-                              Vector &result, idx_t result_idx) {
+                              Vector &result, idx_t result_idx, bool fetch_current_update) {
 	auto result_data = FlatVector::GetData<T>(result);
-	UpdateInfo::UpdatesForTransaction(info, start_time, transaction_id, [&](UpdateInfo *current) {
+	UpdateInfo::UpdatesForTransaction(info, start_time, transaction_id, fetch_current_update, [&](UpdateInfo *current) {
 		auto info_data = (T *)current->tuple_data;
 		// FIXME: we could do a binary search in here
 		for (idx_t i = 0; i < current->N; i++) {
@@ -429,7 +429,7 @@ static UpdateSegment::fetch_row_function_t GetFetchRowFunction(PhysicalType type
 	}
 }
 
-void UpdateSegment::FetchRow(TransactionData transaction, idx_t row_id, Vector &result, idx_t result_idx) {
+void UpdateSegment::FetchRow(TransactionData transaction, idx_t row_id, Vector &result, idx_t result_idx, bool fetch_current_update) {
 	if (!root) {
 		return;
 	}
@@ -439,7 +439,7 @@ void UpdateSegment::FetchRow(TransactionData transaction, idx_t row_id, Vector &
 	}
 	idx_t row_in_vector = (row_id - column_data.start) - vector_index * STANDARD_VECTOR_SIZE;
 	fetch_row_function(transaction.start_time, transaction.transaction_id, root->info[vector_index]->info.get(),
-	                   row_in_vector, result, result_idx);
+	                   row_in_vector, result, result_idx, fetch_current_update);
 }
 
 //===--------------------------------------------------------------------===//
@@ -1074,7 +1074,7 @@ UpdateInfo *CreateEmptyUpdateInfo(TransactionData transaction, idx_t type_size, 
 	return update_info;
 }
 
-void UpdateSegment::Update(TransactionData transaction, idx_t column_index, Vector &update, row_t *ids, idx_t count,
+void UpdateSegment::Update(TransactionData transaction, DataTable &table, idx_t column_index, Vector &update, row_t *ids, idx_t count,
                            Vector &base_data) {
 	// obtain an exclusive lock
 	auto write_lock = lock.GetExclusiveLock();
@@ -1145,6 +1145,7 @@ void UpdateSegment::Update(TransactionData transaction, idx_t column_index, Vect
 			node->N = 0;
 			node->column_index = column_index;
 			node->column = &column_data;
+			node->table = &table;
 
 			// insert the new node into the chain
 			node->next = base_info->next;
@@ -1170,6 +1171,7 @@ void UpdateSegment::Update(TransactionData transaction, idx_t column_index, Vect
 		result->tuples = make_unsafe_uniq_array_uninitialized<sel_t>(STANDARD_VECTOR_SIZE);
 		result->tuple_data = make_unsafe_uniq_array_uninitialized<data_t>(STANDARD_VECTOR_SIZE * type_size);
 		result->info->column = &column_data;
+		result->info->table = &table;
 		result->info->tuples = result->tuples.get();
 		result->info->tuple_data = result->tuple_data.get();
 		result->info->version_number = TRANSACTION_ID_START - 1;
@@ -1196,6 +1198,7 @@ void UpdateSegment::Update(TransactionData transaction, idx_t column_index, Vect
 		transaction_node->prev = result->info.get();
 		transaction_node->column_index = column_index;
 		transaction_node->column = &column_data;
+		transaction_node->table = &table;
 
 		transaction_node->Verify();
 		result->info->Verify();
@@ -1241,5 +1244,16 @@ bool UpdateSegment::HasUpdates(idx_t start_row_index, idx_t end_row_index) {
 	}
 	return false;
 }
+
+// Anybase updates
+void UpdateSegment::FetchAndApplyUpdate(UpdateInfo *info, Vector &result) {
+	auto lock_handle = lock.GetSharedLock();
+
+	// FIXME: normalify if this is not the case... need to pass in count?
+	D_ASSERT(result.GetVectorType() == VectorType::FLAT_VECTOR);
+
+	fetch_committed_function(info, result);
+}
+// Anybase updates
 
 } // namespace duckdb
