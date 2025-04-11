@@ -15,6 +15,7 @@
 namespace duckdb {
 class StorageCommitState;
 class WriteAheadLog;
+class Transaction;
 
 struct UndoBufferProperties {
 	idx_t estimated_size = 0;
@@ -57,13 +58,15 @@ public:
 	//! rollback
 	void Rollback() noexcept;
 
-	// Anybase additions
-	void PublishCdCEvent();
-	// end Anybase additions
+private:
+	ArenaAllocator allocator;
 
+//Anybase Changes
 private:
 	DuckTransaction &transaction;
-	ArenaAllocator allocator;
+public:
+	void PublishCdCEvent();
+//Anybase Changes
 
 private:
 	template <class T>

@@ -1,21 +1,9 @@
 #include "duckdb/transaction/cdc_write_state.hpp"
 
-#include "duckdb/catalog/catalog_entry/duck_index_entry.hpp"
-#include "duckdb/catalog/catalog_entry/duck_table_entry.hpp"
-#include "duckdb/catalog/catalog_entry/scalar_macro_catalog_entry.hpp"
-#include "duckdb/catalog/catalog_entry/type_catalog_entry.hpp"
-#include "duckdb/catalog/catalog_entry/view_catalog_entry.hpp"
 #include "duckdb/catalog/catalog_set.hpp"
-#include "duckdb/catalog/duck_catalog.hpp"
-#include "duckdb/common/serializer/binary_deserializer.hpp"
-#include "duckdb/common/serializer/memory_stream.hpp"
 #include "duckdb/main/attached_database.hpp"
 #include "duckdb/storage/data_table.hpp"
-#include "duckdb/storage/table/chunk_info.hpp"
 #include "duckdb/storage/table/column_data.hpp"
-#include "duckdb/storage/table/row_group.hpp"
-#include "duckdb/storage/table/row_version_manager.hpp"
-#include "duckdb/storage/table/scan_state.hpp"
 #include "duckdb/storage/table/update_segment.hpp"
 #include "duckdb/transaction/append_info.hpp"
 #include "duckdb/transaction/delete_info.hpp"
@@ -153,7 +141,7 @@ void CDCWriteState::EmitInsert(AppendInfo &info) {
 }
 
 bool CDCWriteState::CanApplyUpdate(UpdateInfo &info) {
-	if (current_update_chunk == nullptr || previous_update_chunk == nullptr) {
+	if (!current_update_chunk || !previous_update_chunk) {
 		return false;
 	}
 
@@ -240,7 +228,7 @@ void CDCWriteState::EmitUpdate(UpdateInfo &info) {
 
 		auto ptr = transaction.context.lock();
 
-		if (current_update_chunk == nullptr || previous_update_chunk == nullptr) {
+		if (!current_update_chunk || !previous_update_chunk) {
 			current_update_chunk = make_uniq<DataChunk>();
 			previous_update_chunk = make_uniq<DataChunk>();
 			current_update_chunk->Initialize(*ptr, update_types, STANDARD_VECTOR_SIZE);

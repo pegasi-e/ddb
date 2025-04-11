@@ -242,15 +242,6 @@ void UpdateSegment::FetchCommitted(idx_t vector_index, Vector &result) {
 	fetch_committed_function(root->info[vector_index]->info.get(), result);
 }
 
-void UpdateSegment::FetchAndApplyUpdate(UpdateInfo *info, Vector &result) {
-	auto lock_handle = lock.GetSharedLock();
-
-	// FIXME: normalify if this is not the case... need to pass in count?
-	D_ASSERT(result.GetVectorType() == VectorType::FLAT_VECTOR);
-
-	fetch_committed_function(info, result);
-}
-
 //===--------------------------------------------------------------------===//
 // Fetch Range
 //===--------------------------------------------------------------------===//
@@ -1253,5 +1244,16 @@ bool UpdateSegment::HasUpdates(idx_t start_row_index, idx_t end_row_index) {
 	}
 	return false;
 }
+
+// Anybase updates
+void UpdateSegment::FetchAndApplyUpdate(UpdateInfo *info, Vector &result) {
+	auto lock_handle = lock.GetSharedLock();
+
+	// FIXME: normalify if this is not the case... need to pass in count?
+	D_ASSERT(result.GetVectorType() == VectorType::FLAT_VECTOR);
+
+	fetch_committed_function(info, result);
+}
+// Anybase updates
 
 } // namespace duckdb
