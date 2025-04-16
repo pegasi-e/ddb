@@ -42,7 +42,7 @@ jobs:
     # Builds binaries for linux_amd64_gcc4
     name: Linux (x64)
     runs-on: ubuntu-latest
-    container: quay.io/pypa/manylinux_2_28_x86_64:pypa/manylinux_2_28_x86_64
+    container: quay.io/pypa/manylinux_2_28_x86_64:2022-11-06-7be974c
     env:
       EXTENSION_CONFIGS: '${GITHUB_WORKSPACE}/.github/config/bundled_extensions.cmake'
       ENABLE_EXTENSION_AUTOLOADING: 1
