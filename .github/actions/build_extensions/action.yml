@@ -99,7 +99,7 @@ runs:
       if: inputs.vcpkg_build == 1
       uses: lukka/run-vcpkg@v11
       with:
-        vcpkgGitCommitId: a1a1cbc975abf909a6c8985a6a2b8fe20bbd9bd6
+        vcpkgGitCommitId: ce613c41372b23b1f51333815feb3edd87ef8a8b
 
     - name: Set vcpkg env variables
       if: inputs.vcpkg_build == 1
