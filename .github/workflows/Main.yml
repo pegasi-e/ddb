@@ -39,13 +39,14 @@ jobs:
   linux-debug:
     name: Linux Debug
     if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-22.04
     env:
       CC: gcc-10
       CXX: g++-10
       TREAT_WARNINGS_AS_ERRORS: 1
       BUILD_VISUALIZER: 1
       GEN: ninja
+      SKIP_EXTENSIONS: jemalloc
 
     steps:
       - uses: actions/checkout@v3
