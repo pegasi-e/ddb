@@ -1478,7 +1478,7 @@ idx_t ClientContext::GetTableVersion(const char *schema, const char *table) {
 
 		auto &table_entry = Catalog::GetEntry<TableCatalogEntry>(*this, INVALID_CATALOG, schema, table);
 		auto &dataTable = table_entry.GetStorage();
-		version = dataTable.GetLastCommitId();
+		version = dataTable.GetVersion();
 	});
 
 	return version;

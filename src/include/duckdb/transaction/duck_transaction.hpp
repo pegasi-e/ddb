@@ -108,6 +108,12 @@ private:
 	};
 	//! Active locks on tables
 	reference_map_t<DataTableInfo, unique_ptr<ActiveTableLock>> active_locks;
+
+public:
+	// Anybase Additions
+	void PublishCdcMessages();
+	bool ShouldPublishCDCEvent() override;
+	// end Anybase Additions
 };
 
 } // namespace duckdb

@@ -107,20 +107,20 @@ idx_t StandardColumnData::Fetch(ColumnScanState &state, row_t row_id, Vector &re
 	return scan_count;
 }
 
-void StandardColumnData::Update(TransactionData transaction, idx_t column_index, Vector &update_vector, row_t *row_ids,
+void StandardColumnData::Update(TransactionData transaction, DataTable &table, idx_t column_index, Vector &update_vector, row_t *row_ids,
                                 idx_t update_count) {
-	ColumnData::Update(transaction, column_index, update_vector, row_ids, update_count);
-	validity.Update(transaction, column_index, update_vector, row_ids, update_count);
+	ColumnData::Update(transaction, table, column_index, update_vector, row_ids, update_count);
+	validity.Update(transaction, table, column_index, update_vector, row_ids, update_count);
 }
 
-void StandardColumnData::UpdateColumn(TransactionData transaction, const vector<column_t> &column_path,
+void StandardColumnData::UpdateColumn(TransactionData transaction, DataTable &table, const vector<column_t> &column_path,
                                       Vector &update_vector, row_t *row_ids, idx_t update_count, idx_t depth) {
 	if (depth >= column_path.size()) {
 		// update this column
-		ColumnData::Update(transaction, column_path[0], update_vector, row_ids, update_count);
+		ColumnData::Update(transaction, table, column_path[0], update_vector, row_ids, update_count);
 	} else {
 		// update the child column (i.e. the validity column)
-		validity.UpdateColumn(transaction, column_path, update_vector, row_ids, update_count, depth + 1);
+		validity.UpdateColumn(transaction, table, column_path, update_vector, row_ids, update_count, depth + 1);
 	}
 }
 
@@ -140,14 +140,14 @@ unique_ptr<BaseStatistics> StandardColumnData::GetUpdateStatistics() {
 }
 
 void StandardColumnData::FetchRow(TransactionData transaction, ColumnFetchState &state, row_t row_id, Vector &result,
-                                  idx_t result_idx) {
+                                  idx_t result_idx, bool fetch_current_update) {
 	// find the segment the row belongs to
 	if (state.child_states.empty()) {
 		auto child_state = make_uniq<ColumnFetchState>();
 		state.child_states.push_back(std::move(child_state));
 	}
 	validity.FetchRow(transaction, *state.child_states[0], row_id, result, result_idx);
-	ColumnData::FetchRow(transaction, state, row_id, result, result_idx);
+	ColumnData::FetchRow(transaction, state, row_id, result, result_idx, fetch_current_update);
 }
 
 void StandardColumnData::CommitDropColumn() {

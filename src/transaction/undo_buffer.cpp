@@ -11,13 +11,15 @@
 #include "duckdb/transaction/commit_state.hpp"
 #include "duckdb/transaction/rollback_state.hpp"
 #include "duckdb/execution/index/bound_index.hpp"
+#include "duckdb/transaction/cdc_write_state.hpp"
 #include "duckdb/transaction/wal_write_state.hpp"
 #include "duckdb/transaction/delete_info.hpp"
 
 namespace duckdb {
 constexpr uint32_t UNDO_ENTRY_HEADER_SIZE = sizeof(UndoFlags) + sizeof(uint32_t);
 
-UndoBuffer::UndoBuffer(ClientContext &context_p) : allocator(BufferAllocator::Get(context_p)) {
+UndoBuffer::UndoBuffer(DuckTransaction &transaction_p, ClientContext &context_p)
+	: transaction(transaction_p), allocator(BufferAllocator::Get(context_p)) {
 }
 
 data_ptr_t UndoBuffer::CreateEntry(UndoFlags type, idx_t len) {
@@ -199,4 +201,37 @@ void UndoBuffer::Rollback() noexcept {
 	RollbackState state;
 	ReverseIterateEntries([&](UndoFlags type, data_ptr_t data) { state.RollbackEntry(type, data); });
 }
+
+// Anybase additions
+void UndoBuffer::PublishCdCEvent() {
+	CDCWriteState state(transaction);
+	UndoBuffer::IteratorState iterator_state;
+	auto has_non_catalog_changes = false;
+	auto last_entry_was_update = false;
+
+	IterateEntries(iterator_state, [&](UndoFlags type, data_ptr_t data) {
+		if (type != UndoFlags::CATALOG_ENTRY && type != UndoFlags::SEQUENCE_VALUE && type != UndoFlags::EMPTY_ENTRY) {
+			if (!has_non_catalog_changes) {
+				has_non_catalog_changes = true;
+				state.EmitTransactionEntry(DUCKDB_CDC_EVENT_BEGIN_TRANSACTION);
+			}
+
+			if (!last_entry_was_update || (last_entry_was_update && type != UndoFlags::UPDATE_TUPLE)) {
+				state.EmitEntry(type, data);
+			}
+
+			if (!last_entry_was_update && type == UndoFlags::UPDATE_TUPLE) {
+				last_entry_was_update = true;
+			} else {
+				last_entry_was_update = false;
+			}
+		}
+	});
+	state.Flush();
+
+	if (has_non_catalog_changes) {
+		state.EmitTransactionEntry(DUCKDB_CDC_EVENT_END_TRANSACTION);
+	}
+}
+
 } // namespace duckdb

@@ -32,7 +32,7 @@ TransactionData::TransactionData(transaction_t transaction_id_p, transaction_t s
 DuckTransaction::DuckTransaction(DuckTransactionManager &manager, ClientContext &context_p, transaction_t start_time,
                                  transaction_t transaction_id, idx_t catalog_version_p)
     : Transaction(manager, context_p), start_time(start_time), transaction_id(transaction_id), commit_id(0),
-      highest_active_query(0), catalog_version(catalog_version_p), transaction_manager(manager), undo_buffer(context_p),
+      highest_active_query(0), catalog_version(catalog_version_p), transaction_manager(manager), undo_buffer(*this, context_p),
       storage(make_uniq<LocalStorage>(context_p, *this)) {
 }
 
@@ -232,6 +232,9 @@ ErrorData DuckTransaction::Commit(AttachedDatabase &db, transaction_t new_commit
 	UndoBuffer::IteratorState iterator_state;
 	try {
 		storage->Commit(commit_state.get());
+		if (ShouldPublishCDCEvent()) {
+			PublishCdcMessages();
+		}
 		undo_buffer.Commit(iterator_state, commit_id);
 		if (commit_state) {
 			// if we have written to the WAL - flush after the commit has been successful
@@ -291,5 +294,26 @@ shared_ptr<CheckpointLock> DuckTransaction::SharedLockTable(DataTableInfo &info)
 	active_table_lock.checkpoint_lock = checkpoint_lock;
 	return checkpoint_lock;
 }
+
+// Anybase Additions
+bool DuckTransaction::ShouldPublishCDCEvent() {
+	if (context.expired()) {
+		return false;
+	}
+
+	const auto contextHandle = context.lock();
+	if (!contextHandle ||
+		!contextHandle->db ||
+		!contextHandle->db->config.change_data_capture.IsEnabled()) {
+		return false;
+	}
+
+	return true;
+}
+
+void DuckTransaction::PublishCdcMessages() {
+	undo_buffer.PublishCdCEvent();
+}
+// end Anybase Additions
 
 } // namespace duckdb
