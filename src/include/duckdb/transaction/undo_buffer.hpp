@@ -11,6 +11,7 @@
 #include "duckdb/common/common.hpp"
 #include "duckdb/common/enums/undo_flags.hpp"
 #include "duckdb/storage/arena_allocator.hpp"
+#include "duckdb/transaction/update_info.hpp"
 
 namespace duckdb {
 struct UpdateInfo;
