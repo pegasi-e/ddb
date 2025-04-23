@@ -46,7 +46,6 @@ jobs:
       TREAT_WARNINGS_AS_ERRORS: 1
       BUILD_VISUALIZER: 1
       GEN: ninja
-      SKIP_EXTENSIONS: jemalloc
 
     steps:
       - uses: actions/checkout@v3
