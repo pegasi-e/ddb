@@ -10,9 +10,9 @@ namespace duckdb {
     ~KafkaFileHandle() override;
     void Close() override {
     }
-    private:
-      rd_kafka_conf_t *conf;
-      rd_kafka_t *rk;
+    // private:
+    rd_kafka_conf_t *conf;
+    rd_kafka_t *rk;
   };
   class KafkaFileSystem : public FileSystem {
     string bootstrap_server;
