@@ -4187,6 +4187,39 @@ Destroys the cast function object.
 */
 DUCKDB_API void duckdb_destroy_cast_function(duckdb_cast_function *cast_function);
 
+
+//Anybase APIs
+//===--------------------------------------------------------------------===//
+// Change Data Capture types
+//===--------------------------------------------------------------------===//
+
+// WARNING: the numbers of these enums should not be changed, as changing the numbers breaks ABI compatibility
+// Always add enums at the END of the enum
+//! An enum over DuckDB's internal types.
+typedef enum CDC_EVENT_TYPE : int32_t {
+	DUCKDB_CDC_EVENT_INSERT = 0,
+	DUCKDB_CDC_EVENT_UPDATE = 1,
+	DUCKDB_CDC_EVENT_DELETE = 2,
+	DUCKDB_CDC_EVENT_BEGIN_TRANSACTION = 3,
+	DUCKDB_CDC_EVENT_END_TRANSACTION = 4,
+} cdc_event_type;
+
+typedef void (*duckdb_change_data_capture_callback_t)(
+	cdc_event_type type,
+	idx_t transactionId,
+	idx_t column_count,
+	idx_t table_version,
+	idx_t *updated_column_index,
+	const char *table_name,
+	const char **column_names,
+	idx_t *column_versions,
+	duckdb_data_chunk values,
+	duckdb_data_chunk previous_values
+	);
+
+//===--------------------------------------------------------------------===//
+// Anybase API functions
+//===--------------------------------------------------------------------===//
 DUCKDB_API uint64_t duckdb_get_hlc_timestamp();
 DUCKDB_API void duckdb_set_hlc_timestamp(uint64_t ts);
 DUCKDB_API uint64_t duckdb_get_snapshot_id(duckdb_connection con);
@@ -4195,6 +4228,7 @@ DUCKDB_API duckdb_state duckdb_create_snapshot(duckdb_connection con, duckdb_res
 DUCKDB_API void duckdb_remove_snapshot(duckdb_connection con, const char *snapshot_file_name);
 DUCKDB_API idx_t duckdb_get_table_version(duckdb_connection connection, const char *schema, const char *table, char **error);
 DUCKDB_API idx_t duckdb_get_column_version(duckdb_connection connection, const char *schema, const char *table, const char *column, char **error);
+DUCKDB_API void duckdb_set_cdc_callback(duckdb_database db, duckdb_change_data_capture_callback_t function);
 
 #ifdef __cplusplus
 }

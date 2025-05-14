@@ -4,12 +4,14 @@
 #include "duckdb/common/types/column/column_data_collection.hpp"
 #include "duckdb/common/vector_operations/vector_operations.hpp"
 #include "duckdb/execution/expression_executor.hpp"
+#include "duckdb/execution/operator/scan/physical_table_scan.hpp"
 #include "duckdb/main/client_context.hpp"
 #include "duckdb/parallel/thread_context.hpp"
 #include "duckdb/planner/expression/bound_reference_expression.hpp"
 #include "duckdb/storage/data_table.hpp"
 #include "duckdb/storage/table/delete_state.hpp"
 #include "duckdb/storage/table/update_state.hpp"
+#include "duckdb/transaction/duck_transaction.hpp"
 
 namespace duckdb {
 
@@ -88,6 +90,23 @@ SinkResultType PhysicalUpdate::Sink(ExecutionContext &context, DataChunk &chunk,
 
 	chunk.Flatten();
 	lstate.default_executor.SetChunk(chunk);
+
+	//Extract the involved columns for CDC
+	auto &transaction = DuckTransaction::Get(context.client, table.db);
+	auto columnMap = unordered_map<column_t, vector<column_t>>();
+	vector<column_t> involved_columns;
+	if (context.pipeline->GetSource()->type == PhysicalOperatorType::TABLE_SCAN) {
+		auto table_scan = &context.pipeline->GetSource()->Cast<PhysicalTableScan>();
+		for (idx_t i = 0; i < table_scan->column_ids.size() - 1; i++) {
+			involved_columns.emplace_back(table_scan->column_ids[i]);
+		}
+	}
+
+	for (idx_t i = 0; i < columns.size(); i++) {
+		columnMap[columns[i].index] = involved_columns;
+	}
+	transaction.involved_columns[table.GetTableName()] = columnMap;
+	//End extract the involved columns for CDC
 
 	// update data in the base table
 	// the row ids are given to us as the last column of the child chunk

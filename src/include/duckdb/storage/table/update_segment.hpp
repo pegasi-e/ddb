@@ -36,9 +36,9 @@ public:
 	void FetchUpdates(TransactionData transaction, idx_t vector_index, Vector &result);
 	void FetchCommitted(idx_t vector_index, Vector &result);
 	void FetchCommittedRange(idx_t start_row, idx_t count, Vector &result);
-	void Update(TransactionData transaction, idx_t column_index, Vector &update, row_t *ids, idx_t count,
+	void Update(TransactionData transaction, DataTable &table, idx_t column_index, Vector &update, row_t *ids, idx_t count,
 	            Vector &base_data);
-	void FetchRow(TransactionData transaction, idx_t row_id, Vector &result, idx_t result_idx);
+	void FetchRow(TransactionData transaction, idx_t row_id, Vector &result, idx_t result_idx, bool fetch_current_update = true);
 
 	void RollbackUpdate(UpdateInfo &info);
 	void CleanupUpdateInternal(const StorageLockKey &lock, UpdateInfo &info);
@@ -74,7 +74,7 @@ public:
 	typedef void (*fetch_committed_range_function_t)(UpdateInfo *info, idx_t start, idx_t end, idx_t result_offset,
 	                                                 Vector &result);
 	typedef void (*fetch_row_function_t)(transaction_t start_time, transaction_t transaction_id, UpdateInfo *info,
-	                                     idx_t row_idx, Vector &result, idx_t result_idx);
+	                                     idx_t row_idx, Vector &result, idx_t result_idx, bool fetch_current_update);
 	typedef void (*rollback_update_function_t)(UpdateInfo &base_info, UpdateInfo &rollback_info);
 	typedef idx_t (*statistics_update_function_t)(UpdateSegment *segment, SegmentStatistics &stats, Vector &update,
 	                                              idx_t count, SelectionVector &sel);
@@ -92,6 +92,11 @@ private:
 private:
 	void InitializeUpdateInfo(UpdateInfo &info, row_t *ids, const SelectionVector &sel, idx_t count, idx_t vector_index,
 	                          idx_t vector_offset);
+
+// Anybase additions
+public:
+	void FetchAndApplyUpdate(UpdateInfo *info, Vector &result);
+// Anybase additions
 };
 
 struct UpdateNodeData {

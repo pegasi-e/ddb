@@ -1402,7 +1402,7 @@ void LocalFileSystem::CopyFile(const string &source, const string &target) {
 	}
 	while (len > 0 && ret > 0);
 
-        if (close(src_fd) == -1)
+    if (close(src_fd) == -1)
 	{
 		perror("close");
 	}

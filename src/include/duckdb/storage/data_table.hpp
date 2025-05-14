@@ -94,7 +94,7 @@ public:
 
 	//! Fetch data from the specific row identifiers from the base table
 	void Fetch(DuckTransaction &transaction, DataChunk &result, const vector<column_t> &column_ids,
-	           const Vector &row_ids, idx_t fetch_count, ColumnFetchState &state);
+	           const Vector &row_ids, idx_t fetch_count, ColumnFetchState &state, bool fetch_current_update = true);
 
 	//! Initializes an append to transaction-local storage
 	void InitializeLocalAppend(LocalAppendState &state, TableCatalogEntry &table, ClientContext &context,
@@ -244,8 +244,8 @@ public:
 
 	TableStorageInfo GetStorageInfo();
 
-	idx_t GetLastCommitId() const;
-	void DidCommitTransaction(transaction_t commit_id) const;
+	idx_t GetVersion() const;
+	void DidCommitTransaction(transaction_t commit_id, bool update_all_columns = true) const;
 	idx_t GetColumnVersion(column_t idx) const;
 
 public:
@@ -283,5 +283,11 @@ private:
 	//! Whether or not the data table is the root DataTable for this table; the root DataTable is the newest version
 	//! that can be appended to
 	atomic<bool> is_root;
+
+// start Anybase additions
+public:
+	void ScanFullTableSegment(idx_t row_start, idx_t count, const std::function<void(DataChunk &chunk)> &function);
+	void ScanTableSegment(idx_t row_start, idx_t count, vector<column_t> &column_ids, vector<LogicalType> types, const std::function<void(DataChunk &chunk)> &function);
+// end Anybase additions
 };
 } // namespace duckdb

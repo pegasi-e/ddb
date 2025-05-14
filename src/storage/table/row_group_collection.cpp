@@ -90,9 +90,8 @@ idx_t RowGroupCollection::GetVersion(const column_t column_idx) const {
 	D_ASSERT(row_group);
 
 	idx_t version = 0;
-	while (row_group) {
+	if (row_group) {
 		version = std::max(row_group->GetColumnVersion(column_idx), version);
-		row_group = row_groups->GetNextSegment(row_group);
 	}
 
 	return version;
@@ -102,9 +101,8 @@ void RowGroupCollection::UpdateColumnVersions(const transaction_t commit_id) con
 	auto row_group = row_groups->GetSegment(0);
 	D_ASSERT(row_group);
 
-	while (row_group) {
+	if (row_group) {
 		row_group->UpdateColumnVersions(commit_id);
-		row_group = row_groups->GetNextSegment(row_group);
 	}
 }
 
@@ -306,7 +304,8 @@ bool RowGroupCollection::Scan(DuckTransaction &transaction, const std::function<
 // Fetch
 //===--------------------------------------------------------------------===//
 void RowGroupCollection::Fetch(TransactionData transaction, DataChunk &result, const vector<column_t> &column_ids,
-                               const Vector &row_identifiers, idx_t fetch_count, ColumnFetchState &state) {
+                               const Vector &row_identifiers, idx_t fetch_count, ColumnFetchState &state,
+                               bool fetch_current_update) {
 	// figure out which row_group to fetch from
 	auto row_ids = FlatVector::GetData<row_t>(row_identifiers);
 	idx_t count = 0;
@@ -322,10 +321,10 @@ void RowGroupCollection::Fetch(TransactionData transaction, DataChunk &result, c
 			}
 			row_group = row_groups->GetSegmentByIndex(l, UnsafeNumericCast<int64_t>(segment_index));
 		}
-		if (!row_group->Fetch(transaction, UnsafeNumericCast<idx_t>(row_id) - row_group->start)) {
+		if (!row_group->Fetch(transaction, UnsafeNumericCast<idx_t>(row_id) - row_group->start) && fetch_current_update) {
 			continue;
 		}
-		row_group->FetchRow(transaction, state, column_ids, row_id, result, count);
+		row_group->FetchRow(transaction, state, column_ids, row_id, result, count, fetch_current_update);
 		count++;
 	}
 	result.SetCardinality(count);
@@ -608,7 +607,7 @@ idx_t RowGroupCollection::Delete(TransactionData transaction, DataTable &table, 
 //===--------------------------------------------------------------------===//
 // Update
 //===--------------------------------------------------------------------===//
-void RowGroupCollection::Update(TransactionData transaction, row_t *ids, const vector<PhysicalIndex> &column_ids,
+void RowGroupCollection::Update(TransactionData transaction, DataTable &table, row_t *ids, const vector<PhysicalIndex> &column_ids,
                                 DataChunk &updates) {
 	idx_t pos = 0;
 	do {
@@ -631,7 +630,8 @@ void RowGroupCollection::Update(TransactionData transaction, row_t *ids, const v
 				break;
 			}
 		}
-		row_group->Update(transaction, updates, ids, start, pos - start, column_ids);
+
+		row_group->Update(transaction, table, updates, ids, start, pos - start, column_ids);
 
 		auto l = stats.GetLock();
 		for (idx_t i = 0; i < column_ids.size(); i++) {
@@ -706,7 +706,7 @@ void RowGroupCollection::RemoveFromIndexes(TableIndexList &indexes, Vector &row_
 	}
 }
 
-void RowGroupCollection::UpdateColumn(TransactionData transaction, Vector &row_ids, const vector<column_t> &column_path,
+void RowGroupCollection::UpdateColumn(TransactionData transaction, DataTable &table, Vector &row_ids, const vector<column_t> &column_path,
                                       DataChunk &updates) {
 	auto first_id = FlatVector::GetValue<row_t>(row_ids, 0);
 	if (first_id >= MAX_ROW_ID) {
@@ -715,7 +715,7 @@ void RowGroupCollection::UpdateColumn(TransactionData transaction, Vector &row_i
 	// find the row_group this id belongs to
 	auto primary_column_idx = column_path[0];
 	auto row_group = row_groups->GetSegment(UnsafeNumericCast<idx_t>(first_id));
-	row_group->UpdateColumn(transaction, updates, row_ids, column_path);
+	row_group->UpdateColumn(transaction, table, updates, row_ids, column_path);
 
 	auto lock = stats.GetLock();
 	row_group->MergeIntoStatistics(primary_column_idx, stats.GetStats(*lock, primary_column_idx).Statistics());

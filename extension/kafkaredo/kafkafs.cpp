@@ -190,7 +190,7 @@ int64_t KafkaFileSystem::Write(FileHandle &handle, void *buffer, int64_t nr_byte
 
 	error = rd_kafka_commit_transaction(producer, -1);
 
-	
+
 	return nr_bytes;
 }
 

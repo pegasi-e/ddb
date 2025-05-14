@@ -124,7 +124,7 @@ public:
 	bool Fetch(TransactionData transaction, idx_t row);
 	//! Fetch a specific row from the row_group and insert it into the result at the specified index
 	void FetchRow(TransactionData transaction, ColumnFetchState &state, const vector<column_t> &column_ids,
-	              row_t row_id, DataChunk &result, idx_t result_idx);
+	              row_t row_id, DataChunk &result, idx_t result_idx, bool fetch_current_update = true);
 
 	//! Append count rows to the version info
 	void AppendVersionInfo(TransactionData transaction, idx_t count);
@@ -149,11 +149,11 @@ public:
 	void InitializeAppend(RowGroupAppendState &append_state);
 	void Append(RowGroupAppendState &append_state, DataChunk &chunk, idx_t append_count);
 
-	void Update(TransactionData transaction, DataChunk &updates, row_t *ids, idx_t offset, idx_t count,
+	void Update(TransactionData transaction, DataTable &table, DataChunk &updates, row_t *ids, idx_t offset, idx_t count,
 	            const vector<PhysicalIndex> &column_ids);
 	//! Update a single column; corresponds to DataTable::UpdateColumn
 	//! This method should only be called from the WAL
-	void UpdateColumn(TransactionData transaction, DataChunk &updates, Vector &row_ids,
+	void UpdateColumn(TransactionData transaction, DataTable &table, DataChunk &updates, Vector &row_ids,
 	                  const vector<column_t> &column_path);
 
 	void MergeStatistics(idx_t column_idx, const BaseStatistics &other);

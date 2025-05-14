@@ -177,6 +177,7 @@ void CommitState::CommitEntry(UndoFlags type, data_ptr_t data) {
 			info->column->commit_version_manager.DidCommitTransaction(commit_id);
 			info->column->info.commit_version_manager.DidCommitTransaction(commit_id);
 		}
+		info->table->DidCommitTransaction(commit_id, false);
 
 		break;
 	}

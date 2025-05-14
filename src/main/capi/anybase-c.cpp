@@ -185,3 +185,9 @@ idx_t duckdb_get_column_version(const duckdb_connection connection, const char *
 	} // LCOV_EXCL_STOP
 }
 
+void duckdb_set_cdc_callback(duckdb_database db, duckdb_change_data_capture_callback_t function) {
+	auto wrapper = reinterpret_cast<duckdb::DatabaseData *>(db);
+	auto &config = duckdb::DBConfig::GetConfig(*wrapper->database->instance);
+	config.change_data_capture.function = function;
+}
+
