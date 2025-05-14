@@ -424,7 +424,7 @@ void FileSystem::MoveFile(const string &source, const string &target, optional_p
 	throw NotImplementedException("%s: MoveFile is not implemented!", GetName());
 }
 
-void FileSystem::CopyFile(const string &source, const string &target, unique_ptr<FileHandle>& src_handle) {
+void FileSystem::CopyFile(const string &source, const string &target) {
 	throw NotImplementedException("%s: CopyFile is not implemented!", GetName());
 }
   

@@ -89,8 +89,8 @@ public:
 		GetFileSystem().MoveFile(source, target, GetOpener());
 	}
 
-    void CopyFile(const string &source, const string &target, unique_ptr<FileHandle>& src_handle) override {
-	  GetFileSystem().CopyFile(source, target, src_handle);
+    void CopyFile(const string &source, const string &target) override {
+	  GetFileSystem().CopyFile(source, target);
 	}
 
 	string GetHomeDirectory() override {
