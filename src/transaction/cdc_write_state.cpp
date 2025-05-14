@@ -41,6 +41,8 @@ CDCWriteState::CDCWriteState(DuckTransaction &transaction_p)
 }
 
 void CDCWriteState::EmitDelete(DeleteInfo &info) {
+#ifdef _WIN32
+#else
 	auto &table = info.table;
 
 	auto table_version = table->GetVersion();
@@ -100,9 +102,12 @@ void CDCWriteState::EmitDelete(DeleteInfo &info) {
 			delete[] column_names[i];
 		}
 	}
+#endif
 }
 
 void CDCWriteState::EmitInsert(AppendInfo &info) {
+#ifdef _WIN32
+#else
 	auto &table = info.table;
 	auto table_version = table->GetVersion();
 
@@ -142,9 +147,13 @@ void CDCWriteState::EmitInsert(AppendInfo &info) {
 			delete[] column_names[i];
 		}
 	}
+#endif
 }
 
 bool CDCWriteState::CanApplyUpdate(UpdateInfo &info) {
+#ifdef _WIN32
+	return false;
+#else
 	if (!current_update_chunk || !previous_update_chunk) {
 		return false;
 	}
@@ -163,9 +172,12 @@ bool CDCWriteState::CanApplyUpdate(UpdateInfo &info) {
 	}
 
 	return true;
+#endif
 }
 
 void CDCWriteState::EmitUpdate(UpdateInfo &info) {
+#ifdef _WIN32
+#else
 	auto &table = info.table;
 
 	auto table_types = table->GetTypes();
@@ -251,9 +263,12 @@ void CDCWriteState::EmitUpdate(UpdateInfo &info) {
 		info.segment->FetchAndApplyUpdate(&info, previous_update_chunk->data[update_offset]);
 		info.segment->FetchCommitted(info.vector_index, current_update_chunk->data[update_offset]);
 	}
+#endif
 }
 
 void CDCWriteState::Flush() {
+#ifdef _WIN32
+#else
 	if (current_update_chunk && previous_update_chunk) {
 		SelectionVector sel(last_update_info.tuples);
 		auto &config = DBConfig::GetConfig(last_update_info.table->db.GetDatabase());
@@ -302,6 +317,7 @@ void CDCWriteState::Flush() {
 			}
 		}
 	}
+#endif
 }
 
 void CDCWriteState::EmitEntry(UndoFlags type, data_ptr_t data) {
@@ -348,6 +364,8 @@ void CDCWriteState::EmitEntry(UndoFlags type, data_ptr_t data) {
 }
 
 void CDCWriteState::EmitTransactionEntry(CDC_EVENT_TYPE type){
+#ifdef _WIN32
+#else
 	if (transaction.context.expired()) {
 		return;
 	}
@@ -366,5 +384,6 @@ void CDCWriteState::EmitTransactionEntry(CDC_EVENT_TYPE type){
 		nullptr,
 		nullptr
 		);
+#endif
 }
 } // namespace duckdb
