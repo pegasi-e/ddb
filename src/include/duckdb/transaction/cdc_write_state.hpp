@@ -11,13 +11,13 @@
 #include "duckdb/catalog/catalog_entry/sequence_catalog_entry.hpp"
 #include "duckdb/common/types/data_chunk.hpp"
 #include "duckdb/common/unique_ptr.hpp"
+#include "duckdb/transaction/update_info.hpp"
 #include "duckdb.h"
 
 namespace duckdb {
 class DataChunk;
 class DuckTransaction;
 struct DeleteInfo;
-struct UpdateInfo;
 struct AppendInfo;
 
 class CDCWriteState {
