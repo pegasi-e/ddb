@@ -58,7 +58,7 @@ void CDCWriteState::EmitDelete(DeleteInfo &info) {
 	auto number_of_rows = info.count;
 	if (!info.is_consecutive) {
 		for (idx_t i = 0; i < info.count; i++) {
-			const auto row_offset = info.GetRows()[i] + 1;
+			const auto row_offset = static_cast<idx_t>(info.GetRows()[i]) + 1;
 			if (row_offset > number_of_rows) {
 				number_of_rows = row_offset;
 			}
@@ -165,7 +165,7 @@ bool CDCWriteState::CanApplyUpdate(UpdateInfo &info) {
 		return false;
 	}
 
-	for (auto i = 0; i < info.N; i++) {
+	for (sel_t i = 0; i < info.N; i++) {
 		if (info.tuples[i] != last_update_info.tuples[i]) {
 			return false;
 		}
