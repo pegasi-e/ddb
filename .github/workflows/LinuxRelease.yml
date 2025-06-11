@@ -78,10 +78,9 @@ jobs:
           yum install -y perl-IPC-Cmd gcc-toolset-12 gcc-toolset-12-gcc-c++ librdkafka-devel
 
           rpm -ql librdkafka-devel
-          export CMAKE_PREFIX_PATH=/usr
 
           git config --global --add safe.directory $PWD
-          make -C $PWD
+          make CXX_FLAGS='-DCMAKE_PREFIX_PATH=/usr' -C $PWD
         "
 
     - name: Print platform
