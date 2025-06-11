@@ -78,6 +78,8 @@ jobs:
         bash -c "
           set -e
           yum install -y perl-IPC-Cmd gcc-toolset-12 gcc-toolset-12-gcc-c++
+          
+          . <(curl https://aka.ms/vcpkg-init.sh -L)
         
           source /opt/rh/gcc-toolset-12/enable
           export CC=gcc
