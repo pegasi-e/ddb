@@ -101,10 +101,11 @@ jobs:
   linux-release-aarch64:
     # Builds binaries for linux_arm64
     name: Linux (aarch64)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
     needs: linux-release-64
     container:
-      image: ubuntu:18.04
+      image: quay.io/pypa/manylinux_2_28_aarch64_64:2025.03.29-1
+      # image: ubuntu:18.04
       volumes:
         - /node20217:/node20217:rw,rshared
         - /node20217:/__e/node20:ro,rshared
