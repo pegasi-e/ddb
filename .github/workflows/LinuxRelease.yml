@@ -44,7 +44,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        config: [ { runner: ubuntu-latest, arch: amd64, image: x86_64, librdkafka: x64}, {runner: ubuntu-24.04-arm, arch: arm64, image: aarch64, librdkafka: arm64}]
+        config: [ { runner: ubuntu-latest, arch: amd64, image: x86_64}, {runner: ubuntu-24.04-arm, arch: arm64, image: aarch64}]
 
     name: Linux Build (${{ matrix.config.arch }})
     runs-on: ${{ matrix.config.runner }}
@@ -72,25 +72,10 @@ jobs:
         -e ENABLE_EXTENSION_AUTOINSTALL=1                                      \
         -e BUILD_BENCHMARK=1                                                   \
         -e FORCE_WARN_UNUSED=1                                                 \
-        -e VCPKG_HOST_TRIPLET='${{ matrix.config.librdkafka }}-linux'          \
-        -e VCPKG_TARGET_TRIPLET='${{ matrix.config.librdkafka }}-linux'        \
         quay.io/pypa/manylinux_2_28_${{ matrix.config.image }}                  \
         bash -c "
           set -e
-          yum install -y perl-IPC-Cmd gcc-toolset-12 gcc-toolset-12-gcc-c++
-
-          curl -LO https://aka.ms/vcpkg-init.sh && sudo ./vcpkg-init.sh
-
-          echo 'check for vcpkg'
-          ls ./vcpkg
-        
-          source /opt/rh/gcc-toolset-12/enable
-          export CC=gcc
-          export CXX=g++
-          export CMAKE_TOOLCHAIN_FILE=${VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake
-          export VCPKG_TOOLCHAIN_PATH=${VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake
-
-          cd $VCPKG_ROOT && ./vcpkg install librdkafka --triplet='${{ matrix.config.librdkafka }}-linux' 
+          yum install -y perl-IPC-Cmd gcc-toolset-12 gcc-toolset-12-gcc-c++ librdkafka-devel
 
           git config --global --add safe.directory $PWD
           make -C $PWD
