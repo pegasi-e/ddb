@@ -82,8 +82,7 @@ jobs:
           cd vcpkg
           ./bootstrap-vcpkg.sh
           ./vcpkg integrate install
-          export PATH=./vcpkg:$PATH
-          vcpkg install librdkafka
+          ./vcpkg install librdkafka
 
           git config --global --add safe.directory $PWD
           make CMAKE_OPTION=-DCMAKE_PREFIX_PATH=/usr -C $PWD
