@@ -76,10 +76,13 @@ jobs:
         bash -c "
           set -e
 
-          yum install -y perl-IPC-Cmd gcc-toolset-12 gcc-toolset-12-gcc-c++ librdkafka-devel
-          pip install confluent-kafka
+          yum install -y perl-IPC-Cmd gcc-toolset-12 gcc-toolset-12-gcc-c++
 
-          rpm -ql librdkafka-devel
+          git clone https://github.com/Microsoft/vcpkg.git
+          cd vcpkg
+          ./bootstrap-vcpkg.sh
+          ./vcpkg integrate install
+          vcpkg install librdkafka
 
           git config --global --add safe.directory $PWD
           make CMAKE_OPTION=-DCMAKE_PREFIX_PATH=/usr -C $PWD
