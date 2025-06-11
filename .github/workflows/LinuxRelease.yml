@@ -76,7 +76,7 @@ jobs:
         bash -c "
           set -e
 
-          yum install -y perl-IPC-Cmd gcc-toolset-12 gcc-toolset-12-gcc-c++
+          yum install -y perl-IPC-Cmd gcc-toolset-12 gcc-toolset-12-gcc-c++ zip
 
           git clone https://github.com/Microsoft/vcpkg.git
           cd vcpkg
@@ -84,7 +84,7 @@ jobs:
           ./vcpkg integrate install
           ./vcpkg install librdkafka
 
-          ls ./vcpkg/scripts/buildsystems
+          ls /vcpkg/scripts/buildsystems
 
           export CMAKE_TOOLCHAIN_FILE=./vcpkg/scripts/buildsystems/vcpkg.cmake
           export VCPKG_TOOLCHAIN_PATH=./vcpkg/scripts/buildsystems/vcpkg.cmake
