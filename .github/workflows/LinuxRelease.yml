@@ -84,6 +84,11 @@ jobs:
           ./vcpkg integrate install
           ./vcpkg install librdkafka
 
+          ls ./vcpkg/scripts/buildsystems
+
+          export CMAKE_TOOLCHAIN_FILE=./vcpkg/scripts/buildsystems/vcpkg.cmake
+          export VCPKG_TOOLCHAIN_PATH=./vcpkg/scripts/buildsystems/vcpkg.cmake
+
           git config --global --add safe.directory $PWD
           make CMAKE_OPTION=-DCMAKE_PREFIX_PATH=/vcpkg -C $PWD
         "
