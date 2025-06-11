@@ -80,7 +80,7 @@ jobs:
           rpm -ql librdkafka-devel
 
           git config --global --add safe.directory $PWD
-          make CXX_FLAGS='-DCMAKE_PREFIX_PATH=/usr' -C $PWD
+          make CMAKE_OPTION=-DCMAKE_PREFIX_PATH=/usr -C $PWD
         "
 
     - name: Print platform
