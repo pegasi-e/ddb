@@ -77,7 +77,7 @@ jobs:
           set -e
           yum install -y perl-IPC-Cmd gcc-toolset-12 gcc-toolset-12-gcc-c++ librdkafka-devel
 
-          rpm -ql librdkafka-devel | grep cmake
+          rpm -ql librdkafka-devel
 
           git config --global --add safe.directory $PWD
           make -C $PWD
