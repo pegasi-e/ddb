@@ -75,7 +75,18 @@ jobs:
         quay.io/pypa/manylinux_2_28_${{ matrix.config.image }}                  \
         bash -c "
           set -e
-          yum install -y perl-IPC-Cmd gcc-toolset-12 gcc-toolset-12-gcc-c++ librdkafka1 librdkafka-devel
+          tee /etc/yum.repos.d/confluent.repo <<EOF
+          [confluent]
+          name=Confluent repository
+          baseurl=https://packages.confluent.io/rpm/7.5/
+          gpgcheck=1
+          gpgkey=https://packages.confluent.io/rpm/7.5/archive.key
+          enabled=1
+          EOF
+
+          echo /etc/yum.repos.d/confluent.repo
+
+          yum install -y perl-IPC-Cmd gcc-toolset-12 gcc-toolset-12-gcc-c++ librdkafka-devel
 
           rpm -ql librdkafka-devel
 
