@@ -79,7 +79,7 @@ jobs:
           set -e
           yum install -y perl-IPC-Cmd gcc-toolset-12 gcc-toolset-12-gcc-c++
 
-          curl -LO https://aka.ms/vcpkg-init.sh && ./vcpkg-init.sh
+          curl -LO https://aka.ms/vcpkg-init.sh && sudo ./vcpkg-init.sh
 
           echo 'check for vcpkg'
           ls ./vcpkg
