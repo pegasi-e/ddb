@@ -37,9 +37,9 @@ duckdb_state duckdb_appender_create_ext(duckdb_connection connection, const char
 	*out_appender = (duckdb_appender)wrapper;
 	try {
 		if (!column_names.empty()) {
-			wrapper->appender = duckdb::make_uniq<Merger>(*conn, schema, table, column_names);
+			wrapper->appender = duckdb::make_uniq<Merger>(*conn, catalog, schema, table, column_names);
 		} else {
-			wrapper->appender = duckdb::make_uniq<TYPE>(*conn, schema, table);
+			wrapper->appender = duckdb::make_uniq<TYPE>(*conn, catalog, schema, table);
 		}
 	} catch (std::exception &ex) {
 		ErrorData error(ex);
