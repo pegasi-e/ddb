@@ -417,8 +417,10 @@ TableStorageInfo DataTable::GetStorageInfo() {
 void DataTable::Fetch(DuckTransaction &transaction, DataChunk &result, const vector<StorageIndex> &column_ids,
                       const Vector &row_identifiers, idx_t fetch_count, ColumnFetchState &state,
                       bool fetch_current_update) {
-	auto lock = info->checkpoint_lock.GetSharedLock();
+	auto lock = transaction.SharedLockTable(*info);
+	// Begin Anybase change
 	row_groups->Fetch(transaction, result, column_ids, row_identifiers, fetch_count, state, fetch_current_update);
+	// End Anybase change
 }
 // end Anybase changes
 

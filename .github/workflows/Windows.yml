@@ -98,6 +98,15 @@ jobs:
     #   run: |
     #     test/Release/unittest.exe
 
+    # - name: Test with VS2019 C++ stdlib
+    #   shell: bash
+    #   if: ${{ inputs.skip_tests != 'true' }}
+    #   run: |
+    #     choco install wget -y --no-progress
+    #     wget -P test/Release https://blobs.duckdb.org/ci/msvcp140.dll
+    #     test/Release/unittest.exe
+    #     rm test/Release/msvcp140.dll
+
     # - name: Tools Test
     #   shell: bash
     #   if: ${{ inputs.skip_tests != 'true' }}
@@ -130,9 +139,9 @@ jobs:
         AWS_SECRET_ACCESS_KEY: ${{ secrets.S3_DUCKDB_STAGING_KEY }}
       run: |
         python scripts/amalgamation.py
-        choco install zip -y --force
-        zip -j duckdb_cli-windows-amd64.zip Release/duckdb.exe
-        zip -j libduckdb-windows-amd64.zip src/Release/duckdb.dll src/Release/duckdb.lib src/amalgamation/duckdb.hpp src/include/duckdb.h
+        /c/msys64/usr/bin/bash.exe -lc "pacman -Sy --noconfirm zip"
+        /c/msys64/usr/bin/zip.exe -j duckdb_cli-windows-amd64.zip Release/duckdb.exe
+        /c/msys64/usr/bin/zip.exe -j libduckdb-windows-amd64.zip src/Release/duckdb.dll src/Release/duckdb.lib src/amalgamation/duckdb.hpp src/include/duckdb.h
         ./scripts/upload-assets-to-staging.sh github_release libduckdb-windows-amd64.zip duckdb_cli-windows-amd64.zip
 
     - uses: actions/upload-artifact@v4
@@ -146,6 +155,7 @@ jobs:
     - name: Duckdb.dll export symbols with C++ on Windows
       shell: bash
       run: cl -I src/include examples/embedded-c++-windows/cppintegration.cpp -link src/Release/duckdb.lib
+
 
 #  win-release-32:
 #     name: Windows (32 Bit)
@@ -239,9 +249,9 @@ jobs:
          AWS_SECRET_ACCESS_KEY: ${{ secrets.S3_DUCKDB_STAGING_KEY }}
        run: |
          python scripts/amalgamation.py
-         choco install zip -y --force
-         zip -j duckdb_cli-windows-arm64.zip Release/duckdb.exe
-         zip -j libduckdb-windows-arm64.zip src/Release/duckdb.dll src/Release/duckdb.lib src/amalgamation/duckdb.hpp src/include/duckdb.h
+         /c/msys64/usr/bin/bash.exe -lc "pacman -Sy --noconfirm zip"
+         /c/msys64/usr/bin/zip.exe -j duckdb_cli-windows-arm64.zip Release/duckdb.exe
+         /c/msys64/usr/bin/zip.exe -j libduckdb-windows-arm64.zip src/Release/duckdb.dll src/Release/duckdb.lib src/amalgamation/duckdb.hpp src/include/duckdb.h
          ./scripts/upload-assets-to-staging.sh github_release libduckdb-windows-arm64.zip duckdb_cli-windows-arm64.zip
 
      - uses: actions/upload-artifact@v4
@@ -250,6 +260,7 @@ jobs:
          path: |
            libduckdb-windows-arm64.zip
            duckdb_cli-windows-arm64.zip
+
 
 #  mingw:
 #      name: MinGW (64 Bit)
@@ -266,6 +277,12 @@ jobs:
 #            update: true
 #            install: git mingw-w64-x86_64-toolchain mingw-w64-x86_64-cmake mingw-w64-x86_64-ninja
 #            cache: ${{ github.ref == 'refs/heads/main' || github.repository != 'duckdb/duckdb' }}
+
+#        # see here: https://gist.github.com/scivision/1de4fd6abea9ba6b2d87dc1e86b5d2ce
+#        - name: Put MSYS2_MinGW64 on PATH
+#          # there is not yet an environment variable for this path from msys2/setup-msys2
+#          shell: msys2 {0}
+#          run: export PATH=D:/a/_temp/msys/msys64/mingw64/bin:$PATH
 
 #        # see here: https://gist.github.com/scivision/1de4fd6abea9ba6b2d87dc1e86b5d2ce
 #        - name: Put MSYS2_MinGW64 on PATH
@@ -290,6 +307,7 @@ jobs:
 #          run: |
 #            cp src/libduckdb.dll .
 #            test/unittest.exe
+
 
 #        - name: Tools Test
 #          shell: msys2 {0}
@@ -317,9 +335,6 @@ jobs:
 #        with:
 #          python-version: '3.12'
 
-#      - name: Setup Rust
-#        uses: dtolnay/rust-toolchain@stable
-
 #      - uses: ./.github/actions/build_extensions
 #        with:
 #          vcpkg_target_triplet: x64-windows-static-md
@@ -344,6 +359,7 @@ jobs:
 #       extension_artifact_name: duckdb-extensions-windows_amd64
 #       duckdb_arch: windows_amd64
 #       duckdb_sha: ${{ github.sha }}
+
 
 #  win-packaged-upload:
 #    runs-on: windows-latest
