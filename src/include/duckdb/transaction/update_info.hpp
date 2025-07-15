@@ -63,7 +63,7 @@ struct UpdateInfo {
 		// these tuples were either committed AFTER this transaction started or are not committed yet, use
 		// tuples stored in this version
 		if (version_number > start_time) {
-			if (fetch_current_update && version_number != transaction_id ||
+			if ((fetch_current_update && version_number != transaction_id) ||
 				(!fetch_current_update && version_number == transaction_id)) {
 				return true;
 			}
