@@ -79,6 +79,11 @@ if (EXTENSION_STATIC_BUILD AND "${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
   endif()
 endif()
 
+option(SHADOW_FORBIDDEN_FUNCTIONS "Compile time test on usage of deprecated functions" FALSE)
+if (SHADOW_FORBIDDEN_FUNCTIONS)
+  set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -include 'duckdb/common/shadow_forbidden_functions.hpp'")
+endif()
+
 option(DISABLE_UNITY "Disable unity builds." FALSE)
 option(USE_WASM_THREADS "Should threads be used" FALSE)
 if (${USE_WASM_THREADS})
@@ -102,6 +107,11 @@ endif()
 
 if (DUCKDB_EXPLICIT_PLATFORM)
     add_definitions(-DDUCKDB_CUSTOM_PLATFORM=${DUCKDB_EXPLICIT_PLATFORM})
+endif()
+
+option (BUILD_COMPLETE_EXTENSION_SET "Whether we need to actually build the complete set" TRUE)
+if (DEFINED ENV{BUILD_COMPLETE_EXTENSION_SET})
+     set(BUILD_COMPLETE_EXTENSION_SET "$ENV{BUILD_COMPLETE_EXTENSION_SET}")
 endif()
 
 option (WASM_ENABLED "Are DuckDB-Wasm extensions build enabled" FALSE)

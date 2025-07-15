@@ -591,16 +591,26 @@ void BaseAppender::Close() {
 	}
 }
 
+Merger::Merger(Connection &con, const string &database_name, const string &schema_name,
+							const string &table_name, const vector<string> &column_names)
+	: Appender(con, database_name, schema_name, table_name, column_names) {
+
+}
+
 Merger::Merger(Connection &con, const string &schema_name, const string &table_name, const vector<string> &column_names)
-	: Appender(con, INVALID_CATALOG, schema_name, table_name, column_names) {
+	: Merger(con, INVALID_CATALOG, schema_name, table_name, column_names) {
 }
 
 Merger::Merger(Connection &con, const string &table_name, const vector<string> &column_names)
 	: Merger(con, DEFAULT_SCHEMA, table_name, column_names) {
 }
 
+Merger::Merger(Connection &con, const string &database_name, const string &schema_name, const string &table_name)
+	: Appender(con, database_name, schema_name, table_name) {
+}
+
 Merger::Merger(Connection &con, const string &schema_name, const string &table_name)
-	: Appender(con, schema_name, table_name) {
+	: Merger(con, INVALID_CATALOG, schema_name, table_name) {
 }
 
 Merger::Merger(Connection &con, const string &table_name)

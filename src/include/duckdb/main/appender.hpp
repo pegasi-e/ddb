@@ -165,8 +165,11 @@ protected:
 class Merger : public Appender {
 public:
 	// Mergers and inserts columns for the given column names.
+	DUCKDB_API Merger(Connection &con, const string &database_name, const string &schema_name,
+						const string &table_name, const vector<string> &column_names);
 	DUCKDB_API Merger(Connection &con, const string &schema_name, const string &table_name, const vector<string> &column_names);
 	DUCKDB_API Merger(Connection &con, const string &schema_name, const string &table_name);
+	DUCKDB_API Merger(Connection &con, const string &database_name, const string &schema_name, const string &table_name);
 	DUCKDB_API Merger(Connection &con, const string &table_name, const vector<string> &column_names);
 	DUCKDB_API Merger(Connection &con, const string &table_name);
 	DUCKDB_API ~Merger() override;
