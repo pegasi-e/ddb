@@ -197,69 +197,69 @@ jobs:
 #     #     tools/sqlite3_api_wrapper/Release/test_sqlite3_api_wrapper.exe
 
 
- win-release-arm64:
-   name: Windows (ARM64)
-   if: github.ref == 'refs/heads/main' || github.repository != 'duckdb/duckdb' || inputs.run_all == 'true'
-   runs-on: windows-latest
-   needs: win-release-64
+#  win-release-arm64:
+#    name: Windows (ARM64)
+#    if: github.ref == 'refs/heads/main' || github.repository != 'duckdb/duckdb' || inputs.run_all == 'true'
+#    runs-on: windows-latest
+#    needs: win-release-64
 
-   steps:
-     - uses: actions/checkout@v4
-       with:
-         fetch-depth: 0
-         ref: ${{ inputs.git_ref }}
+#    steps:
+#      - uses: actions/checkout@v4
+#        with:
+#          fetch-depth: 0
+#          ref: ${{ inputs.git_ref }}
 
-     - uses: actions/setup-python@v5
-       with:
-         python-version: '3.12'
+#      - uses: actions/setup-python@v5
+#        with:
+#          python-version: '3.12'
 
-     - name: Setup Ccache
-       uses: hendrikmuhs/ccache-action@main
-       with:
-         key: ${{ github.job }}
-         save: ${{ github.ref == 'refs/heads/main' || github.repository != 'duckdb/duckdb' }}
+#      - name: Setup Ccache
+#        uses: hendrikmuhs/ccache-action@main
+#        with:
+#          key: ${{ github.job }}
+#          save: ${{ github.ref == 'refs/heads/main' || github.repository != 'duckdb/duckdb' }}
 
-     - name: Build
-       shell: bash
-       run: |
-         cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_GENERATOR_PLATFORM=ARM64 -DDUCKDB_EXTENSION_CONFIGS="${GITHUB_WORKSPACE}/.github/config/bundled_extensions.cmake" -DOVERRIDE_GIT_DESCRIBE="$OVERRIDE_GIT_DESCRIBE" -DDUCKDB_EXPLICIT_PLATFORM=windows_arm64 -DDUCKDB_CUSTOM_PLATFORM=windows_arm64 -DBUILD_UNITTESTS=FALSE
-         cmake --build . --config Release --parallel
+#      - name: Build
+#        shell: bash
+#        run: |
+#          cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_GENERATOR_PLATFORM=ARM64 -DDUCKDB_EXTENSION_CONFIGS="${GITHUB_WORKSPACE}/.github/config/bundled_extensions.cmake" -DOVERRIDE_GIT_DESCRIBE="$OVERRIDE_GIT_DESCRIBE" -DDUCKDB_EXPLICIT_PLATFORM=windows_arm64 -DDUCKDB_CUSTOM_PLATFORM=windows_arm64 -DBUILD_UNITTESTS=FALSE
+#          cmake --build . --config Release --parallel
 
-    #  - name: Sign files with Azure Trusted Signing (TM)
-    #    if: github.repository == 'duckdb/duckdb' && github.event_name != 'pull_request'
-    #    uses: azure/trusted-signing-action@v0
-    #    with:
-    #      azure-tenant-id:              ${{ secrets.AZURE_CODESIGN_TENANT_ID }}
-    #      azure-client-id:              ${{ secrets.AZURE_CODESIGN_CLIENT_ID }}
-    #      azure-client-secret:          ${{ secrets.AZURE_CODESIGN_CLIENT_SECRET }}
-    #      endpoint:                     ${{ env.AZURE_CODESIGN_ENDPOINT }}
-    #      trusted-signing-account-name: ${{ env.AZURE_CODESIGN_ACCOUNT }}
-    #      certificate-profile-name:     ${{ env.AZURE_CODESIGN_PROFILE }}
-    #      files-folder:                 ${{ github.workspace }}
-    #      files-folder-filter:          exe,dll
-    #      files-folder-recurse:         true
-    #      file-digest:                  SHA256
-    #      timestamp-rfc3161:            http://timestamp.acs.microsoft.com
-    #      timestamp-digest:             SHA256
+#     #  - name: Sign files with Azure Trusted Signing (TM)
+#     #    if: github.repository == 'duckdb/duckdb' && github.event_name != 'pull_request'
+#     #    uses: azure/trusted-signing-action@v0
+#     #    with:
+#     #      azure-tenant-id:              ${{ secrets.AZURE_CODESIGN_TENANT_ID }}
+#     #      azure-client-id:              ${{ secrets.AZURE_CODESIGN_CLIENT_ID }}
+#     #      azure-client-secret:          ${{ secrets.AZURE_CODESIGN_CLIENT_SECRET }}
+#     #      endpoint:                     ${{ env.AZURE_CODESIGN_ENDPOINT }}
+#     #      trusted-signing-account-name: ${{ env.AZURE_CODESIGN_ACCOUNT }}
+#     #      certificate-profile-name:     ${{ env.AZURE_CODESIGN_PROFILE }}
+#     #      files-folder:                 ${{ github.workspace }}
+#     #      files-folder-filter:          exe,dll
+#     #      files-folder-recurse:         true
+#     #      file-digest:                  SHA256
+#     #      timestamp-rfc3161:            http://timestamp.acs.microsoft.com
+#     #      timestamp-digest:             SHA256
 
-     - name: Deploy
-       shell: bash
-       env:
-         AWS_ACCESS_KEY_ID: ${{ secrets.S3_DUCKDB_STAGING_ID }}
-         AWS_SECRET_ACCESS_KEY: ${{ secrets.S3_DUCKDB_STAGING_KEY }}
-       run: |
-         python scripts/amalgamation.py
-         /c/msys64/usr/bin/bash.exe -lc "pacman -Sy --noconfirm zip"
-         /c/msys64/usr/bin/zip.exe -j duckdb_cli-windows-arm64.zip Release/duckdb.exe
-         /c/msys64/usr/bin/zip.exe -j libduckdb-windows-arm64.zip src/Release/duckdb.dll src/Release/duckdb.lib src/amalgamation/duckdb.hpp src/include/duckdb.h
-         ./scripts/upload-assets-to-staging.sh github_release libduckdb-windows-arm64.zip duckdb_cli-windows-arm64.zip
+#      - name: Deploy
+#        shell: bash
+#        env:
+#          AWS_ACCESS_KEY_ID: ${{ secrets.S3_DUCKDB_STAGING_ID }}
+#          AWS_SECRET_ACCESS_KEY: ${{ secrets.S3_DUCKDB_STAGING_KEY }}
+#        run: |
+#          python scripts/amalgamation.py
+#          /c/msys64/usr/bin/bash.exe -lc "pacman -Sy --noconfirm zip"
+#          /c/msys64/usr/bin/zip.exe -j duckdb_cli-windows-arm64.zip Release/duckdb.exe
+#          /c/msys64/usr/bin/zip.exe -j libduckdb-windows-arm64.zip src/Release/duckdb.dll src/Release/duckdb.lib src/amalgamation/duckdb.hpp src/include/duckdb.h
+#          ./scripts/upload-assets-to-staging.sh github_release libduckdb-windows-arm64.zip duckdb_cli-windows-arm64.zip
 
-     - uses: actions/upload-artifact@v4
-       with:
-         name: duckdb-binaries-windows-arm64
-         path: |
-           libduckdb-windows-arm64.zip
-           duckdb_cli-windows-arm64.zip
+#      - uses: actions/upload-artifact@v4
+#        with:
+#          name: duckdb-binaries-windows-arm64
+#          path: |
+#            libduckdb-windows-arm64.zip
+#            duckdb_cli-windows-arm64.zip
 
 
 #  mingw:
