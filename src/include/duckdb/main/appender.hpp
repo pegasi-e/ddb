@@ -147,7 +147,6 @@ protected:
 
 // start Anybase changes
 public:
-	// void AppendDataChunkWithDefaults(DataChunk &chunk, const optional_ptr<const vector<string>> &column_names);
 	//! A reference to a database connection that created this appender
 	shared_ptr<ClientContext> context;
 	//! The table description (including column names)
