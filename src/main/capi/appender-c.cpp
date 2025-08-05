@@ -15,10 +15,7 @@ using duckdb::uhugeint_t;
 
 // start Anybase changes
 using duckdb::Merger;
-using duckdb::string;
-using duckdb::vector;
 
-// Start Anybase Changes
 template <class TYPE>
 // End Anybase Changes
 duckdb_state duckdb_appender_create_base(duckdb_connection connection, const char *catalog, const char *schema,
@@ -52,6 +49,7 @@ const char *table, duckdb_appender *out_appender) {
 	return DuckDBSuccess;
 }
 
+// start Anybase changes
 duckdb_state duckdb_appender_create_ext(duckdb_connection connection, const char *catalog, const char *schema,
 										const char *table, duckdb_appender *out_appender) {
 	return duckdb_appender_create_base<Appender>(connection, catalog, schema, table, out_appender);

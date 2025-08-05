@@ -1223,6 +1223,7 @@ static unordered_set<column_t> ExtractConflictTarget(DataTable &data_table) {
 	return conflict_target;
 }
 
+// start Anybase changes
 void ClientContext::Merge(TableDescription &description, DataChunk& chunk,
 	optional_ptr<const vector<LogicalIndex>> column_ids) {
 	ColumnDataCollection collection(Allocator::DefaultAllocator());
@@ -1234,6 +1235,7 @@ void ClientContext::Merge(TableDescription &description, ColumnDataCollection &c
 	optional_ptr<const vector<LogicalIndex>> column_ids) {
 
 	RunFunctionInTransaction([&]() {
+		// TODO: Push most of this logic into LocalMerge to align with LocalAppend
 		auto &table_entry =
 			Catalog::GetEntry<TableCatalogEntry>(*this, INVALID_CATALOG, description.schema, description.table);
 
@@ -1310,81 +1312,8 @@ void ClientContext::Merge(TableDescription &description, ColumnDataCollection &c
 		storage.Merge(table_entry, *this, reordered_collection, bound_constraints, conflict_target, set_columns);
 	});
 }
-
-
-// void ClientContext::Append(TableDescription &description, ColumnDataCollection &collection,
-// 						   optional_ptr<const vector<LogicalIndex>> column_ids) {
-//
-// 	RunFunctionInTransaction([&]() {
-// 		// Copy the column descriptors to ensure we don't steal them from the TableDescription
-// 		auto column_descriptors = make_uniq<vector<ColumnDefinition>>();
-// 		for (auto &column_definition : description.columns) {
-// 			column_descriptors->push_back(column_definition.Copy());
-// 		}
-//
-// 		auto column_list = ColumnList(std::move(*column_descriptors));
-// 		auto &table_entry =
-// 			Catalog::GetEntry<TableCatalogEntry>(*this, description.database, description.schema, description.table);
-//
-// 		// verify that the table columns and types match up
-// 		if (description.PhysicalColumnCount() != table_entry.GetColumns().PhysicalColumnCount()) {
-//
-// 			physical_index_vector_t<idx_t> column_index_map;
-// 			vector<LogicalType> table_types;
-//
-// 			for (auto &column : table_entry.GetColumns().Physical()) {
-// 				auto column_name = column.Name();
-// 				auto idx = column_list.GetColumnIndex(column_name);
-// 				if (idx.IsValid()) {
-// 					column_index_map.push_back(idx.index);
-// 				} else {
-// 					column_index_map.push_back(DConstants::INVALID_INDEX);
-// 				}
-// 				table_types.push_back(column.Type());
-// 			}
-//
-// 			auto &storage = table_entry.GetStorage();
-// 			auto conflict_target = ExtractConflictTarget(storage);
-// 			vector<unique_ptr<Expression>> defaults;
-// 			auto binder = Binder::CreateBinder(*this);
-// 			binder->BindDefaultValues(table_entry.GetColumns(), defaults);
-// 			 auto bound_constraints = binder->BindConstraints(table_entry);
-// 			MetaTransaction::Get(*this).ModifyDatabase(table_entry.ParentCatalog().GetAttached());
-//
-// 			ExpressionExecutor default_executor(*this, defaults);
-// 			ColumnDataCollection reordered_collection(collection.GetAllocator(), table_types);
-//
-// 			for (auto &c : collection.Chunks()) {
-// 				DataChunk result_chunk;
-// 				result_chunk.Initialize(collection.GetAllocator(), table_types);
-// 				PhysicalInsert::ResolveDefaults(table_entry, c, column_index_map, default_executor, result_chunk);
-// 				reordered_collection.Append(result_chunk);
-// 			}
-//
-// 			collection.Reset();
-// 			collection.Initialize(table_types);
-// 			collection.Combine(reordered_collection);
-// 		}
-//
-// 		idx_t table_entry_col_idx = 0;
-// 		for (idx_t i = 0; i < description.columns.size(); i++) {
-// 			auto &column = description.columns[i];
-// 			if (column.Generated()) {
-// 				continue;
-// 			}
-// 			if (column.Type() != table_entry.GetColumns().GetColumn(PhysicalIndex(table_entry_col_idx)).Type()) {
-// 				throw InvalidInputException("Failed to append: table entry has different number of columns!");
-// 			}
-// 			table_entry_col_idx++;
-// 		}
-// 		auto binder = Binder::CreateBinder(*this);
-// 		auto bound_constraints = binder->BindConstraints(table_entry);
-// 		MetaTransaction::Get(*this).ModifyDatabase(table_entry.ParentCatalog().GetAttached());
-// 		table_entry.GetStorage().LocalAppend(table_entry, *this, collection, bound_constraints, column_ids);
-// 	});
-// }
-// end Anybase changes
-
+//end Anybase changes
+	
 void ClientContext::Append(TableDescription &description, ColumnDataCollection &collection,
                            optional_ptr<const vector<LogicalIndex>> column_ids) {
 
