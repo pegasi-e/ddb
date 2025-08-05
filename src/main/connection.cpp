@@ -183,8 +183,8 @@ unique_ptr<TableDescription> Connection::TableInfo(const string &schema_name, co
 	return context->TableInfo(schema_name, table_name, column_names);
 }
 
-void Connection::Merge(TableDescription &description, DataChunk &chunk) {
-	context->Merge(description, chunk);
+void Connection::Merge(TableDescription &description, DataChunk &chunk, optional_ptr<const vector<LogicalIndex>> column_ids) {
+	context->Merge(description, chunk, column_ids);
 }
 
 uint64_t Connection::GetSnapshotId() {

@@ -1223,39 +1223,58 @@ static unordered_set<column_t> ExtractConflictTarget(DataTable &data_table) {
 	return conflict_target;
 }
 
-void ClientContext::Merge(TableDescription &description, DataChunk& chunk) {
+// start Anybase changes
+void ClientContext::Merge(TableDescription &description, DataChunk& chunk,
+	optional_ptr<const vector<LogicalIndex>> column_ids) {
 	ColumnDataCollection collection(Allocator::DefaultAllocator());
 	collection.Append(chunk);
-	Merge(description, collection);
+	Merge(description, collection, column_ids);
 }
 
-void ClientContext::Merge(TableDescription &description, ColumnDataCollection &collection) {
+void ClientContext::Merge(TableDescription &description, ColumnDataCollection &collection,
+	optional_ptr<const vector<LogicalIndex>> column_ids) {
+
 	RunFunctionInTransaction([&]() {
+		// TODO: Push most of this logic into LocalMerge to align with LocalAppend
 		auto &table_entry =
-		    Catalog::GetEntry<TableCatalogEntry>(*this, INVALID_CATALOG, description.schema, description.table);
+			Catalog::GetEntry<TableCatalogEntry>(*this, INVALID_CATALOG, description.schema, description.table);
+
+
+		auto column_descriptors = make_uniq<vector<ColumnDefinition>>();
+
 		// verify that the table columns and types match up
-		if (description.columns.size() != collection.ColumnCount()) {
-			throw InvalidInputException("Failed to append: table entry has different number of columns!");
-		}
-		for (idx_t i = 0; i < description.columns.size(); i++) {
-			if (description.columns[i].Type() != collection.Types()[i]) {
+		if (column_ids->empty()) {
+			if (collection.ColumnCount() != table_entry.GetColumns().PhysicalColumnCount()) {
 				throw InvalidInputException("Failed to append: table entry has different number of columns!");
 			}
-		}
 
-		// Copy the column descriptors to ensure we don't steal them from the TableDescription
-		auto column_descriptors = make_uniq<vector<ColumnDefinition>>();
-		for (auto &column_definition : description.columns) {
-			column_descriptors->push_back(column_definition.Copy());
+			// Copy the column descriptors to ensure we don't steal them from the TableDescription
+			for (auto &column : table_entry.GetColumns().Physical()) {
+				column_descriptors->push_back(column.Copy());
+			}
+		} else {
+			// If column ids have been specified, assume this is a partial update or insert with defaults for columns not given
+			if (column_ids->size() != collection.ColumnCount()) {
+				throw InvalidInputException("Failed to append: table entry has different number of columns!");
+			}
+
+			// Copy the column descriptors to ensure we don't steal them from the TableDescription
+			for (idx_t i = 0; i < column_ids->size(); i++) {
+				auto &column = table_entry.GetColumn(column_ids->at(i));
+				if (column.Type() != collection.Types()[i]) {
+					throw InvalidInputException("Failed to append: table entry has different number of columns!");
+				}
+				column_descriptors->push_back(column.Copy());
+			}
 		}
 
 		auto &storage = table_entry.GetStorage();
 		auto conflict_target = ExtractConflictTarget(storage);
-	  	auto column_list = ColumnList(std::move(*column_descriptors));
+		auto column_list = ColumnList(std::move(*column_descriptors));
 		vector<unique_ptr<Expression>> defaults;
 		auto binder = Binder::CreateBinder(*this);
-	  	binder->BindDefaultValues(table_entry.GetColumns(), defaults);
-	  	auto bound_constraints = binder->BindConstraints(table_entry);
+		binder->BindDefaultValues(table_entry.GetColumns(), defaults);
+		auto bound_constraints = binder->BindConstraints(table_entry);
 		MetaTransaction::Get(*this).ModifyDatabase(table_entry.ParentCatalog().GetAttached());
 
 		vector<PhysicalIndex> set_columns;
@@ -1293,8 +1312,8 @@ void ClientContext::Merge(TableDescription &description, ColumnDataCollection &c
 		storage.Merge(table_entry, *this, reordered_collection, bound_constraints, conflict_target, set_columns);
 	});
 }
-// end Anybase changes
-
+//end Anybase changes
+	
 void ClientContext::Append(TableDescription &description, ColumnDataCollection &collection,
                            optional_ptr<const vector<LogicalIndex>> column_ids) {
 

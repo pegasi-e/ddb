@@ -128,10 +128,6 @@ class Appender : public BaseAppender {
 	//! All table default values.
 	unordered_map<column_t, Value> default_values;
 
-	//! If not empty, then this holds all logical column IDs of columns provided by the appender.
-	//! Any other columns default to NULL, or their default values.
-	vector<LogicalIndex> column_ids;
-
 public:
 	DUCKDB_API Appender(Connection &con, const string &database_name, const string &schema_name,
 	                    const string &table_name);
@@ -150,12 +146,16 @@ protected:
 	Value GetDefaultValue(idx_t column);
 
 // start Anybase changes
-protected:
-	DUCKDB_API Appender(Connection &con, const string &database_name, const string &schema_name, const string &table_name, const optional_ptr<const vector<string>> &column_names);
+public:
 	//! A reference to a database connection that created this appender
 	shared_ptr<ClientContext> context;
 	//! The table description (including column names)
 	unique_ptr<TableDescription> description;
+
+protected:
+	//! If not empty, then this holds all logical column IDs of columns provided by the appender.
+	//! Any other columns default to NULL, or their default values.
+	vector<LogicalIndex> column_ids;
 // end Anybase changes
 };
 
@@ -166,11 +166,8 @@ class Merger : public Appender {
 public:
 	// Mergers and inserts columns for the given column names.
 	DUCKDB_API Merger(Connection &con, const string &database_name, const string &schema_name,
-						const string &table_name, const vector<string> &column_names);
-	DUCKDB_API Merger(Connection &con, const string &schema_name, const string &table_name, const vector<string> &column_names);
+						const string &table_name);
 	DUCKDB_API Merger(Connection &con, const string &schema_name, const string &table_name);
-	DUCKDB_API Merger(Connection &con, const string &database_name, const string &schema_name, const string &table_name);
-	DUCKDB_API Merger(Connection &con, const string &table_name, const vector<string> &column_names);
 	DUCKDB_API Merger(Connection &con, const string &table_name);
 	DUCKDB_API ~Merger() override;
 
