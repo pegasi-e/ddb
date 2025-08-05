@@ -140,7 +140,10 @@ TEST_CASE("Partial merge tests", "[merger]") {
 
 	duckdb::vector<std::string> columns = {"j", "i"};
 
-	Merger merger(con, "integers", columns);
+	Merger merger(con, "integers");
+	for (auto &column : columns) {
+		merger.AddColumn(column);
+	}
 	merger.AppendRow(33, 0);
 	merger.Close();
 
@@ -151,7 +154,10 @@ TEST_CASE("Partial merge tests", "[merger]") {
 
 	duckdb::vector<std::string> columns2 = {"k", "i"};
 
-	Merger merger2(con, "integers", columns2);
+	Merger merger2(con, "integers");
+	for (auto &column : columns2) {
+		merger2.AddColumn(column);
+	}
 	merger2.AppendRow(44, 0);
 	merger2.Close();
 
@@ -181,7 +187,10 @@ TEST_CASE("Merger new rows add defaults", "[merger]") {
 
 	duckdb::vector<std::string> columns = {"j", "i"};
 
-	Merger merger(con, "integers", columns);
+	Merger merger(con, "integers");
+	for (auto &column : columns) {
+		merger.AddColumn(column);
+	}
 	merger.AppendRow(33, 1);
 	merger.Close();
 

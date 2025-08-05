@@ -1,3 +1,5 @@
+#include <capi_tester.hpp>
+
 #include "catch.hpp"
 #include "duckdb/main/appender.hpp"
 #include "test_helpers.hpp"
@@ -578,6 +580,12 @@ void setDataChunkInt32(DataChunk &chunk, idx_t col_idx, idx_t row_idx, int32_t v
 	data[row_idx] = value;
 }
 
+void setDataChunkDouble(DataChunk &chunk, idx_t col_idx, idx_t row_idx, double_t value) {
+	auto &col = chunk.data[col_idx];
+	auto data = FlatVector::GetData<double_t>(col);
+	data[row_idx] = value;
+}
+
 TEST_CASE("Test appending with an active default column", "[appender]") {
 	duckdb::unique_ptr<QueryResult> result;
 	DuckDB db(nullptr);
@@ -836,5 +844,127 @@ TEST_CASE("big_insert", "[appender]") {
 	result = con.Query("select COUNT(j) filter (where j != 0) from integers;");
 	REQUIRE(CHECK_COLUMN(result, 0, {1250}));
 	// REQUIRE(((MaterializedQueryResult *) result)->RowCount() == 5);
+}
+
+TEST_CASE("Test appending with column defaults C API", "[capi]") {
+
+	duckdb::unique_ptr<QueryResult> result;
+	DuckDB db(nullptr);
+	Connection con(db);
+
+	REQUIRE_NO_FAIL(con.Query("CREATE TABLE test (i INTEGER PRIMARY KEY, d double, s string default 'Hello')"));
+	REQUIRE_NO_FAIL(con.Query("insert into test (i, d) values (42, 0.0)"));
+	Merger appender(con, "test");
+	appender.AddColumn("d");
+	appender.AddColumn("i");
+
+	DataChunk chunk;
+	const duckdb::vector<LogicalType> types = {LogicalType::DOUBLE, LogicalType::INTEGER};
+	chunk.Initialize(*con.context, types);
+
+	setDataChunkDouble(chunk, 0, 0, 4.3);
+	setDataChunkInt32(chunk, 1, 0, 42);
+
+	chunk.SetCardinality(1);
+	appender.AppendDataChunk(chunk);
+	appender.Close();
+
+	result = con.Query("SELECT i, d, s FROM test");
+	REQUIRE(CHECK_COLUMN(result, 0, {42}));
+	REQUIRE(CHECK_COLUMN(result, 1, {4.3}));
+	REQUIRE(CHECK_COLUMN(result, 2, {"Hello"}));
+
+
+
+
+
+	// CAPITester tester;
+	// duckdb::unique_ptr<CAPIResult> result;
+	// duckdb_state status;
+	//
+	// // open the database in in-memory mode
+	// REQUIRE(tester.OpenDatabase(nullptr));
+	//
+	// tester.Query("CREATE TABLE test (i INTEGER PRIMARY KEY, d double, s string default 'Hello, World')");
+	// duckdb_appender appender;
+	// status = duckdb_appender_create_anybase(tester.connection, nullptr, nullptr, "test", nullptr, &appender);
+	// REQUIRE(status == DuckDBSuccess);
+	// REQUIRE(duckdb_appender_error(appender) == nullptr);
+	//
+	// DataChunk chunk;
+	// const duckdb::vector<LogicalType> types = {LogicalType::INTEGER};
+	// chunk.Initialize(*con.context, types);
+	//
+	// setDataChunkInt32(chunk, 0, 0, 42);
+	// setDataChunkInt32(chunk, 0, 1, 43);
+	//
+	// chunk.SetCardinality(2);
+	// appender.AppendDataChunk(chunk);
+	// appender.Close();
+	//
+	// // status = duckdb_appender_begin_row(appender);
+	// // REQUIRE(status == DuckDBSuccess);
+	// //
+	// // status = duckdb_append_int32(appender, 42);
+	// // REQUIRE(status == DuckDBSuccess);
+	// //
+	// // status = duckdb_append_double(appender, 4.2);
+	// // REQUIRE(status == DuckDBSuccess);
+	// //
+	// // status = duckdb_appender_end_row(appender);
+	// // REQUIRE(status == DuckDBSuccess);
+	//
+	// // we can flush again why not
+	// status = duckdb_appender_flush(appender);
+	// REQUIRE(status == DuckDBSuccess);
+	//
+	// status = duckdb_appender_close(appender);
+	// REQUIRE(status == DuckDBSuccess);
+	//
+	// status = duckdb_appender_destroy(&appender);
+	// REQUIRE(status == DuckDBSuccess);
+	//
+	// result = tester.Query("SELECT * FROM test");
+	// REQUIRE_NO_FAIL(*result);
+	// REQUIRE(result->Fetch<int32_t>(0, 0) == 42);
+	// REQUIRE(result->Fetch<double>(1, 0) == 4.2);
+	// REQUIRE(result->Fetch<string>(2, 0) == "Hello, World");
+	//
+	// duckdb_appender merger1;
+	// status = duckdb_appender_create_anybase(tester.connection, nullptr, nullptr, "test", nullptr, &merger1);
+	// REQUIRE(status == DuckDBSuccess);
+	// REQUIRE(duckdb_appender_error(merger1) == nullptr);
+	//
+	// status = duckdb_appender_begin_row(merger1);
+	// REQUIRE(status == DuckDBSuccess);
+	//
+	// status = duckdb_append_int32(merger1, 43);
+	// REQUIRE(status == DuckDBSuccess);
+	//
+	// status = duckdb_append_double(merger1, 8.2);
+	// REQUIRE(status == DuckDBSuccess);
+	//
+	// status = duckdb_append_varchar(merger1, "Hello, World Again");
+	// REQUIRE(status == DuckDBSuccess);
+	//
+	// status = duckdb_appender_end_row(merger1);
+	// REQUIRE(status == DuckDBSuccess);
+	//
+	// // we can flush again why not
+	// status = duckdb_appender_flush(merger1);
+	// REQUIRE(status == DuckDBSuccess);
+	//
+	// status = duckdb_appender_close(merger1);
+	// REQUIRE(status == DuckDBSuccess);
+	//
+	// status = duckdb_appender_destroy(&merger1);
+	// REQUIRE(status == DuckDBSuccess);
+	// result = tester.Query("SELECT * FROM test");
+	// REQUIRE_NO_FAIL(*result);
+	// REQUIRE(result->Fetch<int32_t>(0, 1) == 43);
+	// REQUIRE(result->Fetch<double>(1, 1) == 8.2);
+	// REQUIRE(result->Fetch<string>(2, 1) == "Hello, World Again");
+	//
+	// tester.Cleanup();
 }
 // end Anybase changes

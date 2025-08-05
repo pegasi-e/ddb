@@ -125,7 +125,7 @@ public:
 	//! Get the table info of a specific table, or nullptr if it cannot be found. Uses INVALID_CATALOG.
 	//! Get the table info of a specific table with only the columns specified, or nullptr if it cannot be found
 	DUCKDB_API unique_ptr<TableDescription> TableInfo(const string &schema_name, const string &table_name, const optional_ptr<const vector<string>> column_names = nullptr);
-	DUCKDB_API void Merge(TableDescription &description, DataChunk &chunk);
+	DUCKDB_API void Merge(TableDescription &description, DataChunk &chunk, optional_ptr<const vector<LogicalIndex>> column_ids);
 	DUCKDB_API uint64_t GetSnapshotId();
 	DUCKDB_API uint64_t CheckpointAndGetSnapshotId();
 	DUCKDB_API pair<string, unique_ptr<QueryResult>> CreateSnapshot();

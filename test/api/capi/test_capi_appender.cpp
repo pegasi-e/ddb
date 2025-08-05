@@ -1202,7 +1202,19 @@ TEST_CASE("Test merger statements in C API", "[capi]") {
 
 	tester.Query("CREATE TABLE test (i INTEGER PRIMARY KEY, d double, s string)");
 	duckdb_appender merger;
-	status = duckdb_merger_create(tester.connection, nullptr, "test", "i, d, s", &merger);
+	status = duckdb_merger_create(tester.connection, nullptr, "test", &merger);
+	REQUIRE(status == DuckDBSuccess);
+	REQUIRE(duckdb_appender_error(merger) == nullptr);
+
+	status = duckdb_appender_add_column(merger,"i");
+	REQUIRE(status == DuckDBSuccess);
+	REQUIRE(duckdb_appender_error(merger) == nullptr);
+
+	status = duckdb_appender_add_column(merger,"d");
+	REQUIRE(status == DuckDBSuccess);
+	REQUIRE(duckdb_appender_error(merger) == nullptr);
+
+	status = duckdb_appender_add_column(merger,"s");
 	REQUIRE(status == DuckDBSuccess);
 	REQUIRE(duckdb_appender_error(merger) == nullptr);
 
@@ -1238,7 +1250,7 @@ TEST_CASE("Test merger statements in C API", "[capi]") {
 	REQUIRE(result->Fetch<string>(2, 0) == "Hello, World");
 
 	duckdb_appender merger1;
-	status = duckdb_merger_create(tester.connection, nullptr, "test", nullptr, &merger1);
+	status = duckdb_merger_create(tester.connection, nullptr, "test", &merger1);
 	REQUIRE(status == DuckDBSuccess);
 	REQUIRE(duckdb_appender_error(merger1) == nullptr);
 

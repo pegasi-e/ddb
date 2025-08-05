@@ -4832,14 +4832,26 @@ Note that the object must be destroyed with `duckdb_appender_destroy`.
 * @param schema The schema of the table to append to, or `nullptr` for the default schema.
 * @param catalog The catalog of the table to append to, or `nullptr` for the default catalog.
 * @param table The table name to append to.
-* @param column_names A comma seperated string of column names to merge or `nullptr` for all columns
 * @param out_appender The resulting appender object.
 * @returns `DuckDBSuccess` on success or `DuckDBError` on failure.
 */
 DUCKDB_C_API duckdb_state duckdb_merger_create_ext(duckdb_connection connection, const char *catalog, const char *schema,
-											 const char *table, const char *column_names, duckdb_appender *out_appender);
+											 const char *table, duckdb_appender *out_appender);
+
+/*!
+Creates an merger object that allows upsert style merges with existing data while appending new data.
+
+Note that the object must be destroyed with `duckdb_appender_destroy`.
+
+* @param connection The connection context to create the appender in.
+* @param schema The schema of the table to append to, or `nullptr` for the default schema.
+* @param table The table name to append to.
+* @param out_appender The resulting appender object.
+* @returns `DuckDBSuccess` on success or `DuckDBError` on failure.
+*/
 DUCKDB_C_API duckdb_state duckdb_merger_create(duckdb_connection connection, const char *schema,
-											  const char *table, const char *column_names, duckdb_appender *out_appender);
+											  const char *table, duckdb_appender *out_appender);
+
 //===--------------------------------------------------------------------===//
 // Change Data Capture types
 //===--------------------------------------------------------------------===//

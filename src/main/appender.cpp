@@ -60,16 +60,10 @@ InternalAppender::~InternalAppender() {
 	Destructor();
 }
 
-// start Anybase changes
-Appender::Appender(Connection &con, const string &database_name, const string &schema_name, const string &table_name,
-	const optional_ptr<const vector<string>> &column_names)
-// end Anybase changes
+Appender::Appender(Connection &con, const string &database_name, const string &schema_name, const string &table_name)
     : BaseAppender(Allocator::DefaultAllocator(), AppenderType::LOGICAL), context(con.context) {
 
-	// start Anybase changes
-	description = con.TableInfo(database_name, schema_name, table_name, column_names);
-	// end Anybase changes
-
+	description = con.TableInfo(database_name, schema_name, table_name);
 	if (!description) {
 		throw CatalogException(
 		    StringUtil::Format("Table \"%s.%s.%s\" could not be found", database_name, schema_name, table_name));
@@ -125,17 +119,61 @@ Appender::Appender(Connection &con, const string &database_name, const string &s
 }
 
 // start Anybase changes
-Appender::Appender(Connection &con, const string &database_name, const string &schema_name, const string &table_name)
-	: Appender(con, database_name, schema_name, table_name, nullptr) {
-}
-
 Appender::Appender(Connection &con, const string &schema_name, const string &table_name)
-    : Appender(con, INVALID_CATALOG, schema_name, table_name, nullptr) {
+    : Appender(con, INVALID_CATALOG, schema_name, table_name) {
 }
 
 Appender::Appender(Connection &con, const string &table_name)
-    : Appender(con, INVALID_CATALOG, DEFAULT_SCHEMA, table_name, nullptr) {
+    : Appender(con, INVALID_CATALOG, DEFAULT_SCHEMA, table_name) {
 }
+//
+// void Appender::AppendDataChunkWithDefaults(DataChunk &chunk, const optional_ptr<const vector<string>> &column_names) {
+//
+// 	auto &table_entry = Catalog::GetEntry<TableCatalogEntry>(
+// 		*context, description->database, description->schema, description->table);
+//
+// 	// There shouldn't be any defaults needed if the chunk column count matches the physical column count
+// 	if (chunk.ColumnCount() == table_entry.GetColumns().PhysicalColumnCount()) {
+// 		AppendDataChunk(chunk);
+// 	}
+//
+// 	// Allows a chuck to be passed with columns that are not in order
+// 	auto local_description = context->TableInfo(description->database, description->schema, description->table, column_names);//con.TableInfo(database_name, schema_name, table_name, column_names);
+//
+// 	// Copy the column descriptors to ensure we don't steal them from the TableDescription
+// 	auto column_descriptors = make_uniq<vector<ColumnDefinition>>();
+// 	for (auto &column_definition : local_description->columns) {
+// 		column_descriptors->push_back(column_definition.Copy());
+// 	}
+//
+// 	physical_index_vector_t<idx_t> column_index_map;
+// 	vector<LogicalType> table_types;
+//
+// 	auto column_list = ColumnList(std::move(*column_descriptors));
+// 	for (auto &column : table_entry.GetColumns().Physical()) {
+// 		auto column_name = column.Name();
+// 		auto idx = column_list.GetColumnIndex(column_name);
+// 		if (idx.IsValid()) {
+// 			column_index_map.push_back(idx.index);
+// 		} else {
+// 			column_index_map.push_back(DConstants::INVALID_INDEX);
+// 		}
+// 		table_types.push_back(column.Type());
+// 	}
+//
+// 	vector<unique_ptr<Expression>> defaults;
+// 	auto binder = Binder::CreateBinder(*context);
+// 	binder->BindDefaultValues(table_entry.GetColumns(), defaults);
+// 	auto bound_constraints = binder->BindConstraints(table_entry);
+// 	MetaTransaction::Get(*context).ModifyDatabase(table_entry.ParentCatalog().GetAttached());
+//
+// 	ExpressionExecutor default_executor(*context, defaults);
+//
+// 	DataChunk result_chunk;
+// 	result_chunk.Initialize(collection->GetAllocator(), table_types);
+// 	PhysicalInsert::ResolveDefaults(table_entry, chunk, column_index_map, default_executor, result_chunk);
+// 	collection->Append(result_chunk);
+// }
 // end Anybase changes
 
 Appender::~Appender() {
@@ -591,20 +629,7 @@ void BaseAppender::Close() {
 	}
 }
 
-Merger::Merger(Connection &con, const string &database_name, const string &schema_name,
-							const string &table_name, const vector<string> &column_names)
-	: Appender(con, database_name, schema_name, table_name, column_names) {
-
-}
-
-Merger::Merger(Connection &con, const string &schema_name, const string &table_name, const vector<string> &column_names)
-	: Merger(con, INVALID_CATALOG, schema_name, table_name, column_names) {
-}
-
-Merger::Merger(Connection &con, const string &table_name, const vector<string> &column_names)
-	: Merger(con, DEFAULT_SCHEMA, table_name, column_names) {
-}
-
+// Start Anybase changes
 Merger::Merger(Connection &con, const string &database_name, const string &schema_name, const string &table_name)
 	: Appender(con, database_name, schema_name, table_name) {
 }
@@ -618,11 +643,12 @@ Merger::Merger(Connection &con, const string &table_name)
 }
 
 void Merger::FlushInternal(ColumnDataCollection &collection) {
-	context->Merge(*description, collection);
+	context->Merge(*description, collection, column_ids);
 }
 
 Merger::~Merger() {
 	Destructor();
 }
+// End Anybase changes
 
 } // namespace duckdb
