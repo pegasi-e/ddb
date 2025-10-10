@@ -105,6 +105,11 @@ public:
 	//! Whether or not the column has any updates
 	bool HasUpdates() const;
 	bool HasChanges(idx_t start_row, idx_t end_row) const;
+	//! Whether or not the column has changes at this level
+	bool HasChanges() const;
+
+	//! Whether or not the column has ANY changes, including in child columns
+	virtual bool HasAnyChanges() const;
 	//! Whether or not we can scan an entire vector
 	virtual ScanVectorType GetVectorScanType(ColumnScanState &state, idx_t scan_count, Vector &result);
 
@@ -152,12 +157,11 @@ public:
 	//! Fetch a specific row id and append it to the vector
 	virtual void FetchRow(TransactionData transaction, ColumnFetchState &state, row_t row_id, Vector &result,
 	                      idx_t result_idx, bool fetch_current_update = true);
-
-	virtual void Update(TransactionData transaction, DataTable &table, idx_t column_index, Vector &update_vector, row_t *row_ids,
-	                    idx_t update_count);
-	virtual void UpdateColumn(TransactionData transaction, DataTable &table, const vector<column_t> &column_path, Vector &update_vector,
-	                          row_t *row_ids, idx_t update_count, idx_t depth);
 	// end Anybase changes
+	virtual void Update(TransactionData transaction, DataTable &data_table, idx_t column_index, Vector &update_vector,
+	                    row_t *row_ids, idx_t update_count);
+	virtual void UpdateColumn(TransactionData transaction, DataTable &data_table, const vector<column_t> &column_path,
+	                          Vector &update_vector, row_t *row_ids, idx_t update_count, idx_t depth);
 	virtual unique_ptr<BaseStatistics> GetUpdateStatistics();
 
 	virtual void CommitDropColumn();
@@ -219,9 +223,10 @@ protected:
 	// start Anybase changes
 	void FetchUpdateRow(TransactionData transaction, row_t row_id, Vector &result, idx_t result_idx,
 						bool fetch_current_update = true);
-	void UpdateInternal(TransactionData transaction, DataTable &table, idx_t column_index, Vector &update_vector, row_t *row_ids,
-	                    idx_t update_count, Vector &base_vector);
 	// end Anybase changes
+	void UpdateInternal(TransactionData transaction, DataTable &data_table, idx_t column_index, Vector &update_vector,
+	                    row_t *row_ids, idx_t update_count, Vector &base_vector);
+	idx_t FetchUpdateData(ColumnScanState &state, row_t *row_ids, Vector &base_vector);
 
 	idx_t GetVectorCount(idx_t vector_index) const;
 
@@ -240,7 +245,7 @@ protected:
 	//! The stats of the root segment
 	unique_ptr<SegmentStatistics> stats;
 	//! Total transient allocation size
-	idx_t allocation_size;
+	atomic<idx_t> allocation_size;
 
 private:
 	//! The parent column (if any)

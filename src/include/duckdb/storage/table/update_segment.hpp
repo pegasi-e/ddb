@@ -38,11 +38,11 @@ public:
 	void FetchUpdates(TransactionData transaction, idx_t vector_index, Vector &result);
 	void FetchCommitted(idx_t vector_index, Vector &result);
 	void FetchCommittedRange(idx_t start_row, idx_t count, Vector &result);
-	// start Anybase changes
-	void Update(TransactionData transaction, DataTable &table, idx_t column_index, Vector &update, row_t *ids, idx_t count,
-	            Vector &base_data);
+	void Update(TransactionData transaction, DataTable &data_table, idx_t column_index, Vector &update, row_t *ids,
+	            idx_t count, Vector &base_data);
+// start Anybase changes
 	void FetchRow(TransactionData transaction, idx_t row_id, Vector &result, idx_t result_idx, bool fetch_current_update = true);
-	// end Anybase changes
+// end Anybase changes
 
 	void RollbackUpdate(UpdateInfo &info);
 	void CleanupUpdateInternal(const StorageLockKey &lock, UpdateInfo &info);
@@ -85,6 +85,8 @@ public:
 	typedef void (*rollback_update_function_t)(UpdateInfo &base_info, UpdateInfo &rollback_info);
 	typedef idx_t (*statistics_update_function_t)(UpdateSegment *segment, SegmentStatistics &stats,
 	                                              UnifiedVectorFormat &update, idx_t count, SelectionVector &sel);
+	typedef idx_t (*get_effective_updates_t)(UnifiedVectorFormat &update_format, row_t *ids, idx_t count,
+	                                         SelectionVector &sel, Vector &base_data, idx_t id_offset);
 
 private:
 	initialize_update_function_t initialize_update_function;
@@ -95,6 +97,7 @@ private:
 	fetch_row_function_t fetch_row_function;
 	rollback_update_function_t rollback_update_function;
 	statistics_update_function_t statistics_update_function;
+	get_effective_updates_t get_effective_updates;
 
 private:
 	UndoBufferPointer GetUpdateNode(StorageLockKey &lock, idx_t vector_idx) const;
