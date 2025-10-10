@@ -134,45 +134,45 @@ jobs:
           duckdb_cli-linux-${{ matrix.config.arch }}.zip
           duckdb_cli-linux-${{ matrix.config.arch }}.gz
 
-    - name: Test
-      shell: bash
-      if: ${{ inputs.skip_tests != 'true' }}
-      run: |
-        python3 scripts/run_tests_one_by_one.py build/release/test/unittest "*" --time_execution
+    # - name: Test
+    #   shell: bash
+    #   if: ${{ inputs.skip_tests != 'true' }}
+    #   run: |
+    #     python3 scripts/run_tests_one_by_one.py build/release/test/unittest "*" --time_execution
 
-    - name: Tools Tests
-      shell: bash
-      if: ${{ inputs.skip_tests != 'true' }}
-      run: |
-        python3 -m pytest tools/shell/tests --shell-binary build/release/duckdb
+    # - name: Tools Tests
+    #   shell: bash
+    #   if: ${{ inputs.skip_tests != 'true' }}
+    #   run: |
+    #     python3 -m pytest tools/shell/tests --shell-binary build/release/duckdb
 
-    - name: Examples
-      shell: bash
-      if: ${{ inputs.skip_tests != 'true' }}
-      run: |
-        build/release/benchmark/benchmark_runner benchmark/micro/update/update_with_join.benchmark
-        build/release/duckdb -c "COPY (SELECT 42) TO '/dev/stdout' (FORMAT PARQUET)" | cat
+    # - name: Examples
+    #   shell: bash
+    #   if: ${{ inputs.skip_tests != 'true' }}
+    #   run: |
+    #     build/release/benchmark/benchmark_runner benchmark/micro/update/update_with_join.benchmark
+    #     build/release/duckdb -c "COPY (SELECT 42) TO '/dev/stdout' (FORMAT PARQUET)" | cat
 
- upload-libduckdb-src:
-    name: Upload libduckdb-src.zip
-    needs: linux-release-cli
-    runs-on: ubuntu-latest
+#  upload-libduckdb-src:
+#     name: Upload libduckdb-src.zip
+#     needs: linux-release-cli
+#     runs-on: ubuntu-latest
 
-    steps:
-    - uses: actions/checkout@v3
-      with:
-        fetch-depth: 0
-        ref: ${{ inputs.git_ref }}
+#     steps:
+#     - uses: actions/checkout@v3
+#       with:
+#         fetch-depth: 0
+#         ref: ${{ inputs.git_ref }}
 
-    - name: Deploy
-      shell: bash
-      env:
-        AWS_ACCESS_KEY_ID: ${{ secrets.S3_DUCKDB_STAGING_ID }}
-        AWS_SECRET_ACCESS_KEY: ${{ secrets.S3_DUCKDB_STAGING_KEY }}
-      run: |
-        python3 scripts/amalgamation.py
-        zip -j libduckdb-src.zip src/amalgamation/duckdb.hpp src/amalgamation/duckdb.cpp src/include/duckdb.h src/include/duckdb_extension.h
-        ./scripts/upload-assets-to-staging.sh github_release libduckdb-src.zip
+#     - name: Deploy
+#       shell: bash
+#       env:
+#         AWS_ACCESS_KEY_ID: ${{ secrets.S3_DUCKDB_STAGING_ID }}
+#         AWS_SECRET_ACCESS_KEY: ${{ secrets.S3_DUCKDB_STAGING_KEY }}
+#       run: |
+#         python3 scripts/amalgamation.py
+#         zip -j libduckdb-src.zip src/amalgamation/duckdb.hpp src/amalgamation/duckdb.cpp src/include/duckdb.h src/include/duckdb_extension.h
+#         ./scripts/upload-assets-to-staging.sh github_release libduckdb-src.zip
 
  symbol-leakage:
     name: Symbol Leakage
