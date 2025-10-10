@@ -71,12 +71,12 @@ void CDCWriteState::EmitDelete(DeleteInfo &info) {
 		delete_chunk->Append(chunk);
 
 		if (!info.is_consecutive) {
-			ManagedSelection sel(info.count);
+			SelectionVector sel(info.count);
 			auto delete_rows = info.GetRows();
 			for (idx_t i = 0; i < info.count; i++) {
-				sel.Append(delete_rows[i]);
+				sel.set_index(i, delete_rows[i]);
 			}
-			delete_chunk->Slice(sel.Selection(), sel.Count());
+			delete_chunk->Slice(sel, info.count);
 		}
 
 		delete_chunk->Flatten();

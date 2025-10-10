@@ -111,7 +111,7 @@ idx_t RowIdColumnData::Fetch(ColumnScanState &state, row_t row_id, Vector &resul
 }
 
 void RowIdColumnData::FetchRow(TransactionData transaction, ColumnFetchState &state, row_t row_id, Vector &result,
-                               idx_t result_idx) {
+                               idx_t result_idx, bool fetch_current_update) {
 	result.SetVectorType(VectorType::FLAT_VECTOR);
 	auto data = FlatVector::GetData<row_t>(result);
 	data[result_idx] = row_id;

@@ -73,13 +73,8 @@ public:
 	void GetDatabaseType(ClientContext &context, AttachInfo &info, const DBConfig &config, AttachOptions &options);
 	//! Scans the catalog set and adds each committed database entry, and each database entry of the current
 	//! transaction, to a vector holding AttachedDatabase references
-<<<<<<< HEAD
-	vector<reference<AttachedDatabase>> GetDatabases(ClientContext &context,
-	                                                 const optional_idx max_db_count = optional_idx());
-=======
 	vector<shared_ptr<AttachedDatabase>> GetDatabases(ClientContext &context,
 	                                                  const optional_idx max_db_count = optional_idx());
->>>>>>> 1.4.1
 	//! Scans the catalog set and returns each committed database entry
 	vector<shared_ptr<AttachedDatabase>> GetDatabases();
 	//! Returns the approximate count of attached databases.
