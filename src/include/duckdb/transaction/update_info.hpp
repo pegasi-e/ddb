@@ -18,6 +18,9 @@ namespace duckdb {
 class UpdateSegment;
 struct DataTableInfo;
 class DataTable;
+// start Anybase changes
+class ColumnData;
+// end Anybase changes
 
 //! UpdateInfo is a class that represents a set of updates applied to a single vector.
 //! The UpdateInfo struct contains metadata associated with the update.
