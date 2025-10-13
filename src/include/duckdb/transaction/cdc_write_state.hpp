@@ -19,6 +19,7 @@ class DataChunk;
 class DuckTransaction;
 struct DeleteInfo;
 struct AppendInfo;
+struct StorageIndex;
 
 class CDCWriteState {
 public:

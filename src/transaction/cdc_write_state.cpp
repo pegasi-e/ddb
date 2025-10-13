@@ -5,6 +5,7 @@
 #include "duckdb/storage/data_table.hpp"
 #include "duckdb/storage/table/column_data.hpp"
 #include "duckdb/storage/table/update_segment.hpp"
+#include "duckdb/storage/storage_index.hpp"
 #include "duckdb/transaction/append_info.hpp"
 #include "duckdb/transaction/delete_info.hpp"
 #include "duckdb/transaction/duck_transaction.hpp"
