@@ -176,13 +176,6 @@ protected:
 
 private:
 	void VerifyCanAccessFileInternal(const string &path, FileType type);
-
-// start Anybase changes
-public:
-	void CopyFile(const string &source, const string &target) override {
-		GetFileSystem().CopyFile(source, target);
-	}
-// end Anybase changes
 };
 
 } // namespace duckdb

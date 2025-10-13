@@ -288,10 +288,4 @@ optional_ptr<FileSystem> VirtualFileSystem::FindFileSystemInternal(const string 
 	// We could use default_fs, that's on the caller
 	return nullptr;
 }
-
-// start Anybase changes
-void VirtualFileSystem::CopyFile(const string &source, const string &target) {
-	FindFileSystem(source).CopyFile(source, target);
-}
-// end Anybase changes
 } // namespace duckdb

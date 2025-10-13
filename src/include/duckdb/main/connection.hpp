@@ -127,8 +127,6 @@ public:
 	DUCKDB_API void Merge(TableDescription &description, DataChunk &chunk, optional_ptr<const vector<LogicalIndex>> column_ids);
 	DUCKDB_API uint64_t GetSnapshotId();
 	DUCKDB_API uint64_t CheckpointAndGetSnapshotId();
-	DUCKDB_API pair<string, unique_ptr<QueryResult>> CreateSnapshot();
-	DUCKDB_API void RemoveSnapshot(const char *snapshot_file_name);
 	// end Anybase changes
 
 	//! Get the table info of a specific table, or nullptr if it cannot be found. Uses INVALID_CATALOG and

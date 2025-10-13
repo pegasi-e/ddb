@@ -98,7 +98,6 @@ private:
 	case_insensitive_map_t<reference<AttachedDatabase>> used_databases;
 // start Anybase changes
 public:
-	string Snapshot(optional_ptr<AttachedDatabase> db);
 	uint64_t GetSnapshotId(optional_ptr<AttachedDatabase> db);
 	uint64_t CheckpointAndGetSnapshotId(optional_ptr<AttachedDatabase> db);
 // end Anybase changes

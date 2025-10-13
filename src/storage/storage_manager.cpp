@@ -530,16 +530,6 @@ uint64_t SingleFileStorageManager::GetSnapshotId() {
 	}
 	return dynamic_cast<SingleFileBlockManager *>(block_manager.get())->GetSnapshotId();
 }
-
-string SingleFileStorageManager::Snapshot() {
-	uint64_t sid = dynamic_cast<SingleFileBlockManager *>(block_manager.get())->GetSnapshotId();
-	string ret = path;
-	ret += ".";
-	ret += to_string(sid);
-	auto &fs = FileSystem::Get(db);
-	fs.CopyFile(path, ret);
-	return ret;
-}
 // end Anybase changes
 
 } // namespace duckdb

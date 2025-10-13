@@ -1197,53 +1197,6 @@ void DataTable::Merge(TableCatalogEntry &table, ClientContext &context, ColumnDa
 }
 // end Anybase changes
 
-static void CombineExistingAndInsertTuples(DataChunk &result, DataChunk &scan_chunk, DataChunk &input_chunk,
-                                           ClientContext &client,
-                                           const optional_ptr<const vector<LogicalType>> &insert_types,
-                                           const optional_ptr<const vector<LogicalType>> &types_to_fetch) {
-
-	if (types_to_fetch == nullptr || types_to_fetch->empty()) {
-		// We have not scanned the initial table, so we can just duplicate the initial chunk
-		result.Initialize(client, input_chunk.GetTypes());
-		result.Reference(input_chunk);
-		result.SetCardinality(input_chunk);
-		return;
-	}
-
-	D_ASSERT(insert_types != nullptr);
-	vector<LogicalType> combined_types;
-	combined_types.reserve(insert_types->size() + types_to_fetch->size());
-	combined_types.insert(combined_types.end(), insert_types->begin(), insert_types->end());
-	combined_types.insert(combined_types.end(), types_to_fetch->begin(), types_to_fetch->end());
-
-	result.Initialize(client, combined_types);
-	result.Reset();
-	// Add the VALUES list
-	for (idx_t i = 0; i < insert_types->size(); i++) {
-		idx_t col_idx = i;
-		auto &other_col = input_chunk.data[i];
-		auto &this_col = result.data[col_idx];
-		D_ASSERT(other_col.GetType() == this_col.GetType());
-		this_col.Reference(other_col);
-	}
-	// Add the columns from the original conflicting tuples
-	for (idx_t i = 0; i < types_to_fetch->size(); i++) {
-		idx_t col_idx = i + insert_types->size();
-		auto &other_col = scan_chunk.data[i];
-		auto &this_col = result.data[col_idx];
-		D_ASSERT(other_col.GetType() == this_col.GetType());
-		this_col.Reference(other_col);
-	}
-	// This is guaranteed by the requirement of a conflict target to have a condition or set expressions
-	// Only when we have any sort of condition or SET expression that references the existing table is this possible
-	// to not be true.
-	// We can have a SET expression without a conflict target ONLY if there is only 1 Index on the table
-	// In which case this also can't cause a discrepancy between existing tuple count and insert tuple count
-	D_ASSERT(input_chunk.size() == scan_chunk.size());
-	result.SetCardinality(input_chunk.size());
-}
-// end Anybase changes
-
 unique_ptr<ConstraintState>
 DataTable::InitializeConstraintState(TableCatalogEntry &table,
                                      const vector<unique_ptr<BoundConstraint>> &bound_constraints) {

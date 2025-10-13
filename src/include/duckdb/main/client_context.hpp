@@ -330,8 +330,6 @@ public:
 	DUCKDB_API void Merge(TableDescription &description, ColumnDataCollection &collection, optional_ptr<const vector<LogicalIndex>> column_ids);
 	DUCKDB_API uint64_t GetSnapshotId();
 	DUCKDB_API uint64_t CheckpointAndGetSnapshotId();
-	DUCKDB_API pair<string, unique_ptr<QueryResult>> CreateSnapshot();
-	DUCKDB_API void RemoveSnapshot(const char *snapshot_file_name);
 	DUCKDB_API void SetActiveResult(ClientContextLock &lock, BaseQueryResult &result);
 	DUCKDB_API idx_t GetTableVersion(const char *schema, const char *table);
 	DUCKDB_API idx_t GetTotalRows(const char *catalog, const char *schema, const char *table);

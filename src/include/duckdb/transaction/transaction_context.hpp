@@ -65,7 +65,6 @@ private:
 
 // start Anybase changes
 public:
-	string Snapshot();
 	uint64_t GetSnapshotId();
 	uint64_t CheckpointAndGetSnapshotId();
 // end Anybase changes

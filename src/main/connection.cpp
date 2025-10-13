@@ -191,15 +191,6 @@ uint64_t Connection::GetSnapshotId() {
 uint64_t Connection::CheckpointAndGetSnapshotId() {
 	return context->CheckpointAndGetSnapshotId();
 }
-
-void Connection::RemoveSnapshot(const char *snapshot_file_name) {
-	context->RemoveSnapshot(snapshot_file_name);
-}
-
-pair<string, unique_ptr<QueryResult>> Connection::CreateSnapshot() {
-	auto result = context->CreateSnapshot();
-	return result;
-}
 // end Anybase changes
 
 unique_ptr<TableDescription> Connection::TableInfo(const string &table_name) {

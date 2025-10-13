@@ -307,11 +307,6 @@ public:
 		DynamicCastCheck<TARGET>(this);
 		return reinterpret_cast<const TARGET &>(*this);
 	}
-
-	// start Anybase changes
-public:
-	DUCKDB_API virtual void CopyFile(const string &source, const string &target);
-	// end Anybase changes
 };
 
 } // namespace duckdb

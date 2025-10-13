@@ -1615,40 +1615,6 @@ uint64_t ClientContext::CheckpointAndGetSnapshotId() {
 	return result;
 }
 
-pair<string, unique_ptr<QueryResult>> ClientContext::CreateSnapshot() {
-	string snapshot_file;
-	RunFunctionInTransaction([&]() {
-	snapshot_file = transaction.Snapshot();
-	});
-
-	if (snapshot_file.length() == 0) {
-	return make_pair(snapshot_file, unique_ptr<QueryResult>(nullptr));
-	}
-
-	StatementType statement_type = StatementType::SELECT_STATEMENT;
-	string query = "SELECT blob_column";
-	auto lock = LockContext();
-	BeginQueryInternal(*lock, query);
-	StatementProperties properties;
-	vector<LogicalType> types{LogicalType::BLOB};
-	vector<string> names{"blob_column"};
-	ClientProperties client_properties;
-	auto ctx = this->shared_from_this();
-	FileSystem &fs = FileSystem::GetFileSystem(*this);
-	auto buffered_data = make_shared_ptr<FileBufferedData>(ctx, fs, snapshot_file);
-	auto result = make_uniq<StreamQueryResult>(statement_type, properties, types,
-					     names, client_properties,
-					     buffered_data);
-	SetActiveResult(*lock, *result);
-	return make_pair(snapshot_file, std::move(result));
-}
-
-void ClientContext::RemoveSnapshot(const char *snapshot_file_name) {
-	FileSystem &fs = FileSystem::GetFileSystem(*this);
-	string file_name(snapshot_file_name);
-	fs.RemoveFile(file_name);
-}
-
 void ClientContext::SetActiveResult(ClientContextLock &lock, BaseQueryResult &result) {
 	if (!active_query) {
 		return;

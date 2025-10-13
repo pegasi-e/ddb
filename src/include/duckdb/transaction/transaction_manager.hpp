@@ -56,7 +56,6 @@ protected:
 
 // start Anybase changes
 public:
-	virtual string Snapshot(ClientContext &context) = 0;
 	virtual uint64_t GetSnapshotId(ClientContext &context) = 0;
 	virtual uint64_t CheckpointAndGetSnapshotId(ClientContext &context) = 0;
 // end Anybase changes
