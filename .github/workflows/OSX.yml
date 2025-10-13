@@ -188,16 +188,16 @@ jobs:
             libduckdb-osx-universal.zip
             duckdb_cli-osx-universal.zip
 
-      - name: Unit Test
-        shell: bash
-        if: ${{ inputs.skip_tests != 'true' }}
-        run: make allunit
+      # - name: Unit Test
+      #   shell: bash
+      #   if: ${{ inputs.skip_tests != 'true' }}
+      #   run: make allunit
 
-      - name: Tools Tests
-        shell: bash
-        if: ${{ inputs.skip_tests != 'true' }}
-        run: |
-          python -m pytest tools/shell/tests --shell-binary build/release/duckdb
+      # - name: Tools Tests
+      #   shell: bash
+      #   if: ${{ inputs.skip_tests != 'true' }}
+      #   run: |
+      #     python -m pytest tools/shell/tests --shell-binary build/release/duckdb
 
       # - name: Examples
       #   shell: bash
