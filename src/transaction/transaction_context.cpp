@@ -138,7 +138,7 @@ uint64_t TransactionContext::CheckpointAndGetSnapshotId() {
 	return current_transaction->CheckpointAndGetSnapshotId(db);
 }
 
-void TransactionContext::BeginTransaction(const timestamp_t timestamp, const transaction_t sequenceNumber) {
+void TransactionContext::BeginTransaction(const duckdb::timestamp_t timestamp, const transaction_t sequenceNumber) {
 	if (current_transaction) {
 		throw TransactionException("cannot start a transaction within a transaction");
 	}
