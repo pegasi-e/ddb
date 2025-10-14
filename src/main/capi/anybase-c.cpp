@@ -175,7 +175,7 @@ duckdb_state duckdb_begin_transaction(const duckdb_connection connection, const 
 	const auto *ddbConnection = reinterpret_cast<Connection *>(connection);
 
 	try {
-		ddbConnection->context->BeginTransaction(timestamp_t(micro_seconds), sequence);
+		ddbConnection->context->BeginTransaction(duckdb::timestamp_t(micro_seconds), sequence);
 		return DuckDBSuccess;
 	} catch (std::exception &ex) {
 		if (error) {
