@@ -324,9 +324,9 @@ private:
 
 // start Anybase changes
 public:
-	//! Merges a DataChunk to the specified table.  This works much like upsert.  Primary key is assumed to be the conflict target
+	//! Merges a DataChunk to the specified table.  This works much like upsert.  The Primary key is assumed to be the conflict target
 	DUCKDB_API void Merge(TableDescription &description, DataChunk &chunk, optional_ptr<const vector<LogicalIndex>> column_ids);
-	//! Merges a ColumnDataCollection to the specified table.  This works much like upsert.  Primary key is assumed to be the conflict target
+	//! Merges a ColumnDataCollection to the specified table.  This works much like upsert.  The Primary key is assumed to be the conflict target
 	DUCKDB_API void Merge(TableDescription &description, ColumnDataCollection &collection, optional_ptr<const vector<LogicalIndex>> column_ids);
 	DUCKDB_API uint64_t GetSnapshotId();
 	DUCKDB_API uint64_t CheckpointAndGetSnapshotId();
@@ -334,6 +334,10 @@ public:
 	DUCKDB_API idx_t GetTableVersion(const char *schema, const char *table);
 	DUCKDB_API idx_t GetTotalRows(const char *catalog, const char *schema, const char *table);
 	DUCKDB_API idx_t GetColumnVersion(const char *schema, const char *table, const char *column);
+	DUCKDB_API void BeginTransaction(const timestamp_t timestamp, const transaction_t sequenceNumber) {
+		transaction.BeginTransaction(timestamp, sequenceNumber);
+		transaction.SetAutoCommit(false);
+	}
 // end Anybase changes
 };
 

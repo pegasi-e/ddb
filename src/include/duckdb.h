@@ -5172,6 +5172,7 @@ DUCKDB_C_API uint64_t duckdb_checkpoint_and_get_snapshot_id(duckdb_connection co
 DUCKDB_C_API idx_t duckdb_get_table_version(duckdb_connection connection, const char *schema, const char *table, char **error);
 DUCKDB_C_API idx_t duckdb_get_column_version(duckdb_connection connection, const char *schema, const char *table, const char *column, char **error);
 DUCKDB_C_API idx_t duckdb_estimated_row_count(duckdb_connection connection, const char *catalog, const char *schema, const char *table, char **error);
+DUCKDB_C_API duckdb_state duckdb_begin_transaction(duckdb_connection connection, int64_t micro_seconds, uint64_t sequence, char **error);
 
 /*!
 Creates a new DataChunk that copy a given DataChunk
@@ -5232,6 +5233,7 @@ typedef enum CDC_EVENT_TYPE : int32_t {
 
 typedef void (*duckdb_change_data_capture_callback_t)(
 	cdc_event_type type,
+	int64_t transactionStartTime,
 	idx_t transactionId,
 	idx_t column_count,
 	idx_t table_version,

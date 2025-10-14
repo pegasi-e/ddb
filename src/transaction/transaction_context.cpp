@@ -137,6 +137,20 @@ uint64_t TransactionContext::CheckpointAndGetSnapshotId() {
 
 	return current_transaction->CheckpointAndGetSnapshotId(db);
 }
+
+void TransactionContext::BeginTransaction(const timestamp_t timestamp, const transaction_t sequenceNumber) {
+	if (current_transaction) {
+		throw TransactionException("cannot start a transaction within a transaction");
+	}
+	auto start_timestamp = timestamp;
+	auto global_transaction_id = sequenceNumber;
+	current_transaction = make_uniq<MetaTransaction>(context, start_timestamp, global_transaction_id);
+
+	// Notify any registered state of transaction begin
+	for (auto &state : context.registered_state->States()) {
+		state->TransactionBegin(*current_transaction, context);
+	}
+}
 // end Anybase changes
 
 } // namespace duckdb

@@ -170,6 +170,26 @@ idx_t duckdb_get_column_version(const duckdb_connection connection, const char *
 	} // LCOV_EXCL_STOP
 }
 
+duckdb_state duckdb_begin_transaction(const duckdb_connection connection, const int64_t micro_seconds, const uint64_t sequence, char **error) {
+	const auto *ddbConnection = reinterpret_cast<Connection *>(connection);
+
+	try {
+		ddbConnection->context->BeginTransaction(timestamp_t(micro_seconds), sequence);
+		return DuckDBSuccess;
+	} catch (std::exception &ex) {
+		if (error) {
+			ErrorData parsed_error(ex);
+			*error = strdup(parsed_error.Message().c_str());
+		}
+	} catch (...) { // LCOV_EXCL_START
+		if (error) {
+			*error = strdup("Unknown error");
+		}
+	} // LCOV_EXCL_STOP
+
+	return DuckDBError;
+}
+
 idx_t duckdb_estimated_row_count(const duckdb_connection connection, const char *catalog, const char *schema, const char *table, char **error) {
 	auto *ddbConnection = reinterpret_cast<Connection *>(connection);
 

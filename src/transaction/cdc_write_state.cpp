@@ -21,6 +21,7 @@ namespace duckdb {
 
 void ChangeDataCapture::EmitChange(
 			const cdc_event_type type,
+			const int64_t transactionStartTime,
 			const idx_t transactionId,
 			const idx_t column_count,
 			const idx_t table_version,
@@ -33,7 +34,7 @@ void ChangeDataCapture::EmitChange(
 
 	if (function != nullptr) {
 
-		function(type, transactionId, column_count, table_version, updated_column_index, table_name, column_names, column_versions, values, previous_values);
+		function(type, transactionStartTime, transactionId, column_count, table_version, updated_column_index, table_name, column_names, column_versions, values, previous_values);
 	}
 }
 
@@ -84,6 +85,7 @@ void CDCWriteState::EmitDelete(DeleteInfo &info) {
 
 		config.change_data_capture.EmitChange(
 			DUCKDB_CDC_EVENT_DELETE,
+			transaction.start_time,
 			transaction.transaction_id,
 			columnCount,
 			table_version,
@@ -126,6 +128,7 @@ void CDCWriteState::EmitInsert(AppendInfo &info) {
 		auto &config = DBConfig::GetConfig(info.table->db.GetDatabase());
 		config.change_data_capture.EmitChange(
 			DUCKDB_CDC_EVENT_INSERT,
+			transaction.start_time,
 			transaction.transaction_id,
 			columnCount,
 			table_version,
@@ -289,6 +292,7 @@ void CDCWriteState::Flush() {
 
 		config.change_data_capture.EmitChange(
 			DUCKDB_CDC_EVENT_UPDATE,
+			transaction.start_time,
 			transaction.transaction_id,
 			column_names_cstrings.size(),
 			update_table_version,
@@ -360,6 +364,7 @@ void CDCWriteState::EmitTransactionEntry(CDC_EVENT_TYPE type){
 	auto &config = DBConfig::GetConfig(*context);
 	config.change_data_capture.EmitChange(
 		type,
+		transaction.start_time,
 		transaction.transaction_id,
 		0,
 		0,

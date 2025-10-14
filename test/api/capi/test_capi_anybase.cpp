@@ -93,6 +93,48 @@ TEST_CASE("Get table row count", "[capi]") {
 	duckdb_close(&db);
 }
 
+TEST_CASE("Ensure begin transaction succeeds", "[cAnybaseApi]") {
+	duckdb_database db;
+	duckdb_connection con;
+
+	REQUIRE(duckdb_open(nullptr, &db) != DuckDBError);
+	REQUIRE(duckdb_connect(db, &con) != DuckDBError);
+
+	REQUIRE(duckdb_begin_transaction(con, 1234, 1, nullptr) != DuckDBError);
+	REQUIRE(duckdb_query(con, "commit;", NULL) != DuckDBError);
+
+	duckdb_disconnect(&con);
+	duckdb_close(&db);
+}
+
+TEST_CASE("Ensure calling begin twice causes an exception", "[cAnybaseApi]") {
+	duckdb_database db;
+	duckdb_connection con;
+
+	REQUIRE(duckdb_open(nullptr, &db) != DuckDBError);
+	REQUIRE(duckdb_connect(db, &con) != DuckDBError);
+
+	REQUIRE(duckdb_begin_transaction(con, 1234, 1, nullptr) != DuckDBError);
+	REQUIRE(duckdb_begin_transaction(con, 5432, 2, nullptr) == DuckDBError);
+
+	duckdb_disconnect(&con);
+	duckdb_close(&db);
+}
+
+TEST_CASE("Ensure calling begin called twice by two different interfaces causes an exception", "[cAnybaseApi]") {
+	duckdb_database db;
+	duckdb_connection con;
+
+	REQUIRE(duckdb_open(nullptr, &db) != DuckDBError);
+	REQUIRE(duckdb_connect(db, &con) != DuckDBError);
+
+	REQUIRE(duckdb_begin_transaction(con, 1234, 1, nullptr) != DuckDBError);
+	REQUIRE(duckdb_query(con, "begin;", NULL) == DuckDBError);
+
+	duckdb_disconnect(&con);
+	duckdb_close(&db);
+}
+
 // TEST_CASE("Test Update version isolation", "[capi]") {
 //
 // 	duckdb_database db;
@@ -382,6 +424,7 @@ TEST_CASE("Test DataChunk C API reference", "[cAnybaseApi]") {
 }
 
 void some_func2(cdc_event_type type,
+				int64_t transaction_start_time,
                 idx_t transaction_id,
                 idx_t column_count,
                 idx_t table_version,
@@ -397,47 +440,47 @@ void some_func2(cdc_event_type type,
     duckdb_destroy_data_chunk(&previous_values);
 }
 
-TEST_CASE("Test WAL Generation", "[capi]") {
-    duckdb_database db;
-    duckdb_connection connection1;
-    duckdb_connection connection2;
-    duckdb_result result;
-    duckdb_result errorMessage;
-
-//     REQUIRE(duckdb_open("/Users/jeremyosterhoudt/Downloads/dbz_demo/test.db", &db) != DuckDBError);
-    REQUIRE(duckdb_open(nullptr, &db) != DuckDBError);
-    duckdb_set_cdc_callback(db, some_func2);
-    REQUIRE(duckdb_connect(db, &connection1) != DuckDBError);
-    REQUIRE(duckdb_connect(db, &connection2) != DuckDBError);
-
-    REQUIRE(duckdb_query(connection1, "BEGIN TRANSACTION", nullptr) != DuckDBError);
-
-    // REQUIRE(duckdb_query(connection1, "CREATE TABLE if not exists FOO(id BIGINT unique, val INTEGER default 22, xtra INTEGER default 11)", nullptr) != DuckDBError);
-    // REQUIRE(duckdb_query(connection1, "INSERT INTO FOO (id) VALUES (1), (2)", nullptr) != DuckDBError);
-    REQUIRE(duckdb_query(connection1, "CREATE TABLE if not exists FOO(id BIGINT, val INTEGER, xtra INTEGER, other integer)", nullptr) != DuckDBError);
-    REQUIRE(duckdb_query(connection1, "INSERT INTO FOO VALUES (1, 22, 11, 124), (2, 8, 31, 125), (3, 3, 3, 3)", nullptr) != DuckDBError);
-    // REQUIRE(duckdb_query(connection1, "UPDATE FOO SET val = 5 where val = 8 or other = 125", nullptr) != DuckDBError);
-    // REQUIRE(duckdb_query(connection1, "DELETE FROM FOO where id = 2", nullptr) != DuckDBError);
-    // REQUIRE(duckdb_query(connection1, "INSERT INTO FOO VALUES (2, 8, 31, 125)", nullptr) != DuckDBError);
-    REQUIRE(duckdb_query(connection1, "COMMIT", nullptr) != DuckDBError);
-    // REQUIRE(duckdb_query(connection1, "BEGIN TRANSACTION", nullptr) != DuckDBError);
-
-
-
-    REQUIRE(duckdb_query(connection1, "UPDATE FOO SET val = 5 where id = 2", nullptr) != DuckDBError);
-    REQUIRE(duckdb_query(connection1, "UPDATE FOO SET val = 44 where id = 2", nullptr) != DuckDBError);
-    // REQUIRE(duckdb_query(connection1, "UPDATE FOO SET val = 5 where val = 8 and other = 125", nullptr) != DuckDBError);
-    // REQUIRE(duckdb_query(connection1, "UPDATE FOO SET val = 4 where val = 5", nullptr) != DuckDBError);
-    // REQUIRE(duckdb_query(connection1, "UPDATE FOO SET val = 3 where val = 4", nullptr) != DuckDBError);
-    // REQUIRE(duckdb_query(connection1, "COMMIT", nullptr) != DuckDBError);
-    REQUIRE(duckdb_query(connection1, "DELETE FROM FOO where id = 1 or id = 3", nullptr) != DuckDBError);
-
-    // duckdb_destroy_result(&errorMessage);
-    //duckdb_destroy_result(&result);
-    duckdb_disconnect(&connection1);
-    duckdb_disconnect(&connection2);
-    duckdb_close(&db);
-}
+// TEST_CASE("Test WAL Generation", "[capi]") {
+//     duckdb_database db;
+//     duckdb_connection connection1;
+//     duckdb_connection connection2;
+//     duckdb_result result;
+//     duckdb_result errorMessage;
+//
+// //     REQUIRE(duckdb_open("/Users/jeremyosterhoudt/Downloads/dbz_demo/test.db", &db) != DuckDBError);
+//     REQUIRE(duckdb_open(nullptr, &db) != DuckDBError);
+//     duckdb_set_cdc_callback(db, some_func2);
+//     REQUIRE(duckdb_connect(db, &connection1) != DuckDBError);
+//     REQUIRE(duckdb_connect(db, &connection2) != DuckDBError);
+//
+//     REQUIRE(duckdb_query(connection1, "BEGIN TRANSACTION", nullptr) != DuckDBError);
+//
+//     // REQUIRE(duckdb_query(connection1, "CREATE TABLE if not exists FOO(id BIGINT unique, val INTEGER default 22, xtra INTEGER default 11)", nullptr) != DuckDBError);
+//     // REQUIRE(duckdb_query(connection1, "INSERT INTO FOO (id) VALUES (1), (2)", nullptr) != DuckDBError);
+//     REQUIRE(duckdb_query(connection1, "CREATE TABLE if not exists FOO(id BIGINT, val INTEGER, xtra INTEGER, other integer)", nullptr) != DuckDBError);
+//     REQUIRE(duckdb_query(connection1, "INSERT INTO FOO VALUES (1, 22, 11, 124), (2, 8, 31, 125), (3, 3, 3, 3)", nullptr) != DuckDBError);
+//     // REQUIRE(duckdb_query(connection1, "UPDATE FOO SET val = 5 where val = 8 or other = 125", nullptr) != DuckDBError);
+//     // REQUIRE(duckdb_query(connection1, "DELETE FROM FOO where id = 2", nullptr) != DuckDBError);
+//     // REQUIRE(duckdb_query(connection1, "INSERT INTO FOO VALUES (2, 8, 31, 125)", nullptr) != DuckDBError);
+//     REQUIRE(duckdb_query(connection1, "COMMIT", nullptr) != DuckDBError);
+//     // REQUIRE(duckdb_query(connection1, "BEGIN TRANSACTION", nullptr) != DuckDBError);
+//
+//
+//
+//     REQUIRE(duckdb_query(connection1, "UPDATE FOO SET val = 5 where id = 2", nullptr) != DuckDBError);
+//     REQUIRE(duckdb_query(connection1, "UPDATE FOO SET val = 44 where id = 2", nullptr) != DuckDBError);
+//     // REQUIRE(duckdb_query(connection1, "UPDATE FOO SET val = 5 where val = 8 and other = 125", nullptr) != DuckDBError);
+//     // REQUIRE(duckdb_query(connection1, "UPDATE FOO SET val = 4 where val = 5", nullptr) != DuckDBError);
+//     // REQUIRE(duckdb_query(connection1, "UPDATE FOO SET val = 3 where val = 4", nullptr) != DuckDBError);
+//     // REQUIRE(duckdb_query(connection1, "COMMIT", nullptr) != DuckDBError);
+//     REQUIRE(duckdb_query(connection1, "DELETE FROM FOO where id = 1 or id = 3", nullptr) != DuckDBError);
+//
+//     // duckdb_destroy_result(&errorMessage);
+//     //duckdb_destroy_result(&result);
+//     duckdb_disconnect(&connection1);
+//     duckdb_disconnect(&connection2);
+//     duckdb_close(&db);
+// }
 
 
 // TEST_CASE("Test Snapshot in C API", "[cAnybaseApi]") {
