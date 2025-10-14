@@ -4,6 +4,7 @@
 #include "duckdb/common/arrow/arrow.hpp"
 #include "duckdb/common/arrow/arrow_converter.hpp"
 #include "duckdb/common/arrow/arrow_appender.hpp"
+#include "duckdb/common/types/timestamp.hpp"
 #include "duckdb/main/prepared_statement_data.hpp"
 #include "duckdb/common/types.hpp"
 #include "duckdb/storage/data_table.hpp"
