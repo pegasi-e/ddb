@@ -1,6 +1,7 @@
 #include "duckdb/transaction/cdc_write_state.hpp"
 
 #include "duckdb/catalog/catalog_set.hpp"
+#include "duckdb/common/printer.hpp"
 #include "duckdb/main/attached_database.hpp"
 #include "duckdb/storage/data_table.hpp"
 #include "duckdb/storage/table/column_data.hpp"
@@ -183,6 +184,7 @@ void CDCWriteState::EmitUpdate(UpdateInfo &info) {
 	vector<StorageIndex> column_indexes;
 	auto did_add_target = false;
 
+	Printer::Print("CDCWriteState::EmitUpdate()\n");
 	if (transaction.involved_columns.find(table->GetTableName()) != transaction.involved_columns.end()) {
 		auto column_map = transaction.involved_columns[table->GetTableName()];
 		if (!column_map.empty()) {

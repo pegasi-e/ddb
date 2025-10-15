@@ -131,8 +131,7 @@ SinkResultType PhysicalUpdate::Sink(ExecutionContext &context, DataChunk &chunk,
 
 		auto target_table_name = table.GetTableName();
 		for (idx_t i = 0; i < columns.size(); i++) {
-			vector<column_t> copied_columns;
-			std::copy(involved_columns.begin(), involved_columns.end(), copied_columns.begin());
+			vector<column_t> copied_columns(involved_columns);
 			transaction.AddInvolvedColumn(target_table_name, columns[i].index, std::move(copied_columns));
 		}
 	}
