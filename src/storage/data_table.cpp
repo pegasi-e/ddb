@@ -1069,12 +1069,14 @@ static idx_t HandleInsertConflicts(TableCatalogEntry &table, ClientContext &cont
 	conflict_chunk.SetCardinality(conflict_count);
 
 	// Start CDC changes
-	auto &current_transaction = DuckTransaction::Get(context, table.catalog);
-	// auto columnMap = unordered_map<column_t, vector<column_t>>();
-	// auto involved_columns = vector<idx_t>(conflict_target.begin(), conflict_target.end());
-	for (idx_t i = 0; i < set_columns.size(); ++i) {
-		// involved_columns.push_back(set_columns[i].index);
-		current_transaction.involved_columns[data_table.GetTableName()].emplace_back(set_columns[i].index);
+	if (GLOBAL) {
+		auto &current_transaction = DuckTransaction::Get(context, table.catalog);
+		// auto columnMap = unordered_map<column_t, vector<column_t>>();
+		// auto involved_columns = vector<idx_t>(conflict_target.begin(), conflict_target.end());
+		for (idx_t i = 0; i < set_columns.size(); ++i) {
+			// involved_columns.push_back(set_columns[i].index);
+			current_transaction.involved_columns[data_table.GetTableName()].emplace_back(set_columns[i].index);
+		}
 	}
 
 	// for (auto &t : set_columns) {
