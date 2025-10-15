@@ -121,14 +121,14 @@ SinkResultType PhysicalUpdate::Sink(ExecutionContext &context, DataChunk &chunk,
 	unordered_map<column_t, vector<column_t>> columnMap;
 	vector<column_t> involved_columns;
 
-	// if (context.pipeline->GetSource()->type == PhysicalOperatorType::TABLE_SCAN) {
-	// 	auto table_scan = &context.pipeline->GetSource()->Cast<PhysicalTableScan>();
-	// 	involved_columns.reserve(table_scan->column_ids.size());
-	// 	for (idx_t i = 0; i + 1 < table_scan->column_ids.size(); i++) {
-	// 		involved_columns.emplace_back(table_scan->column_ids[i].GetPrimaryIndex());
-	// 	}
-	// }
-	//
+	if (context.pipeline->GetSource()->type == PhysicalOperatorType::TABLE_SCAN) {
+		auto table_scan = &context.pipeline->GetSource()->Cast<PhysicalTableScan>();
+		involved_columns.reserve(table_scan->column_ids.size());
+		for (idx_t i = 0; i + 1 < table_scan->column_ids.size(); i++) {
+			involved_columns.emplace_back(table_scan->column_ids[i].GetPrimaryIndex());
+		}
+	}
+	
 	// for (idx_t i = 0; i < columns.size(); i++) {
 	// 	columnMap[columns[i].index] = involved_columns;
 	// }
