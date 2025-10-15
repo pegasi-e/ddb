@@ -119,7 +119,6 @@ SinkResultType PhysicalUpdate::Sink(ExecutionContext &context, DataChunk &chunk,
 	//Extract the involved columns for CDC
 	if (context.pipeline->GetSource()->type == PhysicalOperatorType::TABLE_SCAN) {
 		auto &transaction = DuckTransaction::Get(context.client, table.db);
-		unordered_map<column_t, vector<column_t>> columnMap;
 		vector<column_t> involved_columns;
 
 		auto table_scan = &context.pipeline->GetSource()->Cast<PhysicalTableScan>();
@@ -131,7 +130,7 @@ SinkResultType PhysicalUpdate::Sink(ExecutionContext &context, DataChunk &chunk,
 
 		auto target_table_name = table.GetTableName();
 		for (idx_t i = 0; i < columns.size(); i++) {
-			vector<column_t> copied_columns(involved_columns);
+			vector<column_t> copied_columns;
 			transaction.AddInvolvedColumn("abc", columns[i].index, std::move(copied_columns));
 		}
 	}

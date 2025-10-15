@@ -1071,7 +1071,6 @@ static idx_t HandleInsertConflicts(TableCatalogEntry &table, ClientContext &cont
 	// Start CDC changes
 	if (GLOBAL) {
 		auto &current_transaction = DuckTransaction::Get(context, table.catalog);
-		auto columnMap = unordered_map<column_t, vector<column_t>>();
 		auto involved_columns = vector<idx_t>(conflict_target.begin(), conflict_target.end());
 		for (idx_t i = 0; i < set_columns.size(); ++i) {
 			involved_columns.push_back(set_columns[i].index);
