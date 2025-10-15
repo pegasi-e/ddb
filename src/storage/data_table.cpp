@@ -1070,17 +1070,19 @@ static idx_t HandleInsertConflicts(TableCatalogEntry &table, ClientContext &cont
 
 	// Start CDC changes
 	auto &current_transaction = DuckTransaction::Get(context, table.catalog);
-	auto columnMap = unordered_map<column_t, vector<column_t>>();
-	auto involved_columns = vector<idx_t>(conflict_target.begin(), conflict_target.end());
+	// auto columnMap = unordered_map<column_t, vector<column_t>>();
+	// auto involved_columns = vector<idx_t>(conflict_target.begin(), conflict_target.end());
 	for (idx_t i = 0; i < set_columns.size(); ++i) {
-		involved_columns.push_back(set_columns[i].index);
+		// involved_columns.push_back(set_columns[i].index);
+		current_transaction.involved_columns[data_table.GetTableName()].emplace_back(set_columns[i].index);
 	}
 
-	for (auto &t : set_columns) {
-		columnMap[t.index] = involved_columns;
-	}
+	// for (auto &t : set_columns) {
+	// 	columnMap[t.index] = involved_columns;
+	// 	current_transaction.involved_columns[data_table.GetTableName()].emplace_back(t.index);
+	// }
 
-	current_transaction.involved_columns[data_table.GetTableName()] = columnMap;
+	// current_transaction.involved_columns[data_table.GetTableName()] = columnMap;
 	// End CDC changes
 
 	// We have not scanned the initial table, so we can just duplicate the initial chunk

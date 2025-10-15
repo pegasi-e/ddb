@@ -185,8 +185,9 @@ void CDCWriteState::EmitUpdate(UpdateInfo &info) {
 
 	if (transaction.involved_columns.find(table->GetTableName()) != transaction.involved_columns.end()) {
 		auto column_map = transaction.involved_columns[table->GetTableName()];
-		if (column_map.find(info.column_index) != column_map.end()) {
-			column_ids = column_map[info.column_index];
+		if (!column_map.empty()) {
+			column_ids = column_map;
+			//column_ids = column_map[info.column_index];
 		}
 	}
 
