@@ -128,10 +128,10 @@ SinkResultType PhysicalUpdate::Sink(ExecutionContext &context, DataChunk &chunk,
 			involved_columns.emplace_back(table_scan->column_ids[i].GetPrimaryIndex());
 		}
 	}
-	
-	// for (idx_t i = 0; i < columns.size(); i++) {
-	// 	columnMap[columns[i].index] = involved_columns;
-	// }
+
+	for (idx_t i = 0; i < columns.size(); i++) {
+		columnMap[columns[i].index] = involved_columns;
+	}
 	// transaction.involved_columns[table.GetTableName()] = std::move(columnMap);
 	//End extract the involved columns for CDC
 	// end Anybase changes
