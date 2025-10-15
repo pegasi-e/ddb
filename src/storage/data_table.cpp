@@ -1080,7 +1080,7 @@ static idx_t HandleInsertConflicts(TableCatalogEntry &table, ClientContext &cont
 		auto target_table_name = data_table.GetTableName();
 		for (auto &t : set_columns) {
 			vector<column_t> copied_columns(involved_columns);
-			current_transaction.AddInvolvedColumn(target_table_name, t.index, std::move(copied_columns));
+			current_transaction.AddInvolvedColumn("abc", t.index, std::move(copied_columns));
 		}
 	}
 	// End CDC changes

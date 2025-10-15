@@ -82,7 +82,7 @@ public:
 		return false;
 	}
 
-	void AddInvolvedColumn(const string table_name, const idx_t column_index, vector<idx_t> &&column_indices) {  // NOLINT(*-unnecessary-value-param)
+	void AddInvolvedColumn(const string table_name, const idx_t column_index, vector<idx_t> &&column_indices) {  // NOLINT
 		involved_columns[table_name][column_index] = std::move(column_indices);
 	}
 	// table -> column indexes -> [involved column indexes]
