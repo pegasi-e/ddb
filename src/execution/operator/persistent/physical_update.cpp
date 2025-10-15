@@ -129,11 +129,12 @@ SinkResultType PhysicalUpdate::Sink(ExecutionContext &context, DataChunk &chunk,
 			involved_columns.emplace_back(table_scan->column_ids[i].GetPrimaryIndex());
 		}
 
+		auto target_table_name = table.GetTableName();
 		for (idx_t i = 0; i < columns.size(); i++) {
-			std::copy(involved_columns.begin(), involved_columns.end(), std::back_inserter(columnMap[columns[i].index]));
+			vector<column_t> copied_columns;
+			std::copy(involved_columns.begin(), involved_columns.end(), copied_columns.begin());
+			transaction.AddInvolvedColumn(target_table_name, columns[i].index, std::move(copied_columns));
 		}
-
-		transaction.involved_columns[table.GetTableName()] = std::move(columnMap);
 	}
 	//End extract the involved columns for CDC
 	// end Anybase changes
