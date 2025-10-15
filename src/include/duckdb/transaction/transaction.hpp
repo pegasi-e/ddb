@@ -82,8 +82,7 @@ public:
 		return false;
 	}
 	// table -> column indexes -> [involved column indexes]
-	// unordered_map<string, unordered_map<idx_t, vector<idx_t>>> involved_columns;
-	unordered_map<string, vector<idx_t>> involved_columns;
+	unordered_map<string, unordered_map<idx_t, vector<idx_t>>> involved_columns;
 // end Anybase changes
 };
 

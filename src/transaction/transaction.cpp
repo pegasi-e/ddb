@@ -10,6 +10,11 @@ Transaction::Transaction(TransactionManager &manager_p, ClientContext &context_p
 }
 
 Transaction::~Transaction() {
+	Printer::Print("clear");
+	for (auto &column : involved_columns) {
+		column.second.clear();
+	}
+	involved_columns.clear();
 }
 
 bool Transaction::IsReadOnly() {
