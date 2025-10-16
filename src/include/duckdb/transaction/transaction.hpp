@@ -82,12 +82,13 @@ public:
 		return false;
 	}
 
-	void AddInvolvedColumn(const string table_name, const idx_t column_index, vector<idx_t> &&column_indices) {  // NOLINT
+	void AddInvolvedColumn(const string table_name, vector<idx_t> &&column_indices) {  // NOLINT
 		// because string is shared it will cause a seg fault without this copy
-		involved_columns[string(table_name)][column_index] = std::move(column_indices);
+		// TODO: merge the columns.
+		involved_columns[string(table_name)] = std::move(column_indices);
 	}
 	// table -> column indexes -> [involved column indexes]
-	unordered_map<string, unordered_map<idx_t, vector<idx_t>>> involved_columns;
+	unordered_map<string, vector<idx_t>> involved_columns;
 // end Anybase changes
 };
 
