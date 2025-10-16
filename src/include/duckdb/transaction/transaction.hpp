@@ -82,7 +82,7 @@ public:
 		return false;
 	}
 
-	void AddInvolvedColumn(const string &table_name, vector<idx_t> &&column_indices) {
+	void AddInvolvedColumn(const string &table_name, vector<idx_t> &column_indices) {
 		auto& dest = involved_columns[table_name];
 		dest.insert(dest.end(),
 				std::make_move_iterator(column_indices.begin()),

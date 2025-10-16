@@ -127,7 +127,7 @@ SinkResultType PhysicalUpdate::Sink(ExecutionContext &context, DataChunk &chunk,
 			involved_columns.emplace_back(table_scan->column_ids[i].GetPrimaryIndex());
 		}
 
-		transaction.AddInvolvedColumn(table.GetTableName(), std::move(involved_columns));
+		transaction.AddInvolvedColumn(table.GetTableName(), involved_columns);
 	}
 	//End extract the involved columns for CDC
 	// end Anybase changes
