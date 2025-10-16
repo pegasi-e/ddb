@@ -176,7 +176,7 @@ void CDCWriteState::EmitUpdate(UpdateInfo &info) {
 
 	auto table_types = table->GetTypes();
 	auto &column_definitions = table->Columns();
-	vector<column_t> column_ids;
+	vector<idx_t> column_ids;
 	vector<string> column_names;
 	vector<uint64_t> column_versions;
 	vector<LogicalType> update_types;
@@ -184,10 +184,7 @@ void CDCWriteState::EmitUpdate(UpdateInfo &info) {
 	auto did_add_target = false;
 
 	if (transaction.involved_columns.find(table->GetTableName()) != transaction.involved_columns.end()) {
-		auto column_map = transaction.involved_columns[table->GetTableName()];
-		if (!column_map.empty()) {
-			column_ids = column_map[info.column_index];
-		}
+		column_ids = transaction.involved_columns[table->GetTableName()];
 	}
 
 	for (idx_t i = 0; i < column_ids.size(); i++) {
