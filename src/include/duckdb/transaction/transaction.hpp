@@ -85,8 +85,7 @@ public:
 	void AddInvolvedColumn(const string table_name, vector<idx_t> &&column_indices) {  // NOLINT
 		// because string is shared it will cause a seg fault without this copy
 		// TODO: merge the columns.
-		auto s = string(table_name.c_str());
-		involved_columns[std::move(s)] = std::move(column_indices);
+		involved_columns[std::move(string(strdup(table_name.c_str())))] = std::move(column_indices);
 	}
 	// table -> column indexes -> [involved column indexes]
 	unordered_map<string, vector<idx_t>> involved_columns;
