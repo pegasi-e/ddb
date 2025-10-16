@@ -184,7 +184,10 @@ void CDCWriteState::EmitUpdate(UpdateInfo &info) {
 	auto did_add_target = false;
 
 	if (transaction.involved_columns.find(table->GetTableName()) != transaction.involved_columns.end()) {
-		column_ids = transaction.involved_columns[table->GetTableName()];
+		auto set = transaction.involved_columns[table->GetTableName()];
+		if (!set.empty()) {
+			column_ids = vector<idx_t>(set.begin(), set.end());
+		}
 	}
 
 	for (idx_t i = 0; i < column_ids.size(); i++) {

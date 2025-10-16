@@ -84,11 +84,9 @@ public:
 
 	void AddInvolvedColumn(const string &table_name, vector<idx_t> &column_indices) {
 		auto& dest = involved_columns[table_name];
-		dest.insert(dest.end(),
-				std::make_move_iterator(column_indices.begin()),
-				std::make_move_iterator(column_indices.end()));
+		dest.insert(dest.begin(), dest.end());
 	}
-	unordered_map<string, vector<idx_t>> involved_columns;
+	unordered_map<string, unordered_set<idx_t>> involved_columns;
 // end Anybase changes
 };
 
