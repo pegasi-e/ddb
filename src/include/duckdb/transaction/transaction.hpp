@@ -83,11 +83,11 @@ public:
 	}
 
 	void AddInvolvedColumn(const string &table_name, vector<idx_t> &&column_indices) {
-		// because string is shared it will cause a seg fault without this copy
-		// TODO: merge the columns.
-		involved_columns["test"] = std::move(column_indices);
+		auto& dest = involved_columns[table_name];
+		dest.insert(dest.end(),
+				std::make_move_iterator(column_indices.begin()),
+				std::make_move_iterator(column_indices.end()));
 	}
-	// table -> column indexes -> [involved column indexes]
 	unordered_map<string, vector<idx_t>> involved_columns;
 // end Anybase changes
 };
