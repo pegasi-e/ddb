@@ -145,6 +145,7 @@ void TransactionContext::BeginTransaction(const duckdb::timestamp_t timestamp, c
 	auto start_timestamp = timestamp;
 	auto global_transaction_id = sequenceNumber;
 	current_transaction = make_uniq<MetaTransaction>(context, start_timestamp, global_transaction_id);
+	current_transaction->SetIdIsProvided();
 
 	// Notify any registered state of transaction begin
 	for (auto &state : context.registered_state->States()) {

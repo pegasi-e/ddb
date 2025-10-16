@@ -97,9 +97,12 @@ private:
 	//! Map of name -> used database for databases that are in-use by this transaction
 	case_insensitive_map_t<reference<AttachedDatabase>> used_databases;
 // start Anybase changes
+	bool is_id_provided_transaction;
 public:
 	uint64_t GetSnapshotId(optional_ptr<AttachedDatabase> db);
 	uint64_t CheckpointAndGetSnapshotId(optional_ptr<AttachedDatabase> db);
+	void SetIdIsProvided();
+	bool IsIdProvided() const;
 // end Anybase changes
 };
 

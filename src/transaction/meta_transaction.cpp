@@ -12,7 +12,10 @@ MetaTransaction::MetaTransaction(ClientContext &context_p, timestamp_t start_tim
                                  transaction_t transaction_id_p)
     : context(context_p), start_timestamp(start_timestamp_p), global_transaction_id(transaction_id_p),
       transaction_validity(*context_p.db), active_query(MAXIMUM_QUERY_ID), modified_database(nullptr),
-      is_read_only(false) {
+      is_read_only(false),
+	//Start Anybase change
+	is_id_provided_transaction(false) {
+	//End Anybase change
 }
 
 MetaTransaction &MetaTransaction::Get(ClientContext &context) {
@@ -250,6 +253,14 @@ uint64_t MetaTransaction::GetSnapshotId(optional_ptr<AttachedDatabase> db) {
 uint64_t MetaTransaction::CheckpointAndGetSnapshotId(optional_ptr<AttachedDatabase> db) {
 	auto &transaction_manager = db->GetTransactionManager();
 	return transaction_manager.CheckpointAndGetSnapshotId(context);
+}
+
+void MetaTransaction::SetIdIsProvided() {
+	this->is_id_provided_transaction = true;
+}
+
+bool MetaTransaction::IsIdProvided() const {
+	return this->is_id_provided_transaction;
 }
 // end Anybase changes
 } // namespace duckdb

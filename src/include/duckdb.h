@@ -5233,7 +5233,7 @@ typedef enum CDC_EVENT_TYPE : int32_t {
 
 typedef void (*duckdb_change_data_capture_callback_t)(
 	cdc_event_type type,
-	int64_t transactionStartTime,
+	idx_t transactionStartTime,
 	idx_t transactionId,
 	idx_t column_count,
 	idx_t table_version,

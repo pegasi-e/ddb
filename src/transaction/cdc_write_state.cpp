@@ -21,7 +21,7 @@ namespace duckdb {
 
 void ChangeDataCapture::EmitChange(
 			const cdc_event_type type,
-			const int64_t transactionStartTime,
+			const idx_t transactionStartTime,
 			const idx_t transactionId,
 			const idx_t column_count,
 			const idx_t table_version,

@@ -17,7 +17,7 @@ struct ChangeDataCapture {
 	bool IsEnabled() const { return function != nullptr; }
 	void EmitChange(
 		cdc_event_type type,
-		int64_t transactionStartTime,
+		idx_t transactionStartTime,
 		idx_t transactionId,
 		idx_t column_count,
 		idx_t table_version,

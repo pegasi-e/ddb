@@ -64,15 +64,27 @@ Transaction &DuckTransactionManager::StartTransaction(ClientContext &context) {
 	if (!meta_transaction.IsReadOnly()) {
 		start_lock = make_uniq<lock_guard<mutex>>(start_transaction_lock);
 	}
-	lock_guard<mutex> lock(transaction_lock);
-	if (current_start_timestamp >= TRANSACTION_ID_START) { // LCOV_EXCL_START
-		throw InternalException("Cannot start more transactions, ran out of "
-		                        "transaction identifiers!");
-	} // LCOV_EXCL_STOP
 
-	// obtain the start time and transaction ID of this transaction
-	transaction_t start_time = current_start_timestamp++;
-	transaction_t transaction_id = current_transaction_id++;
+	lock_guard<mutex> lock(transaction_lock);
+	//being anybase changes
+
+	transaction_t start_time;
+	transaction_t transaction_id;
+	if (meta_transaction.IsIdProvided()) {
+		start_time = meta_transaction.start_timestamp.value;
+		transaction_id = meta_transaction.global_transaction_id;
+	} else {
+		if (current_start_timestamp >= TRANSACTION_ID_START) { // LCOV_EXCL_START
+			throw InternalException("Cannot start more transactions, ran out of "
+									"transaction identifiers!");
+		} // LCOV_EXCL_STOP
+
+		// obtain the start time and transaction ID of this transaction
+		start_time = current_start_timestamp++;
+		transaction_id = current_transaction_id++;
+	}
+	//end anybase changes
+
 	if (active_transactions.empty()) {
 		lowest_active_start = start_time;
 		lowest_active_id = transaction_id;
