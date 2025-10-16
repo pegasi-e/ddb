@@ -176,18 +176,15 @@ void CDCWriteState::EmitUpdate(UpdateInfo &info) {
 
 	auto table_types = table->GetTypes();
 	auto &column_definitions = table->Columns();
-	vector<idx_t> column_ids;
+	std::vector<idx_t> column_ids;
 	vector<string> column_names;
 	vector<uint64_t> column_versions;
 	vector<LogicalType> update_types;
 	vector<StorageIndex> column_indexes;
 	auto did_add_target = false;
 
-	if (transaction.involved_columns.find(table->GetTableName()) != transaction.involved_columns.end()) {
-		auto set = transaction.involved_columns[table->GetTableName()];
-		if (!set.empty()) {
-			column_ids = vector<idx_t>(set.begin(), set.end());
-		}
+	if (transaction.HasInvolvedColumns(table->GetTableName())) {
+		column_ids = transaction.GetInvolvedColumns(table->GetTableName());
 	}
 
 	for (idx_t i = 0; i < column_ids.size(); i++) {
