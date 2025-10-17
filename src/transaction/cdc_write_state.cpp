@@ -106,7 +106,7 @@ void CDCWriteState::EmitDelete(DeleteInfo &info) {
 }
 
 void CDCWriteState::EmitInsert(AppendInfo &info) {
-	printf("I-1\n");
+	fprintf(stderr, "I-1\n");
 	auto &table = info.table;
 	auto table_version = table->GetVersion();
 
@@ -119,7 +119,7 @@ void CDCWriteState::EmitInsert(AppendInfo &info) {
 		column_versions[i] = table->GetColumnVersion(i);
 	}
 	auto ptr = transaction.context.lock();
-	printf("I-2\n");
+	fprintf(stderr, "I-2\n");
 
 	table->ScanTableSegment(transaction, info.start_row, info.count, [&](DataChunk &chunk) {
 		auto insert_chunk = make_uniq<DataChunk>();
@@ -128,7 +128,7 @@ void CDCWriteState::EmitInsert(AppendInfo &info) {
 		insert_chunk->Flatten();
 
 		auto &config = DBConfig::GetConfig(info.table->db.GetDatabase());
-		printf("I-Emit\n");
+		fprintf(stderr, "I-Emit\n");
 		config.change_data_capture.EmitChange(
 			DUCKDB_CDC_EVENT_INSERT,
 			transaction.start_time,
@@ -143,7 +143,7 @@ void CDCWriteState::EmitInsert(AppendInfo &info) {
 			nullptr
 			);
 
-		printf("I-3\n");
+		fprintf(stderr, "I-3\n");
 
 		if (columnCount > 0) {
 			for (idx_t i = 0; i < columnCount; i++) {
@@ -189,12 +189,12 @@ void CDCWriteState::EmitUpdate(UpdateInfo &info) {
 	vector<StorageIndex> column_indexes;
 	auto did_add_target = false;
 
-	printf("1\n");
+	fprintf(stderr, "1\n");
 	if (transaction.HasInvolvedColumns(table->GetTableName())) {
 		column_ids = transaction.GetInvolvedColumns(table->GetTableName());
 	}
 
-	printf("2\n");
+	fprintf(stderr, "2\n");
 	for (idx_t i = 0; i < column_ids.size(); i++) {
 		auto column_index = column_ids[i];
 		column_names.push_back(column_definitions[column_index].GetName());
@@ -206,7 +206,7 @@ void CDCWriteState::EmitUpdate(UpdateInfo &info) {
 		}
 	}
 
-	printf("3\n");
+	fprintf(stderr, "3\n");
 	if (!did_add_target) {
 		column_names.push_back(column_definitions[info.column_index].GetName());
 		column_versions.push_back(table->GetColumnVersion(info.column_index));
@@ -214,7 +214,7 @@ void CDCWriteState::EmitUpdate(UpdateInfo &info) {
 		column_indexes.push_back(StorageIndex(info.column_index));
 	}
 
-	printf("4\n");
+	fprintf(stderr, "4\n");
 	auto update_offset = info.column_index;
 	for (idx_t i = 0; i < column_indexes.size(); i++) {
 		if (column_indexes[i].GetPrimaryIndex() == info.column_index) {
@@ -223,7 +223,7 @@ void CDCWriteState::EmitUpdate(UpdateInfo &info) {
 		}
 	}
 
-	printf("5\n");
+	fprintf(stderr, "5\n");
 	if (CanApplyUpdate(info)) {
 		info.segment->FetchAndApplyUpdate(info, previous_update_chunk->data[update_offset]);
 		info.segment->FetchCommitted(info.vector_index, current_update_chunk->data[update_offset]);
@@ -265,11 +265,11 @@ void CDCWriteState::EmitUpdate(UpdateInfo &info) {
 		info.segment->FetchAndApplyUpdate(info, previous_update_chunk->data[update_offset]);
 		info.segment->FetchCommitted(info.vector_index, current_update_chunk->data[update_offset]);
 	}
-	printf("6\n");
+	fprintf(stderr, "6\n");
 }
 
 void CDCWriteState::Flush() {
-	printf("F Start\n");
+	fprintf(stderr, "F Start\n");
 	if (current_update_chunk && previous_update_chunk) {
 		SelectionVector sel(last_update_info.cdc_tuples);
 		auto &config = DBConfig::GetConfig(last_update_info.table->db.GetDatabase());
@@ -299,7 +299,7 @@ void CDCWriteState::Flush() {
 			column_names_cstrings.push_back(strdup(column_name.c_str()));
 		}
 
-		printf("Emit\n");
+		fprintf(stderr, "Emit\n");
 		config.change_data_capture.EmitChange(
 			DUCKDB_CDC_EVENT_UPDATE,
 			transaction.start_time,
@@ -320,7 +320,7 @@ void CDCWriteState::Flush() {
 			}
 		}
 	}
-	printf("F Done\n");
+	fprintf(stderr, "F Done\n");
 }
 
 void CDCWriteState::EmitEntry(UndoFlags type, data_ptr_t data) {
