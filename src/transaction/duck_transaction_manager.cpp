@@ -71,7 +71,7 @@ Transaction &DuckTransactionManager::StartTransaction(ClientContext &context) {
 	transaction_t start_time;
 	transaction_t transaction_id;
 	if (meta_transaction.IsIdProvided()) {
-		start_time = meta_transaction.start_timestamp.value;
+		start_time = reinterpret_cast<transaction_t&>(meta_transaction.start_timestamp.value);
 		transaction_id = meta_transaction.global_transaction_id;
 	} else {
 		if (current_start_timestamp >= TRANSACTION_ID_START) { // LCOV_EXCL_START
