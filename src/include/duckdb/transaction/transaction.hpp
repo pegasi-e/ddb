@@ -78,7 +78,7 @@ private:
 	bool is_read_only;
 // start Anybase changes
 	unordered_map<string, unordered_set<idx_t>> involved_columns;
-	mutable std::mutex mu_;
+	// mutable std::mutex mu_;
 
 public:
 	virtual bool ShouldPublishCDCEvent() {
@@ -86,13 +86,13 @@ public:
 	}
 
 	void AddInvolvedColumn(const string &table_name, std::vector<idx_t> &column_indices) {
-		std::lock_guard<std::mutex> lock(mu_);
+		// std::lock_guard<std::mutex> lock(mu_);
 		auto& dest = involved_columns[table_name];
 		dest.insert(column_indices.begin(), column_indices.end());
 	}
 
 	std::vector<idx_t> GetInvolvedColumns(const string &table_name) {
-		std::lock_guard<std::mutex> lock(mu_);
+		// std::lock_guard<std::mutex> lock(mu_);
 		if (involved_columns.find(table_name) != involved_columns.end()) {
 			auto& dest = involved_columns[table_name];
 			return std::vector<idx_t>(dest.begin(), dest.end());
@@ -102,7 +102,7 @@ public:
 	}
 
 	bool HasInvolvedColumns(const string &table_name) const {
-		std::lock_guard<std::mutex> lock(mu_);
+		// std::lock_guard<std::mutex> lock(mu_);
 		return involved_columns.find(table_name) != involved_columns.end();
 	}
 
