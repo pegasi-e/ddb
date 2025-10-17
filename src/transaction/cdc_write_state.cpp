@@ -100,7 +100,7 @@ void CDCWriteState::EmitDelete(DeleteInfo &info) {
 
 	if (columnCount > 0) {
 		for (idx_t i = 0; i < columnCount; i++) {
-			delete[] column_names[i];
+			free((void *) column_names[i]);
 		}
 	}
 }
@@ -303,7 +303,7 @@ void CDCWriteState::Flush() {
 
 		if (!column_names_cstrings.empty()) {
 			for (idx_t i = 0; i < column_names_cstrings.size(); i++) {
-				delete[] column_names_cstrings[i];
+				free((void *) column_names_cstrings[i]);
 			}
 		}
 	}
