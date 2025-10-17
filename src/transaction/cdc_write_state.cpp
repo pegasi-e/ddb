@@ -143,7 +143,7 @@ void CDCWriteState::EmitInsert(AppendInfo &info) {
 
 	if (columnCount > 0) {
 		for (idx_t i = 0; i < columnCount; i++) {
-			delete[] column_names[i];
+			free((void *) column_names[i]);
 		}
 	}
 }
