@@ -1,7 +1,6 @@
 #include "duckdb/transaction/cdc_write_state.hpp"
 
 #include "duckdb/catalog/catalog_set.hpp"
-#include "duckdb/common/printer.hpp"
 #include "duckdb/main/attached_database.hpp"
 #include "duckdb/storage/data_table.hpp"
 #include "duckdb/storage/table/column_data.hpp"
@@ -107,7 +106,7 @@ void CDCWriteState::EmitDelete(DeleteInfo &info) {
 }
 
 void CDCWriteState::EmitInsert(AppendInfo &info) {
-	Printer::Print("I-1");
+	printf("I-1\n");
 	auto &table = info.table;
 	auto table_version = table->GetVersion();
 
@@ -120,7 +119,7 @@ void CDCWriteState::EmitInsert(AppendInfo &info) {
 		column_versions[i] = table->GetColumnVersion(i);
 	}
 	auto ptr = transaction.context.lock();
-	Printer::Print("I-2");
+	printf("I-2\n");
 
 	table->ScanTableSegment(transaction, info.start_row, info.count, [&](DataChunk &chunk) {
 		auto insert_chunk = make_uniq<DataChunk>();
@@ -129,7 +128,7 @@ void CDCWriteState::EmitInsert(AppendInfo &info) {
 		insert_chunk->Flatten();
 
 		auto &config = DBConfig::GetConfig(info.table->db.GetDatabase());
-		Printer::Print("I-Emit");
+		printf("I-Emit\n");
 		config.change_data_capture.EmitChange(
 			DUCKDB_CDC_EVENT_INSERT,
 			transaction.start_time,
@@ -144,7 +143,7 @@ void CDCWriteState::EmitInsert(AppendInfo &info) {
 			nullptr
 			);
 
-		Printer::Print("I-3");
+		printf("I-3\n");
 
 		if (columnCount > 0) {
 			for (idx_t i = 0; i < columnCount; i++) {
@@ -190,12 +189,12 @@ void CDCWriteState::EmitUpdate(UpdateInfo &info) {
 	vector<StorageIndex> column_indexes;
 	auto did_add_target = false;
 
-	Printer::Print("1");
+	printf("1\n");
 	if (transaction.HasInvolvedColumns(table->GetTableName())) {
 		column_ids = transaction.GetInvolvedColumns(table->GetTableName());
 	}
 
-	Printer::Print("2");
+	printf("2\n");
 	for (idx_t i = 0; i < column_ids.size(); i++) {
 		auto column_index = column_ids[i];
 		column_names.push_back(column_definitions[column_index].GetName());
@@ -207,7 +206,7 @@ void CDCWriteState::EmitUpdate(UpdateInfo &info) {
 		}
 	}
 
-	Printer::Print("3");
+	printf("3\n");
 	if (!did_add_target) {
 		column_names.push_back(column_definitions[info.column_index].GetName());
 		column_versions.push_back(table->GetColumnVersion(info.column_index));
@@ -215,7 +214,7 @@ void CDCWriteState::EmitUpdate(UpdateInfo &info) {
 		column_indexes.push_back(StorageIndex(info.column_index));
 	}
 
-	Printer::Print("4");
+	printf("4\n");
 	auto update_offset = info.column_index;
 	for (idx_t i = 0; i < column_indexes.size(); i++) {
 		if (column_indexes[i].GetPrimaryIndex() == info.column_index) {
@@ -224,7 +223,7 @@ void CDCWriteState::EmitUpdate(UpdateInfo &info) {
 		}
 	}
 
-	Printer::Print("5");
+	printf("5\n");
 	if (CanApplyUpdate(info)) {
 		info.segment->FetchAndApplyUpdate(info, previous_update_chunk->data[update_offset]);
 		info.segment->FetchCommitted(info.vector_index, current_update_chunk->data[update_offset]);
@@ -266,11 +265,11 @@ void CDCWriteState::EmitUpdate(UpdateInfo &info) {
 		info.segment->FetchAndApplyUpdate(info, previous_update_chunk->data[update_offset]);
 		info.segment->FetchCommitted(info.vector_index, current_update_chunk->data[update_offset]);
 	}
-	Printer::Print("6");
+	printf("6\n");
 }
 
 void CDCWriteState::Flush() {
-	Printer::Print("F Start");
+	printf("F Start\n");
 	if (current_update_chunk && previous_update_chunk) {
 		SelectionVector sel(last_update_info.cdc_tuples);
 		auto &config = DBConfig::GetConfig(last_update_info.table->db.GetDatabase());
@@ -300,7 +299,7 @@ void CDCWriteState::Flush() {
 			column_names_cstrings.push_back(strdup(column_name.c_str()));
 		}
 
-		Printer::Print("Emit");
+		printf("Emit\n");
 		config.change_data_capture.EmitChange(
 			DUCKDB_CDC_EVENT_UPDATE,
 			transaction.start_time,
@@ -321,7 +320,7 @@ void CDCWriteState::Flush() {
 			}
 		}
 	}
-	Printer::Print("F Done");
+	printf("F Done\n");
 }
 
 void CDCWriteState::EmitEntry(UndoFlags type, data_ptr_t data) {

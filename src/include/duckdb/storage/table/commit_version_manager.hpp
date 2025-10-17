@@ -14,7 +14,9 @@ namespace duckdb {
     struct CommitVersionManager {
     public:
         void DidCommitTransaction(const transaction_t commit_id) {
-            if (commit_id == last_commit_id) return;
+            if (commit_id == last_commit_id) {
+                return;
+            }
 
             last_commit_id = commit_id;
             version++;
