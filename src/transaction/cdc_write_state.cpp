@@ -21,8 +21,7 @@ namespace duckdb {
 
 void ChangeDataCapture::EmitChange(
 			const cdc_event_type type,
-			const idx_t transactionStartTime,
-			const idx_t transactionId,
+			const char *transaction_id,
 			const idx_t column_count,
 			const idx_t table_version,
 			idx_t *updated_column_index,
@@ -34,7 +33,7 @@ void ChangeDataCapture::EmitChange(
 
 	if (function != nullptr) {
 
-		function(type, transactionStartTime, transactionId, column_count, table_version, updated_column_index, table_name, column_names, column_versions, values, previous_values);
+		function(type, transaction_id, column_count, table_version, updated_column_index, table_name, column_names, column_versions, values, previous_values);
 	}
 }
 
@@ -81,12 +80,13 @@ void CDCWriteState::EmitDelete(DeleteInfo &info) {
 			delete_chunk->Slice(sel, info.count);
 		}
 
-		delete_chunk->Flatten();
+		std::ostringstream oss;
+		oss << transaction.start_time << ":" << transaction.transaction_id;
+		const auto t_id = strdup(oss.str().c_str());
 
 		config.change_data_capture.EmitChange(
 			DUCKDB_CDC_EVENT_DELETE,
-			transaction.start_time,
-			transaction.transaction_id,
+			t_id,
 			columnCount,
 			table_version,
 			nullptr,
@@ -102,11 +102,12 @@ void CDCWriteState::EmitDelete(DeleteInfo &info) {
 				free((void *) column_names[i]);
 			}
 		}
+
+		free(t_id);
 	});
 }
 
 void CDCWriteState::EmitInsert(AppendInfo &info) {
-	fprintf(stderr, "I-1\n");
 	auto &table = info.table;
 	auto table_version = table->GetVersion();
 
@@ -119,7 +120,6 @@ void CDCWriteState::EmitInsert(AppendInfo &info) {
 		column_versions[i] = table->GetColumnVersion(i);
 	}
 	auto ptr = transaction.context.lock();
-	fprintf(stderr, "I-2\n");
 
 	table->ScanTableSegment(transaction, info.start_row, info.count, [&](DataChunk &chunk) {
 		auto insert_chunk = make_uniq<DataChunk>();
@@ -128,11 +128,12 @@ void CDCWriteState::EmitInsert(AppendInfo &info) {
 		insert_chunk->Flatten();
 
 		auto &config = DBConfig::GetConfig(info.table->db.GetDatabase());
-		fprintf(stderr, "I-Emit\n");
+		std::ostringstream oss;
+		oss << transaction.start_time << ":" << transaction.transaction_id;
+		const auto t_id = strdup(oss.str().c_str());
 		config.change_data_capture.EmitChange(
 			DUCKDB_CDC_EVENT_INSERT,
-			transaction.start_time,
-			transaction.transaction_id,
+			t_id,
 			columnCount,
 			table_version,
 			nullptr,
@@ -143,13 +144,13 @@ void CDCWriteState::EmitInsert(AppendInfo &info) {
 			nullptr
 			);
 
-		fprintf(stderr, "I-3\n");
-
 		if (columnCount > 0) {
 			for (idx_t i = 0; i < columnCount; i++) {
 				free((void *) column_names[i]);
 			}
 		}
+
+		free(t_id);
 	});
 
 }
@@ -189,12 +190,10 @@ void CDCWriteState::EmitUpdate(UpdateInfo &info) {
 	vector<StorageIndex> column_indexes;
 	auto did_add_target = false;
 
-	fprintf(stderr, "1\n");
 	if (transaction.HasInvolvedColumns(table->GetTableName())) {
 		column_ids = transaction.GetInvolvedColumns(table->GetTableName());
 	}
 
-	fprintf(stderr, "2\n");
 	for (idx_t i = 0; i < column_ids.size(); i++) {
 		auto column_index = column_ids[i];
 		column_names.push_back(column_definitions[column_index].GetName());
@@ -206,7 +205,6 @@ void CDCWriteState::EmitUpdate(UpdateInfo &info) {
 		}
 	}
 
-	fprintf(stderr, "3\n");
 	if (!did_add_target) {
 		column_names.push_back(column_definitions[info.column_index].GetName());
 		column_versions.push_back(table->GetColumnVersion(info.column_index));
@@ -214,7 +212,6 @@ void CDCWriteState::EmitUpdate(UpdateInfo &info) {
 		column_indexes.push_back(StorageIndex(info.column_index));
 	}
 
-	fprintf(stderr, "4\n");
 	auto update_offset = info.column_index;
 	for (idx_t i = 0; i < column_indexes.size(); i++) {
 		if (column_indexes[i].GetPrimaryIndex() == info.column_index) {
@@ -223,7 +220,6 @@ void CDCWriteState::EmitUpdate(UpdateInfo &info) {
 		}
 	}
 
-	fprintf(stderr, "5\n");
 	if (CanApplyUpdate(info)) {
 		info.segment->FetchAndApplyUpdate(info, previous_update_chunk->data[update_offset]);
 		info.segment->FetchCommitted(info.vector_index, current_update_chunk->data[update_offset]);
@@ -265,11 +261,9 @@ void CDCWriteState::EmitUpdate(UpdateInfo &info) {
 		info.segment->FetchAndApplyUpdate(info, previous_update_chunk->data[update_offset]);
 		info.segment->FetchCommitted(info.vector_index, current_update_chunk->data[update_offset]);
 	}
-	fprintf(stderr, "6\n");
 }
 
 void CDCWriteState::Flush() {
-	fprintf(stderr, "F Start\n");
 	if (current_update_chunk && previous_update_chunk) {
 		SelectionVector sel(last_update_info.cdc_tuples);
 		auto &config = DBConfig::GetConfig(last_update_info.table->db.GetDatabase());
@@ -299,11 +293,13 @@ void CDCWriteState::Flush() {
 			column_names_cstrings.push_back(strdup(column_name.c_str()));
 		}
 
-		fprintf(stderr, "Emit\n");
+		std::ostringstream oss;
+		oss << transaction.start_time << ":" << transaction.transaction_id;
+		const auto t_id = strdup(oss.str().c_str());
+
 		config.change_data_capture.EmitChange(
 			DUCKDB_CDC_EVENT_UPDATE,
-			transaction.start_time,
-			transaction.transaction_id,
+			t_id,
 			column_names_cstrings.size(),
 			update_table_version,
 			nullptr,
@@ -319,8 +315,9 @@ void CDCWriteState::Flush() {
 				free((void *) column_names_cstrings[i]);
 			}
 		}
+
+		free(t_id);
 	}
-	fprintf(stderr, "F Done\n");
 }
 
 void CDCWriteState::EmitEntry(UndoFlags type, data_ptr_t data) {
@@ -373,10 +370,13 @@ void CDCWriteState::EmitTransactionEntry(CDC_EVENT_TYPE type){
 
 	auto context = transaction.context.lock();
 	auto &config = DBConfig::GetConfig(*context);
+	std::ostringstream oss;
+	oss << transaction.start_time << ":" << transaction.transaction_id;
+	const auto t_id = strdup(oss.str().c_str());
+
 	config.change_data_capture.EmitChange(
 		type,
-		transaction.start_time,
-		transaction.transaction_id,
+		t_id,
 		0,
 		0,
 		nullptr,
@@ -386,5 +386,7 @@ void CDCWriteState::EmitTransactionEntry(CDC_EVENT_TYPE type){
 		nullptr,
 		nullptr
 		);
+
+	free(t_id);
 }
 } // namespace duckdb

@@ -68,8 +68,8 @@ Transaction &DuckTransactionManager::StartTransaction(ClientContext &context) {
 	lock_guard<mutex> lock(transaction_lock);
 	//being anybase changes
 
-	transaction_t start_time;
-	transaction_t transaction_id;
+	transaction_t start_time = 0;
+	transaction_t transaction_id = 0;
 	if (meta_transaction.IsIdProvided()) {
 		start_time = reinterpret_cast<transaction_t&>(meta_transaction.start_timestamp.value);
 		transaction_id = meta_transaction.global_transaction_id;
