@@ -97,12 +97,15 @@ private:
 	//! Map of name -> used database for databases that are in-use by this transaction
 	case_insensitive_map_t<reference<AttachedDatabase>> used_databases;
 // start Anybase changes
-	bool is_id_provided_transaction;
 public:
+	DUCKDB_API MetaTransaction(ClientContext &context, timestamp_t start_timestamp,
+	transaction_t global_transaction_id,
+	timestamp_t meta_start,
+	transaction_t meta_transaction_id);
 	uint64_t GetSnapshotId(optional_ptr<AttachedDatabase> db);
 	uint64_t CheckpointAndGetSnapshotId(optional_ptr<AttachedDatabase> db);
-	void SetIdIsProvided();
-	bool IsIdProvided() const;
+	timestamp_t meta_start_timestamp;
+	transaction_t meta_global_transaction_id;
 // end Anybase changes
 };
 

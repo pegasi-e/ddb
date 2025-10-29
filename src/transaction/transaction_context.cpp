@@ -142,10 +142,9 @@ void TransactionContext::BeginTransaction(const duckdb::timestamp_t timestamp, c
 	if (current_transaction) {
 		throw TransactionException("cannot start a transaction within a transaction");
 	}
-	auto start_timestamp = timestamp;
-	auto global_transaction_id = sequenceNumber;
-	current_transaction = make_uniq<MetaTransaction>(context, start_timestamp, global_transaction_id);
-	current_transaction->SetIdIsProvided();
+	auto start_timestamp = Timestamp::GetCurrentTimestamp();
+	auto global_transaction_id = context.db->GetDatabaseManager().GetNewTransactionNumber();
+	current_transaction = make_uniq<MetaTransaction>(context, start_timestamp, global_transaction_id, timestamp, sequenceNumber);
 
 	// Notify any registered state of transaction begin
 	for (auto &state : context.registered_state->States()) {

@@ -66,32 +66,22 @@ Transaction &DuckTransactionManager::StartTransaction(ClientContext &context) {
 	}
 
 	lock_guard<mutex> lock(transaction_lock);
-	//being anybase changes
+	if (current_start_timestamp >= TRANSACTION_ID_START) { // LCOV_EXCL_START
+		throw InternalException("Cannot start more transactions, ran out of "
+								"transaction identifiers!");
+	} // LCOV_EXCL_STOP
 
-	transaction_t start_time = 0;
-	transaction_t transaction_id = 0;
-	if (meta_transaction.IsIdProvided()) {
-		start_time = reinterpret_cast<transaction_t&>(meta_transaction.start_timestamp.value);
-		transaction_id = meta_transaction.global_transaction_id;
-	} else {
-		if (current_start_timestamp >= TRANSACTION_ID_START) { // LCOV_EXCL_START
-			throw InternalException("Cannot start more transactions, ran out of "
-									"transaction identifiers!");
-		} // LCOV_EXCL_STOP
-
-		// obtain the start time and transaction ID of this transaction
-		start_time = current_start_timestamp++;
-		transaction_id = current_transaction_id++;
-	}
-	//end anybase changes
-
+	// obtain the start time and transaction ID of this transaction
+	transaction_t start_time = current_start_timestamp++;
+	transaction_t transaction_id = current_transaction_id++;
 	if (active_transactions.empty()) {
 		lowest_active_start = start_time;
 		lowest_active_id = transaction_id;
 	}
 
 	// create the actual transaction
-	auto transaction = make_uniq<DuckTransaction>(*this, context, start_time, transaction_id, last_committed_version);
+	auto transaction = make_uniq<DuckTransaction>(*this, context, start_time, transaction_id, last_committed_version,
+		meta_transaction.meta_start_timestamp, meta_transaction.meta_global_transaction_id);
 	auto &transaction_ref = *transaction;
 
 	// store it in the set of active transactions
