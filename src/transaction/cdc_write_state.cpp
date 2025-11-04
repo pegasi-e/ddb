@@ -70,6 +70,7 @@ void CDCWriteState::EmitDelete(DeleteInfo &info) {
 		auto delete_chunk = make_uniq<DataChunk>();
 		delete_chunk->Initialize(*ptr, chunk.GetTypes(), chunk.size());
 		delete_chunk->Append(chunk);
+		delete_chunk->Flatten();
 
 		if (!info.is_consecutive) {
 			SelectionVector sel(info.count);
