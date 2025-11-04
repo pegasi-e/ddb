@@ -80,6 +80,7 @@ void CDCWriteState::EmitDelete(DeleteInfo &info) {
 			delete_chunk->Slice(sel, info.count);
 		}
 
+		delete_chunk->Flatten();
 		std::ostringstream oss;
 		oss << transaction.meta_startTime.value << ":" << transaction.meta_sequenceNumber;
 		const auto t_id = strdup(oss.str().c_str());
