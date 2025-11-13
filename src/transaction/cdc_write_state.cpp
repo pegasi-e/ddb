@@ -46,8 +46,6 @@ void CDCWriteState::EmitDelete(DeleteInfo &info) {
 	auto number_of_rows = info.count;
 	auto ptr = transaction.context.lock();
 
-
-
 	table->ScanTableSegment(transaction, info.base_row, number_of_rows, [&](DataChunk &chunk) {
 		auto &config = DBConfig::GetConfig(info.table->db.GetDatabase());
 		auto table_version = table->GetVersion();
@@ -128,8 +126,8 @@ void CDCWriteState::EmitInsert(AppendInfo &info) {
 		auto column_names = vector<const char*>(columnCount);
 		auto column_versions = vector<uint64_t>(columnCount);
 		for (idx_t i = 0; i < columnCount; i++) {
-			column_names.push_back(strdup(column_definitions[i].GetName().c_str()));
-			column_versions.push_back(table->GetColumnVersion(i));
+			column_names[i] = strdup(column_definitions[i].GetName().c_str());
+			column_versions[i] = table->GetColumnVersion(i);
 		}
 
 		auto &config = DBConfig::GetConfig(info.table->db.GetDatabase());
