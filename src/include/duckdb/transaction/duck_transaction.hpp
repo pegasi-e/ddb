@@ -118,6 +118,15 @@ private:
 	};
 	//! Active locks on tables
 	reference_map_t<DataTableInfo, unique_ptr<ActiveTableLock>> active_locks;
+// start Anybase changes
+public:
+	void PublishCdcMessages();
+	bool ShouldPublishCDCEvent() override;
+	DuckTransaction(DuckTransactionManager &manager, ClientContext &context, transaction_t start_time,
+					transaction_t transaction_id, idx_t catalog_version, timestamp_t meta_start_time, transaction_t meta_transaction_id);
+	transaction_t meta_sequenceNumber;
+	timestamp_t meta_startTime;
+// end Anybase changes
 };
 
 } // namespace duckdb

@@ -620,4 +620,30 @@ void BaseAppender::Close() {
 	}
 }
 
+// Start Anybase changes
+Merger::Merger(Connection &con, const string &database_name, const string &schema_name, const string &table_name)
+		: Appender(con, database_name, schema_name, table_name) {
+}
+
+Merger::Merger(Connection &con, const string &schema_name, const string &table_name)
+		: Merger(con, INVALID_CATALOG, schema_name, table_name) {
+}
+
+Merger::Merger(Connection &con, const string &table_name)
+		: Merger(con, DEFAULT_SCHEMA, table_name) {
+}
+
+void Merger::FlushInternal(ColumnDataCollection &collection) {
+	auto context_ref = context.lock();
+	if (!context_ref) {
+		throw InvalidInputException("Merger: Attempting to flush data to a closed connection");
+	}
+	context_ref->Merge(*description, collection, column_ids);
+}
+
+	Merger::~Merger() {
+	Destructor();
+}
+// End Anybase changes
+
 } // namespace duckdb

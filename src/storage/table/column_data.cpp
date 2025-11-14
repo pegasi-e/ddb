@@ -284,15 +284,16 @@ void ColumnData::FetchUpdates(TransactionData transaction, idx_t vector_index, V
 		updates->FetchUpdates(transaction, vector_index, result);
 	}
 }
-
-void ColumnData::FetchUpdateRow(TransactionData transaction, row_t row_id, Vector &result, idx_t result_idx) {
+// start Anybase changes
+void ColumnData::FetchUpdateRow(TransactionData transaction, row_t row_id, Vector &result, idx_t result_idx,
+								bool fetch_current_update) {
 	lock_guard<mutex> update_guard(update_lock);
 	if (!updates) {
 		return;
 	}
-	updates->FetchRow(transaction, NumericCast<idx_t>(row_id), result, result_idx);
+	updates->FetchRow(transaction, NumericCast<idx_t>(row_id), result, result_idx, fetch_current_update);
 }
-
+//end Anybase changes
 void ColumnData::UpdateInternal(TransactionData transaction, DataTable &data_table, idx_t column_index,
                                 Vector &update_vector, row_t *row_ids, idx_t update_count, Vector &base_vector) {
 	lock_guard<mutex> update_guard(update_lock);
@@ -560,18 +561,18 @@ idx_t ColumnData::Fetch(ColumnScanState &state, row_t row_id, Vector &result) {
 	state.internal_index = state.current->start;
 	return ScanVector(state, result, STANDARD_VECTOR_SIZE, ScanVectorType::SCAN_FLAT_VECTOR);
 }
-
+// start Anybase changes
 void ColumnData::FetchRow(TransactionData transaction, ColumnFetchState &state, row_t row_id, Vector &result,
-                          idx_t result_idx) {
+							idx_t result_idx, bool fetch_current_update) {
 	auto segment = data.GetSegment(UnsafeNumericCast<idx_t>(row_id));
 
 	// now perform the fetch within the segment
 	segment->FetchRow(state, row_id, result, result_idx);
 	// merge any updates made to this row
 
-	FetchUpdateRow(transaction, row_id, result, result_idx);
+	FetchUpdateRow(transaction, row_id, result, result_idx, fetch_current_update);
 }
-
+// end Anybase changes
 idx_t ColumnData::FetchUpdateData(ColumnScanState &state, row_t *row_ids, Vector &base_vector) {
 	auto fetch_count = ColumnData::Fetch(state, row_ids[0], base_vector);
 	base_vector.Flatten(fetch_count);
@@ -697,6 +698,9 @@ void ColumnData::InitializeColumn(PersistentColumnData &column_data, BaseStatist
 	D_ASSERT(type.InternalType() == column_data.physical_type);
 	// construct the segments based on the data pointers
 	this->count = 0;
+	// start Anybase changes
+	this->commit_version_manager.SetVersion(column_data.commit_version);
+	// end Anybase changes
 	for (auto &data_pointer : column_data.pointers) {
 		// Update the count and statistics
 		this->count += data_pointer.tuple_count;
@@ -763,6 +767,10 @@ void PersistentColumnData::Serialize(Serializer &serializer) const {
 		serializer.WriteList(102, "sub_columns", child_columns.size() - 1,
 		                     [&](Serializer::List &list, idx_t i) { list.WriteElement(child_columns[i + 1]); });
 	}
+
+	// start Anybase changes
+	serializer.WriteProperty(103, "commit_version", commit_version);
+	// end Anybase changes
 }
 
 void PersistentColumnData::DeserializeField(Deserializer &deserializer, field_id_t field_idx, const char *field_name,
@@ -801,6 +809,10 @@ PersistentColumnData PersistentColumnData::Deserialize(Deserializer &deserialize
 	default:
 		break;
 	}
+
+	// start Anybase changes
+	deserializer.ReadPropertyWithDefault(103, "commit_version", result.commit_version);
+	// end Anybase changes
 	return result;
 }
 
@@ -871,6 +883,9 @@ PersistentColumnData ColumnData::Serialize() {
 	auto result = count ? PersistentColumnData(type.InternalType(), GetDataPointers())
 	                    : PersistentColumnData(type.InternalType());
 	result.has_updates = HasUpdates();
+	// start Anybase changes
+	result.commit_version = commit_version_manager.GetVersion();
+	// end Anybase changes
 	return result;
 }
 

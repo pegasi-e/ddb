@@ -141,20 +141,24 @@ public:
 	void ClearColumns() override;
 
 private:
-	//! A shared pointer to the context of this appender.
-	weak_ptr<ClientContext> context;
-	//! The table description including the column names.
-	unique_ptr<TableDescription> description;
-	//! All table default values.
 	unordered_map<column_t, Value> default_values;
-
-	//! If not empty, then this holds all logical column IDs of columns provided by the appender.
-	//! Any other columns default to NULL, or their default values.
-	vector<LogicalIndex> column_ids;
 
 protected:
 	void FlushInternal(ColumnDataCollection &collection) override;
 	Value GetDefaultValue(idx_t column);
+
+// start Anybase changes
+public:
+	//! A reference to a database connection that created this appender
+	weak_ptr<ClientContext> context;
+	//! The table description (including column names)
+	unique_ptr<TableDescription> description;
+
+protected:
+	//! If not empty, then this holds all logical column IDs of columns provided by the appender.
+	//! Any other columns default to NULL, or their default values.
+	vector<LogicalIndex> column_ids;
+	// end Anybase changes
 };
 
 class QueryAppender : public BaseAppender {
@@ -191,6 +195,23 @@ public:
 protected:
 	void FlushInternal(ColumnDataCollection &collection) override;
 };
+
+// start Anybase changes
+//! Used to merge and insert content into a table.  This object mirrors the way upsert works for the query engine.
+//! Primary key is assumed to be the conflict target
+class Merger : public Appender {
+	public:
+		// Mergers and inserts columns for the given column names.
+		DUCKDB_API Merger(Connection &con, const string &database_name, const string &schema_name,
+							const string &table_name);
+		DUCKDB_API Merger(Connection &con, const string &schema_name, const string &table_name);
+		DUCKDB_API Merger(Connection &con, const string &table_name);
+		DUCKDB_API ~Merger() override;
+
+	protected:
+		void FlushInternal(ColumnDataCollection &collection) override;
+	};
+// end Anybase changes
 
 template <>
 DUCKDB_API void BaseAppender::Append(bool value);

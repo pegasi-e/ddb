@@ -84,6 +84,17 @@ profile = args.profile
 assertions = args.no_assertions
 time_execution = args.time_execution
 timeout = args.timeout
+tests_per_invocation = args.tests_per_invocation
+
+summarize_failures = args.summarize_failures
+if summarize_failures is None:
+    # get from env
+    summarize_failures = False
+    if 'SUMMARIZE_FAILURES' in os.environ:
+        summarize_failures = os.environ['SUMMARIZE_FAILURES'] == '1'
+    elif 'CI' in os.environ:
+        # enable by default in CI if not set explicitly
+        summarize_failures = True
 
 summarize_failures = args.summarize_failures
 if summarize_failures is None:

@@ -19,6 +19,9 @@
 #include "duckdb/common/enums/scan_vector_type.hpp"
 #include "duckdb/common/serializer/serialization_traits.hpp"
 #include "duckdb/common/atomic_ptr.hpp"
+// start Anybase changes
+#include "duckdb/storage/table/commit_version_manager.hpp"
+// end Anybase changes
 
 namespace duckdb {
 class ColumnData;
@@ -150,10 +153,11 @@ public:
 
 	//! Fetch the vector from the column data that belongs to this specific row
 	virtual idx_t Fetch(ColumnScanState &state, row_t row_id, Vector &result);
+	// start Anybase changes
 	//! Fetch a specific row id and append it to the vector
 	virtual void FetchRow(TransactionData transaction, ColumnFetchState &state, row_t row_id, Vector &result,
-	                      idx_t result_idx);
-
+				  idx_t result_idx, bool fetch_current_update = true);
+	// end Anybase changes
 	virtual void Update(TransactionData transaction, DataTable &data_table, idx_t column_index, Vector &update_vector,
 	                    row_t *row_ids, idx_t update_count);
 	virtual void UpdateColumn(TransactionData transaction, DataTable &data_table, const vector<column_t> &column_path,
@@ -216,7 +220,10 @@ protected:
 	void ClearUpdates();
 	void FetchUpdates(TransactionData transaction, idx_t vector_index, Vector &result, idx_t scan_count,
 	                  bool allow_updates, bool scan_committed);
-	void FetchUpdateRow(TransactionData transaction, row_t row_id, Vector &result, idx_t result_idx);
+	// start Anybase changes
+	void FetchUpdateRow(TransactionData transaction, row_t row_id, Vector &result, idx_t result_idx,
+						bool fetch_current_update = true);
+	// end Anybase changes
 	void UpdateInternal(TransactionData transaction, DataTable &data_table, idx_t column_index, Vector &update_vector,
 	                    row_t *row_ids, idx_t update_count, Vector &base_vector);
 	idx_t FetchUpdateData(ColumnScanState &state, row_t *row_ids, Vector &base_vector);
@@ -246,6 +253,11 @@ private:
 	//!	The compression function used by the ColumnData
 	//! This is empty if the segments have mixed compression or the ColumnData is empty
 	atomic_ptr<const CompressionFunction> compression;
+
+// start Anybase changes
+public:
+	CommitVersionManager commit_version_manager;
+// end Anybase changes
 };
 
 struct PersistentColumnData {
@@ -269,6 +281,9 @@ struct PersistentColumnData {
 	void DeserializeField(Deserializer &deserializer, field_id_t field_idx, const char *field_name,
 	                      const LogicalType &type);
 	bool HasUpdates() const;
+// start Anybase changes
+	idx_t commit_version = 0;
+// end Anybase changes
 };
 
 struct PersistentRowGroupData {

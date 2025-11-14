@@ -40,4 +40,11 @@ struct StorageOptions {
 	void Initialize(const unordered_map<string, Value> &options);
 };
 
+inline void ClearUserKey(shared_ptr<string> const &encryption_key) {
+	if (encryption_key && !encryption_key->empty()) {
+		memset(&(*encryption_key)[0], 0, encryption_key->size());
+		encryption_key->clear();
+	}
+}
+
 } // namespace duckdb

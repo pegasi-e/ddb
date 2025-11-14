@@ -5160,6 +5160,91 @@ Folds an expression creating a folded value.
 */
 DUCKDB_C_API duckdb_error_data duckdb_expression_fold(duckdb_client_context context, duckdb_expression expr,
                                                       duckdb_value *out_value);
+// start Anybase changes
+//===--------------------------------------------------------------------===//
+// Anybase API functions
+//===--------------------------------------------------------------------===//
+DUCKDB_C_API uint64_t duckdb_get_hlc_timestamp();
+DUCKDB_C_API void duckdb_set_hlc_timestamp(uint64_t ts);
+DUCKDB_C_API uint64_t duckdb_get_snapshot_id(duckdb_connection con);
+DUCKDB_C_API uint64_t duckdb_checkpoint_and_get_snapshot_id(duckdb_connection con);
+DUCKDB_C_API idx_t duckdb_get_table_version(duckdb_connection connection, const char *schema, const char *table, char **error);
+DUCKDB_C_API idx_t duckdb_get_column_version(duckdb_connection connection, const char *schema, const char *table, const char *column, char **error);
+DUCKDB_C_API idx_t duckdb_estimated_row_count(duckdb_connection connection, const char *catalog, const char *schema, const char *table, char **error);
+DUCKDB_C_API duckdb_state duckdb_begin_transaction(duckdb_connection connection, int64_t micro_seconds, uint64_t sequence, char **error);
+
+/*!
+Creates a new DataChunk that copy a given DataChunk
+ *
+ * chunk: The chunk to create a copy from
+ * @return A new data chunk with a copied data from the given data chunk
+ */
+DUCKDB_C_API duckdb_data_chunk duckdb_create_data_chunk_copy(duckdb_data_chunk *chunk);
+DUCKDB_C_API duckdb_state duckdb_result_to_arrow(duckdb_result result, duckdb_arrow_array *out_array);
+DUCKDB_C_API duckdb_state duckdb_data_chunks_to_arrow_array(duckdb_connection  connection, duckdb_data_chunk *chunks, idx_t number_of_chunks, duckdb_arrow_array *out_array);
+DUCKDB_C_API duckdb_state duckdb_data_chunk_column_to_arrow_array(duckdb_connection  connection, duckdb_data_chunk *chunks, idx_t number_of_chunks, idx_t column_index, duckdb_arrow_array *out_array);
+DUCKDB_C_API uint64_t duckdb_get_hlc_timestamp();
+DUCKDB_C_API void duckdb_set_hlc_timestamp(uint64_t ts);
+
+/*!
+Creates an merger object that allows upsert style merges with existing data while appending new data.
+
+Note that the object must be destroyed with `duckdb_appender_destroy`.
+
+* @param connection The connection context to create the appender in.
+* @param schema The schema of the table to append to, or `nullptr` for the default schema.
+* @param catalog The catalog of the table to append to, or `nullptr` for the default catalog.
+* @param table The table name to append to.
+* @param out_appender The resulting appender object.
+* @returns `DuckDBSuccess` on success or `DuckDBError` on failure.
+*/
+DUCKDB_C_API duckdb_state duckdb_merger_create_ext(duckdb_connection connection, const char *catalog, const char *schema,
+											 const char *table, duckdb_appender *out_appender);
+
+/*!
+Creates an merger object that allows upsert style merges with existing data while appending new data.
+
+Note that the object must be destroyed with `duckdb_appender_destroy`.
+
+* @param connection The connection context to create the appender in.
+* @param schema The schema of the table to append to, or `nullptr` for the default schema.
+* @param table The table name to append to.
+* @param out_appender The resulting appender object.
+* @returns `DuckDBSuccess` on success or `DuckDBError` on failure.
+*/
+DUCKDB_C_API duckdb_state duckdb_merger_create(duckdb_connection connection, const char *schema,
+											  const char *table, duckdb_appender *out_appender);
+
+//===--------------------------------------------------------------------===//
+// Change Data Capture types
+//===--------------------------------------------------------------------===//
+
+// WARNING: the numbers of these enums should not be changed, as changing the numbers breaks ABI compatibility
+// Always add enums at the END of the enum
+//! An enum over DuckDB's internal types.
+typedef enum CDC_EVENT_TYPE : int32_t {
+	DUCKDB_CDC_EVENT_INSERT = 0,
+	DUCKDB_CDC_EVENT_UPDATE = 1,
+	DUCKDB_CDC_EVENT_DELETE = 2,
+	DUCKDB_CDC_EVENT_BEGIN_TRANSACTION = 3,
+	DUCKDB_CDC_EVENT_END_TRANSACTION = 4,
+} cdc_event_type;
+
+typedef void (*duckdb_change_data_capture_callback_t)(
+	cdc_event_type type,
+	const char *transaction_id,
+	idx_t column_count,
+	idx_t table_version,
+	idx_t *updated_column_index,
+	const char *table_name,
+	const char **column_names,
+	idx_t *column_versions,
+	duckdb_data_chunk values,
+	duckdb_data_chunk previous_values
+	);
+
+DUCKDB_C_API void duckdb_set_cdc_callback(duckdb_database db, duckdb_change_data_capture_callback_t function);
+// end Anybase changes
 
 #endif
 

@@ -173,6 +173,9 @@ void CommitState::CommitEntry(UndoFlags type, data_ptr_t data) {
 		}
 		// mark the tuples as committed
 		info->table->CommitAppend(commit_id, info->start_row, info->count);
+		// start Anybase changes
+		info->table->DidCommitTransaction(commit_id);
+		// end Anybase changes
 		break;
 	}
 	case UndoFlags::DELETE_TUPLE: {
@@ -186,6 +189,9 @@ void CommitState::CommitEntry(UndoFlags type, data_ptr_t data) {
 		}
 		// mark the tuples as committed
 		info->version_info->CommitDelete(info->vector_idx, commit_id, *info);
+		// start Anybase changes
+		info->table->DidCommitTransaction(commit_id);
+		// end Anybase changes
 		break;
 	}
 	case UndoFlags::UPDATE_TUPLE: {
@@ -198,6 +204,13 @@ void CommitState::CommitEntry(UndoFlags type, data_ptr_t data) {
 			                           table_name, table_modification);
 		}
 		info->version_number = commit_id;
+		// start Anybase changes
+		if (info->column) {
+			info->column->commit_version_manager.DidCommitTransaction(commit_id);
+			info->column->info.commit_version_manager.DidCommitTransaction(commit_id);
+		}
+		info->table->DidCommitTransaction(commit_id, false);
+		// end Anybase changes
 		break;
 	}
 	case UndoFlags::ATTACHED_DATABASE:

@@ -125,12 +125,15 @@ public:
 
 	//! Destroy the client context
 	DUCKDB_API void Destroy();
-
+// start Anybase changes
 	//! Get the table info of a specific table, or nullptr if it cannot be found.
 	DUCKDB_API unique_ptr<TableDescription> TableInfo(const string &database_name, const string &schema_name,
-	                                                  const string &table_name);
+													  const string &table_name,
+													  const optional_ptr<const vector<string>> column_names = nullptr);
 	//! Get the table info of a specific table, or nullptr if it cannot be found. Uses INVALID_CATALOG.
-	DUCKDB_API unique_ptr<TableDescription> TableInfo(const string &schema_name, const string &table_name);
+	DUCKDB_API unique_ptr<TableDescription> TableInfo(const string &schema_name, const string &table_name,
+												const optional_ptr<const vector<string>> column_names = nullptr);
+// end Anybase changes
 	//! Execute a query with the given collection "attached" to the query using a CTE
 	DUCKDB_API void Append(ColumnDataCollection &collection, const string &query, const vector<string> &column_names,
 	                       const string &collection_name);
@@ -315,6 +318,24 @@ private:
 	QueryProgress query_progress;
 	//! The connection corresponding to this client context
 	connection_t connection_id;
+
+// start Anybase changes
+public:
+	//! Merges a DataChunk to the specified table.  This works much like upsert.  The Primary key is assumed to be the conflict target
+	DUCKDB_API void Merge(TableDescription &description, DataChunk &chunk, optional_ptr<const vector<LogicalIndex>> column_ids);
+	//! Merges a ColumnDataCollection to the specified table.  This works much like upsert.  The Primary key is assumed to be the conflict target
+	DUCKDB_API void Merge(TableDescription &description, ColumnDataCollection &collection, optional_ptr<const vector<LogicalIndex>> column_ids);
+	DUCKDB_API uint64_t GetSnapshotId();
+	DUCKDB_API uint64_t CheckpointAndGetSnapshotId();
+	DUCKDB_API void SetActiveResult(ClientContextLock &lock, BaseQueryResult &result);
+	DUCKDB_API idx_t GetTableVersion(const char *schema, const char *table);
+	DUCKDB_API idx_t GetTotalRows(const char *catalog, const char *schema, const char *table);
+	DUCKDB_API idx_t GetColumnVersion(const char *schema, const char *table, const char *column);
+	DUCKDB_API void BeginTransaction(const timestamp_t timestamp, const transaction_t sequenceNumber) {
+		transaction.BeginTransaction(timestamp, sequenceNumber);
+		transaction.SetAutoCommit(false);
+	}
+// end Anybase changes
 };
 
 class ClientContextLock {

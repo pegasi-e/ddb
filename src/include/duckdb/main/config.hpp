@@ -37,6 +37,9 @@
 #include "duckdb/function/encoding_function.hpp"
 #include "duckdb/main/setting_info.hpp"
 #include "duckdb/logging/log_manager.hpp"
+// start Anybase changes
+#include "duckdb/function/change_data_capature_function.hpp"
+// end Anybase changes
 
 namespace duckdb {
 
@@ -384,6 +387,11 @@ private:
 	unique_ptr<CollationBinding> collation_bindings;
 	unique_ptr<IndexTypeSet> index_types;
 	bool is_user_config = true;
+
+// start Anybase changes
+public:
+	ChangeDataCapture change_data_capture;
+// end Anybase changes
 };
 
 } // namespace duckdb
