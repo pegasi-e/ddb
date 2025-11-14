@@ -3,29 +3,29 @@ on:
   workflow_dispatch:
   repository_dispatch:
   push:
-    branches:
-      - 'ampere_main'
-    tags:
-      - '**'
+    branches-ignore:
+      - 'main'
+      - 'feature'
+      - 'v*.*-*'
     paths-ignore:
       - '**.md'
       - 'tools/**'
-      - '!tools/odbc/**'
       - '!tools/shell/**'
       - '.github/patches/duckdb-wasm/**'
       - '.github/workflows/**'
       - '!.github/workflows/Main.yml'
-
+      - '.github/config/out_of_tree_extensions.cmake'
+  merge_group:
   pull_request:
-    types: [opened, reopened, ready_for_review]
+    types: [opened, reopened, ready_for_review, converted_to_draft]
     paths-ignore:
       - '**.md'
       - 'tools/**'
-      - '!tools/odbc/**'
       - '!tools/shell/**'
       - '.github/patches/duckdb-wasm/**'
       - '.github/workflows/**'
       - '!.github/workflows/Main.yml'
+      - '.github/config/out_of_tree_extensions.cmake'
 
 
 concurrency:
@@ -36,16 +36,23 @@ env:
   GH_TOKEN: ${{ secrets.GH_TOKEN }}
 
 jobs:
-
+ check-draft:
+    # We run all other jobs on PRs only if they are not draft PR
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Preliminary checks on CI 
+        run: echo "Event name is ${{ github.event_name }}"
+      
  linux-debug:
-    name: Linux DEBUG + sanitizers
+    name: Linux Debug
     # This tests release build while enabling slow verifiers (masked by #ifdef DEBUG) and sanitizers
+    needs: check-draft
     runs-on: ubuntu-22.04
     env:
       CC: gcc-10
       CXX: g++-10
       TREAT_WARNINGS_AS_ERRORS: 1
-      BUILD_VISUALIZER: 1
       GEN: ninja
       CRASH_ON_ASSERT: 1
       CMAKE_CXX_FLAGS: '-DDEBUG'
@@ -65,7 +72,7 @@ jobs:
       uses: hendrikmuhs/ccache-action@main
       with:
         key: ${{ github.job }}
-        save: ${{ github.ref == 'refs/heads/main' || github.repository != 'duckdb/duckdb' }}
+        save: ${{ vars.BRANCHES_TO_BE_CACHED == '' || contains(vars.BRANCHES_TO_BE_CACHED, github.ref) }}
 
     - name: Build
       shell: bash
@@ -89,6 +96,7 @@ jobs:
 
  linux-release:
     name: Linux Release (full suite)
+    needs: check-draft
     runs-on: ubuntu-24.04
     env:
       GEN: ninja
@@ -107,7 +115,7 @@ jobs:
       uses: hendrikmuhs/ccache-action@main
       with:
         key: ${{ github.job }}
-        save: ${{ github.ref == 'refs/heads/main' || github.repository != 'duckdb/duckdb' }}
+        save: ${{ vars.BRANCHES_TO_BE_CACHED == '' || contains(vars.BRANCHES_TO_BE_CACHED, github.ref) }}
 
     - name: Build
       shell: bash
@@ -117,226 +125,336 @@ jobs:
       shell: bash
       run: make allunit
 
-#  force-storage:
-#     name: Force Storage
-#     if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
-#     runs-on: ubuntu-22.04
-#     env:
-#       CC: gcc-10
-#       CXX: g++-10
-#       GEN: ninja
-#       BUILD_JEMALLOC: 1
-#       CORE_EXTENSIONS: "icu;parquet;tpch;tpcds;json"
-#       RUN_SLOW_VERIFIERS: 1
+ no-string-inline:
+    name: No String Inline / Destroy Unpinned Blocks
+    runs-on: ubuntu-24.04
+    needs: linux-configs
+    env:
+      GEN: ninja
+      CORE_EXTENSIONS: "icu;parquet;tpch;tpcds;fts;json;inet"
+      DISABLE_STRING_INLINE: 1
+      DESTROY_UNPINNED_BLOCKS: 1
+      ALTERNATIVE_VERIFY: 1
+      DISABLE_POINTER_SALT: 1
+      LSAN_OPTIONS: suppressions=${{ github.workspace }}/.sanitizer-leak-suppressions.txt
+      DUCKDB_TEST_DESCRIPTION: 'Compiled with ALTERNATIVE_VERIFY=1 DISABLE_STRING_INLINE=1 DESTROY_UNPINNED_BLOCKS=1 DISABLE_POINTER_SALT=1. Use require no_alternative_verify to skip.'
 
-#     steps:
-#     - uses: actions/checkout@v4
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
 
-#     - name: Install
-#       shell: bash
-#       run: sudo apt-get update -y -qq && sudo apt-get install -y -qq ninja-build
+      - name: Install
+        shell: bash
+        run: sudo apt-get update -y -qq && sudo apt-get install -y -qq ninja-build
 
-#     - name: Setup Ccache
-#       uses: hendrikmuhs/ccache-action@main
-#       with:
-#         key: ${{ github.job }}
-#         save: ${{ github.ref == 'refs/heads/main' || github.repository != 'duckdb/duckdb' }}
+      - name: Setup Ccache
+        uses: hendrikmuhs/ccache-action@main
+        with:
+          key: ${{ github.job }}
+          save: ${{ vars.BRANCHES_TO_BE_CACHED == '' || contains(vars.BRANCHES_TO_BE_CACHED, github.ref) }}
 
-#     - name: Build
-#       shell: bash
-#       run: make reldebug
+      - name: Build
+        shell: bash
+        run: make relassert
 
-#     - name: Output version info
-#       shell: bash
-#       run: ./build/reldebug/duckdb -c "PRAGMA version;"
+      - name: Test
+        shell: bash
+        run: build/relassert/test/unittest
 
-#     - name: Test
-#       shell: bash
-#       run: build/reldebug/test/unittest --force-storage
+ vector-sizes:
+    name: Vector Sizes
+    runs-on: ubuntu-22.04
+    needs: linux-configs
+    env:
+      CC: gcc-10
+      CXX: g++-10
+      GEN: ninja
+      DUCKDB_TEST_DESCRIPTION: 'Compiled with STANDARD_VECTOR_SIZE=2. Use require vector_size 2048 to skip tests.'
 
-#  force-restart:
-#     name: Force Restart
-#     if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
-#     runs-on: ubuntu-22.04
-#     needs: force-storage
-#     env:
-#       CC: gcc-10
-#       CXX: g++-10
-#       GEN: ninja
-#       BUILD_JEMALLOC: 1
-#       CORE_EXTENSIONS: "icu;parquet;tpch;tpcds;json"
+    steps:
+      - name: Clean up the disc space
+        shell: bash
+        run: |
+          echo "Disk usage before clean up:"
+          df -h
+          rm -rf /opt/hostedtoolcache/CodeQL Java* Pypy Ruby go node
+          echo "Disk usage after clean up:"
+          df -h
 
-#     steps:
-#     - uses: actions/checkout@v4
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
 
-#     - name: Install
-#       shell: bash
-#       run: sudo apt-get update -y -qq && sudo apt-get install -y -qq ninja-build
+      - name: Install
+        shell: bash
+        run: sudo apt-get update -y -qq && sudo apt-get install -y -qq ninja-build
 
-#     - name: Setup Ccache
-#       uses: hendrikmuhs/ccache-action@main
-#       with:
-#         key: ${{ github.job }}
-#         save: ${{ github.ref == 'refs/heads/main' || github.repository != 'duckdb/duckdb' }}
+      - name: Setup Ccache
+        uses: hendrikmuhs/ccache-action@main
+        with:
+          key: ${{ github.job }}
+          save: ${{ vars.BRANCHES_TO_BE_CACHED == '' || contains(vars.BRANCHES_TO_BE_CACHED, github.ref) }}
 
-#     - name: Build
-#       shell: bash
-#       run: make reldebug
+      - name: Build
+        shell: bash
+        run: STANDARD_VECTOR_SIZE=2 make reldebug
 
-#     - name: Output version info
-#       shell: bash
-#       run: ./build/reldebug/duckdb -c "PRAGMA version;"
+      - name: Test
+        shell: bash
+        run: |
+          python3 scripts/run_tests_one_by_one.py build/reldebug/test/unittest --no-exit --time_execution
 
-#     - name: Test
-#       shell: bash
-#       run: build/reldebug/test/unittest --force-reload --force-storage
+ valgrind:
+    name: Valgrind
+    if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
+    runs-on: ubuntu-24.04
+    needs: linux-configs
+    env:
+      CC: clang
+      CXX: clang++
+      DISABLE_SANITIZER: 1
+      BUILD_JEMALLOC: 1
+      CORE_EXTENSIONS: 'icu;json;parquet;tpch'
+      GEN: ninja
 
-#  no-string-inline:
-#     name: No String Inline / Destroy Unpinned Blocks
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install
+      shell: bash
+      run: sudo apt-get update -y -qq && sudo apt-get install -y -qq ninja-build valgrind clang
+
+    - name: Setup Ccache
+      uses: hendrikmuhs/ccache-action@main
+      with:
+        key: ${{ github.job }}
+        save: ${{ vars.BRANCHES_TO_BE_CACHED == '' || contains(vars.BRANCHES_TO_BE_CACHED, github.ref) }}
+
+    - name: Build
+      shell: bash
+      run: make relassert
+
+    - name: Output version info
+      shell: bash
+      run: ./build/relassert/duckdb -c "PRAGMA version;"
+
+    - name: Test
+      shell: bash
+      run: valgrind ./build/relassert/test/unittest test/sql/tpch/tpch_sf001.test_slow
+
+#  threadsan:
+#     name: Thread Sanitizer
+#     needs: linux-configs
 #     runs-on: ubuntu-24.04
-#     needs: force-storage
 #     env:
+#       CC: clang
+#       CXX: clang++
 #       GEN: ninja
-#       CORE_EXTENSIONS: "icu;parquet;tpch;tpcds;fts;json;inet"
-#       DISABLE_STRING_INLINE: 1
-#       DESTROY_UNPINNED_BLOCKS: 1
-#       ALTERNATIVE_VERIFY: 1
-#       DISABLE_POINTER_SALT: 1
-#       LSAN_OPTIONS: suppressions=${{ github.workspace }}/.sanitizer-leak-suppressions.txt
+#       BUILD_JEMALLOC: 1
+#       CORE_EXTENSIONS: "icu;tpch;tpcds;fts;json;inet"
+#       TSAN_OPTIONS: suppressions=${{ github.workspace }}/.sanitizer-thread-suppressions.txt
+#       DUCKDB_TEST_DESCRIPTION: 'Tests run with thread sanitizer.'
 
 #     steps:
-#       - uses: actions/checkout@v3
-#         with:
-#           fetch-depth: 0
+#     - uses: actions/checkout@v3
+#       with:
+#         fetch-depth: 0
 
-#       - name: Install
-#         shell: bash
-#         run: sudo apt-get update -y -qq && sudo apt-get install -y -qq ninja-build
+#     - name: Install
+#       shell: bash
+#       run: sudo apt-get update -y -qq && sudo apt-get install -y -qq ninja-build clang
 
-#         # Note instead of using scripts/setup_manylinux2014.sh vcpkg, we prefer to use
-#         # lukka/run-vcpkg@v11.1 here as it configures vcpkg to cache to GH actions.
-#       - name: Setup vcpkg
-#         uses: lukka/run-vcpkg@v11.1
-#         with:
-#           vcpkgGitCommitId: a1a1cbc975abf909a6c8985a6a2b8fe20bbd9bd6
+#     - name: Setup Ccache
+#       uses: hendrikmuhs/ccache-action@main
+#       with:
+#         key: ${{ github.job }}
+#         save: ${{ vars.BRANCHES_TO_BE_CACHED == '' || contains(vars.BRANCHES_TO_BE_CACHED, github.ref) }}
 
-#       - name: Install librdkafka
-#         shell: bash
-#         run: |
-#           cd $VCPKG_ROOT && ./vcpkg install librdkafka
+#     - name: Build
+#       shell: bash
+#       run: THREADSAN=1 make reldebug
 
-#       - name: Setup Ccache
-#         uses: hendrikmuhs/ccache-action@main
-#         with:
-#           key: ${{ github.job }}
-#           save: ${{ github.ref == 'refs/heads/main' || github.repository != 'duckdb/duckdb' }}
+#     - name: Test
+#       shell: bash
+#       run: |
+#           python3 scripts/run_tests_one_by_one.py build/reldebug/test/unittest --no-exit --timeout 600
+#           python3 scripts/run_tests_one_by_one.py build/reldebug/test/unittest "[intraquery]" --no-exit --timeout 600
+#           python3 scripts/run_tests_one_by_one.py build/reldebug/test/unittest "[interquery]" --no-exit --timeout 1800
+#           python3 scripts/run_tests_one_by_one.py build/reldebug/test/unittest "[interquery]" --no-exit --timeout 1800 --force-storage
+#           python3 scripts/run_tests_one_by_one.py build/reldebug/test/unittest "[interquery]" --no-exit --timeout 1800 --force-storage --force-reload
+#           python3 scripts/run_tests_one_by_one.py build/reldebug/test/unittest "[detailed_profiler]" --no-exit --timeout 600
+#           python3 scripts/run_tests_one_by_one.py build/reldebug/test/unittest test/sql/tpch/tpch_sf01.test_slow --no-exit --timeout 600
 
-#       - name: Build
-#         shell: bash
-#         run:  VCPKG_TOOLCHAIN_PATH='${VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake' make debug
+ amalgamation-tests:
+    name: Amalgamation Tests
+    runs-on: ubuntu-22.04
+    needs: check-draft
+    env:
+      CC: clang
+      CXX: clang++
 
-#       - name: Set DUCKDB_INSTALL_LIB for ADBC tests
-#         shell: bash
-#         run: echo "DUCKDB_INSTALL_LIB=$(find `pwd` -name "libduck*.so" | head -n 1)" >> $GITHUB_ENV
+    steps:
+    - uses: actions/checkout@v3
+      with:
+        fetch-depth: 0
+        ref: ${{ github.ref }}
 
-#       - name: Test DUCKDB_INSTALL_LIB variable
-#         run: echo $DUCKDB_INSTALL_LIB
+    - uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
 
-#       - name: Test
-#         shell: bash
-#         run: make unittestci
+    - name: Install LLVM and Clang
+      uses: KyleMayes/install-llvm-action@v1
+      with:
+        version: "14.0"
 
-#  docs:
-#    name: Website Docs
-#    if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
-#    runs-on: ubuntu-20.04
-#    needs: linux-debug
-#    steps:
-#      - uses: actions/checkout@v3
-#        with:
-#          fetch-depth: 0
-#
-#      - name: Clone Website
-#        shell: bash
-#        run: git clone https://github.com/duckdb/duckdb-web
-#
-#      - name: Set up Python 3.9
-#        uses: actions/setup-python@v4
-#        with:
-#          python-version: '3.9'
-#
-#      - name: Package
-#        shell: bash
-#        run: |
-#          cd duckdb-web
-#          python3 scripts/generate_docs.py ..
+    - name: Generate Amalgamation
+      shell: bash
+      run:  |
+          python scripts/amalgamation.py --extended
+          clang++ -std=c++17 -Isrc/amalgamation src/amalgamation/duckdb.cpp -emit-llvm -S -O0
 
-# odbc:
-#    name: ODBC
-#    if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
-#    runs-on: ubuntu-22.04
-#    needs: linux-debug
-#    env:
-#      BUILD_ODBC: 1
-#      GEN: ninja
-#
-#    steps:
-#    - uses: actions/checkout@v3
-#      with:
-#        fetch-depth: 0
-#
-#    - uses: actions/setup-python@v4
-#      with:
-#        python-version: '3.7'
-#
-#    - name: Dependencies
-#      shell: bash
-#      run: |
-#        sudo apt-get update -y -qq
-#        sudo apt-get install -y -qq ninja-build unixodbc-dev
-#        pip3 install pyodbc
-#
-#    - name: Install nanodbc
-#      shell: bash
-#      run: |
-#        wget https://github.com/nanodbc/nanodbc/archive/refs/tags/v2.14.0.tar.gz -O nanodbc.tgz
-#        mkdir nanodbc
-#        tar xvf nanodbc.tgz -C nanodbc --strip-components=1
-#        cd nanodbc
-#        wget https://github.com/catchorg/Catch2/releases/download/v2.13.9/catch.hpp
-#        cp catch.hpp test/catch/catch.hpp
-#        sed -i -e "s/set(test_list/set(test_list odbc/" test/CMakeLists.txt
-#        mkdir build
-#        cd build
-#        cmake -DNANODBC_DISABLE_TESTS=OFF ..
-#        cmake --build .
-#
-#    - name: Setup Ccache
-#      uses: hendrikmuhs/ccache-action@main
-#      with:
-#        key: ${{ github.job }}
-#        save: ${{ github.ref == 'refs/heads/main' || github.repository != 'duckdb/duckdb' }}
-#
-#    - name: Build
-#      shell: bash
-#      run: DISABLE_SANITIZER=1 make debug
-#
-#    - name: Test Standard ODBC tests
-#      shell: bash
-#      run: build/debug/tools/odbc/test/test_odbc
-#
-#    - name: Test nanodbc
-#      shell: bash
-#      run: ./tools/odbc/test/run_nanodbc_tests.sh
-#
-#    - name: Test isql
-#      shell: bash
-#      run: ./tools/odbc/test/run_isql_tests.sh
-#
-#    - name: Test R ODBC
-#      shell: bash
-#      run: R -f tools/odbc/test/rodbc.R
-#
-#    - name: Test Python ODBC
-#      shell: bash
-#      run: ./tools/odbc/test/run_pyodbc_tests.sh
+ # TODO: Bring back BLOCK_VERIFICATION: 1, and consider bringing back fts
+ # TODO: DEBUG_STACKTRACE: 1 + reldebug ?
+ linux-configs:
+    name: Tests a release build with different configurations
+    runs-on: ubuntu-24.04
+    needs: check-draft
+    env:
+      BASE_BRANCH: ${{ github.base_ref || 'main' }}
+
+    steps:
+    - uses: actions/checkout@v3
+      with:
+        fetch-depth: 0
+
+    - uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+
+    - name: Install Ninja
+      shell: bash
+      run: sudo apt-get update -y -qq && sudo apt-get install -y -qq ninja-build
+
+    - name: Setup Ccache
+      uses: hendrikmuhs/ccache-action@main
+      with:
+        key: ${{ github.job }}
+        save: ${{ vars.BRANCHES_TO_BE_CACHED == '' || contains(vars.BRANCHES_TO_BE_CACHED, github.ref) }}
+
+    - name: Build
+      id: build
+      shell: bash
+      env:
+        CORE_EXTENSIONS: "json;parquet;icu;tpch;tpcds"
+        GEN: ninja
+      run: make
+
+    - name: test/configs/encryption.json
+      if: (success() || failure()) && steps.build.conclusion == 'success'
+      shell: bash
+      run: |
+        ./build/release/test/unittest --test-config test/configs/encryption.json
+
+    - name: test/configs/force_storage.json
+      if: (success() || failure()) && steps.build.conclusion == 'success'
+      shell: bash
+      run: |
+        ./build/release/test/unittest --test-config test/configs/force_storage.json
+
+    - name: test/configs/force_storage_restart.json
+      if: (success() || failure()) && steps.build.conclusion == 'success'
+      shell: bash
+      run: |
+        ./build/release/test/unittest --test-config test/configs/force_storage_restart.json
+
+    - name: test/configs/latest_storage.json
+      if: (success() || failure()) && steps.build.conclusion == 'success'
+      shell: bash
+      run: |
+        ./build/release/test/unittest --test-config test/configs/latest_storage.json
+
+    - name: test/configs/verify_fetch_row.json
+      if: (success() || failure()) && steps.build.conclusion == 'success'
+      shell: bash
+      run: |
+        ./build/release/test/unittest --test-config test/configs/verify_fetch_row.json
+
+    - name: test/configs/wal_verification.json
+      if: (success() || failure()) && steps.build.conclusion == 'success'
+      shell: bash
+      run: |
+        ./build/release/test/unittest --test-config test/configs/wal_verification.json
+
+    - name: test/configs/prefetch_all_parquet_files.json
+      if: (success() || failure()) && steps.build.conclusion == 'success'
+      shell: bash
+      run: |
+        ./build/release/test/unittest --test-config test/configs/prefetch_all_parquet_files.json
+
+    - name: test/configs/no_local_filesystem.json
+      if: (success() || failure()) && steps.build.conclusion == 'success'
+      shell: bash
+      run: |
+        ./build/release/test/unittest --test-config test/configs/no_local_filesystem.json
+
+    - name: test/configs/block_size_16kB.json
+      if: (success() || failure()) && steps.build.conclusion == 'success'
+      shell: bash
+      run: |
+        ./build/release/test/unittest --test-config test/configs/block_size_16kB.json
+
+    - name: test/configs/latest_storage_block_size_16kB.json
+      if: (success() || failure()) && steps.build.conclusion == 'success'
+      shell: bash
+      run: |
+        ./build/release/test/unittest --test-config test/configs/latest_storage_block_size_16kB.json
+
+    - name: test/configs/enable_verification.json
+      if: (success() || failure()) && steps.build.conclusion == 'success'
+      shell: bash
+      run: |
+        ./build/release/test/unittest --test-config test/configs/enable_verification.json
+
+    - name: Test dictionary_expression
+      if: (success() || failure()) && steps.build.conclusion == 'success'
+      shell: bash
+      run: |
+        ./build/release/test/unittest --verify-vector dictionary_expression --skip-compiled
+
+    - name: Test dictionary_operator
+      if: (success() || failure()) && steps.build.conclusion == 'success'
+      shell: bash
+      run: |
+        ./build/release/test/unittest --verify-vector dictionary_operator --skip-compiled
+
+    - name: Test constant_operator
+      if: (success() || failure()) && steps.build.conclusion == 'success'
+      shell: bash
+      run: |
+        ./build/release/test/unittest --verify-vector constant_operator --skip-compiled
+
+    - name: Test sequence_operator
+      if: (success() || failure()) && steps.build.conclusion == 'success'
+      shell: bash
+      run: |
+        ./build/release/test/unittest --verify-vector sequence_operator --skip-compiled
+
+    - name: Test nested_shuffle
+      if: (success() || failure()) && steps.build.conclusion == 'success'
+      shell: bash
+      run: |
+        ./build/release/test/unittest --verify-vector nested_shuffle --skip-compiled
+
+    - name: Test variant_vector
+      if: (success() || failure()) && steps.build.conclusion == 'success'
+      shell: bash
+      run: |
+        ./build/release/test/unittest --test-config test/configs/variant_vector.json
+
+    - name: Test variant_vector
+      if: (success() || failure()) && steps.build.conclusion == 'success'
+      shell: bash
+      run: |
+        ./build/release/test/unittest --test-config test/configs/compressed_in_memory.json

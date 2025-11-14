@@ -5,6 +5,7 @@
 #include "duckdb/storage/data_table.hpp"
 #include "duckdb/storage/table/column_data.hpp"
 #include "duckdb/storage/table/update_segment.hpp"
+#include "duckdb/storage/storage_index.hpp"
 #include "duckdb/transaction/append_info.hpp"
 #include "duckdb/transaction/delete_info.hpp"
 #include "duckdb/transaction/duck_transaction.hpp"
@@ -20,7 +21,7 @@ namespace duckdb {
 
 void ChangeDataCapture::EmitChange(
 			const cdc_event_type type,
-			const idx_t transactionId,
+			const char *transaction_id,
 			const idx_t column_count,
 			const idx_t table_version,
 			idx_t *updated_column_index,
@@ -32,7 +33,7 @@ void ChangeDataCapture::EmitChange(
 
 	if (function != nullptr) {
 
-		function(type, transactionId, column_count, table_version, updated_column_index, table_name, column_names, column_versions, values, previous_values);
+		function(type, transaction_id, column_count, table_version, updated_column_index, table_name, column_names, column_versions, values, previous_values);
 	}
 }
 
@@ -42,48 +43,52 @@ CDCWriteState::CDCWriteState(DuckTransaction &transaction_p)
 
 void CDCWriteState::EmitDelete(DeleteInfo &info) {
 	auto &table = info.table;
-
-	auto table_version = table->GetVersion();
-	auto &column_definitions = table->Columns();
-	auto columnCount = column_definitions.size();
-	auto column_names = vector<const char*>(columnCount);
-	auto column_versions = vector<uint64_t>(columnCount);
-	for (idx_t i = 0; i < columnCount; i++) {
-		column_names[i] = strdup(column_definitions[i].GetName().c_str());
-		column_versions[i] = table->GetColumnVersion(i);
-	}
-
 	auto number_of_rows = info.count;
-	if (!info.is_consecutive) {
-		for (idx_t i = 0; i < info.count; i++) {
-			const auto row_offset = info.GetRows()[i] + 1U;
-			if (row_offset > number_of_rows) {
-				number_of_rows = row_offset;
+	auto ptr = transaction.context.lock();
+
+	table->ScanTableSegment(transaction, info.base_row, number_of_rows, [&](DataChunk &chunk) {
+		auto &config = DBConfig::GetConfig(info.table->db.GetDatabase());
+		auto table_version = table->GetVersion();
+		auto &column_definitions = table->Columns();
+		auto columnCount = column_definitions.size();
+		auto column_names = vector<const char*>(columnCount);
+		auto column_versions = vector<uint64_t>(columnCount);
+		for (idx_t i = 0; i < columnCount; i++) {
+			column_names[i] = strdup(column_definitions[i].GetName().c_str());
+			column_versions[i] = table->GetColumnVersion(i);
+		}
+
+		if (!info.is_consecutive) {
+			for (idx_t i = 0; i < info.count; i++) {
+				const auto row_offset = info.GetRows()[i] + 1U;
+				if (row_offset > number_of_rows) {
+					number_of_rows = row_offset;
+				}
 			}
 		}
-	}
 
-	auto ptr = transaction.context.lock();
-	auto &config = DBConfig::GetConfig(info.table->db.GetDatabase());
-	table->ScanTableSegment(transaction, info.base_row, number_of_rows, [&](DataChunk &chunk) {
 		auto delete_chunk = make_uniq<DataChunk>();
 		delete_chunk->Initialize(*ptr, chunk.GetTypes(), chunk.size());
 		delete_chunk->Append(chunk);
+		delete_chunk->Flatten();
 
 		if (!info.is_consecutive) {
-			ManagedSelection sel(info.count);
+			SelectionVector sel(info.count);
 			auto delete_rows = info.GetRows();
 			for (idx_t i = 0; i < info.count; i++) {
-				sel.Append(delete_rows[i]);
+				sel.set_index(i, delete_rows[i]);
 			}
-			delete_chunk->Slice(sel.Selection(), sel.Count());
+			delete_chunk->Slice(sel, info.count);
 		}
 
 		delete_chunk->Flatten();
+		std::ostringstream oss;
+		oss << transaction.meta_startTime.value << ":" << transaction.meta_sequenceNumber;
+		const auto t_id = strdup(oss.str().c_str());
 
 		config.change_data_capture.EmitChange(
 			DUCKDB_CDC_EVENT_DELETE,
-			transaction.transaction_id,
+			t_id,
 			columnCount,
 			table_version,
 			nullptr,
@@ -93,40 +98,46 @@ void CDCWriteState::EmitDelete(DeleteInfo &info) {
 			nullptr,
 			reinterpret_cast<duckdb_data_chunk>(delete_chunk.release())
 			);
-	});
 
-	if (columnCount > 0) {
-		for (idx_t i = 0; i < columnCount; i++) {
-			delete[] column_names[i];
+		if (columnCount > 0) {
+			for (idx_t i = 0; i < columnCount; i++) {
+				free((void *) column_names[i]);
+			}
 		}
-	}
+
+		free(t_id);
+	});
 }
 
 void CDCWriteState::EmitInsert(AppendInfo &info) {
-	auto &table = info.table;
-	auto table_version = table->GetVersion();
-
-	auto &column_definitions = table->Columns();
-	auto columnCount = column_definitions.size();
-	auto column_names = vector<const char*>(columnCount);
-	auto column_versions = vector<uint64_t>(columnCount);
-	for (idx_t i = 0; i < columnCount; i++) {
-		column_names[i] = strdup(column_definitions[i].GetName().c_str());
-		column_versions[i] = table->GetColumnVersion(i);
-	}
 	auto ptr = transaction.context.lock();
+	auto &table = info.table;
 
 	table->ScanTableSegment(transaction, info.start_row, info.count, [&](DataChunk &chunk) {
+		auto table_version = table->GetVersion();
+
 		auto insert_chunk = make_uniq<DataChunk>();
 		insert_chunk->Initialize(*ptr, chunk.GetTypes(), chunk.size());
 		insert_chunk->Append(chunk);
 		insert_chunk->Flatten();
 
+		auto &column_definitions = table->Columns();
+		auto columnCount = column_definitions.size();
+		auto column_names = vector<const char*>(columnCount);
+		auto column_versions = vector<uint64_t>(columnCount);
+		for (idx_t i = 0; i < columnCount; i++) {
+			column_names[i] = strdup(column_definitions[i].GetName().c_str());
+			column_versions[i] = table->GetColumnVersion(i);
+		}
+
 		auto &config = DBConfig::GetConfig(info.table->db.GetDatabase());
+		std::ostringstream oss;
+		oss << transaction.meta_startTime.value << ":" << transaction.meta_sequenceNumber;
+		const auto t_id = strdup(oss.str().c_str());
 		config.change_data_capture.EmitChange(
 			DUCKDB_CDC_EVENT_INSERT,
-			transaction.transaction_id,
-			columnCount,
+			t_id,
+			column_names.size(),
 			table_version,
 			nullptr,
 			table->GetTableName().c_str(),
@@ -135,13 +146,16 @@ void CDCWriteState::EmitInsert(AppendInfo &info) {
 			reinterpret_cast<duckdb_data_chunk>(insert_chunk.release()),
 			nullptr
 			);
+
+		if (columnCount > 0) {
+			for (idx_t i = 0; i < columnCount; i++) {
+				free((void *) column_names[i]);
+			}
+		}
+
+		free(t_id);
 	});
 
-	if (columnCount > 0) {
-		for (idx_t i = 0; i < columnCount; i++) {
-			delete[] column_names[i];
-		}
-	}
 }
 
 bool CDCWriteState::CanApplyUpdate(UpdateInfo &info) {
@@ -172,23 +186,20 @@ void CDCWriteState::EmitUpdate(UpdateInfo &info) {
 
 	auto table_types = table->GetTypes();
 	auto &column_definitions = table->Columns();
-	vector<column_t> column_ids;
+	std::vector<idx_t> column_ids;
 	vector<string> column_names;
 	vector<uint64_t> column_versions;
 	vector<LogicalType> update_types;
 	vector<StorageIndex> column_indexes;
 	auto did_add_target = false;
 
-	if (transaction.involved_columns.find(table->GetTableName()) != transaction.involved_columns.end()) {
-		auto column_map = transaction.involved_columns[table->GetTableName()];
-		if (column_map.find(info.column_index) != column_map.end()) {
-			column_ids = column_map[info.column_index];
-		}
+	if (transaction.HasInvolvedColumns(table->GetTableName())) {
+		column_ids = transaction.GetInvolvedColumns(table->GetTableName());
 	}
 
 	for (idx_t i = 0; i < column_ids.size(); i++) {
 		auto column_index = column_ids[i];
-		column_names.push_back(std::move(column_definitions[column_index].GetName()));
+		column_names.push_back(column_definitions[column_index].GetName());
 		column_versions.push_back(table->GetColumnVersion(column_index));
 		update_types.emplace_back(table_types[column_index]);
 		column_indexes.push_back(StorageIndex(column_index));
@@ -198,7 +209,7 @@ void CDCWriteState::EmitUpdate(UpdateInfo &info) {
 	}
 
 	if (!did_add_target) {
-		column_names.push_back(std::move(column_definitions[info.column_index].GetName()));
+		column_names.push_back(column_definitions[info.column_index].GetName());
 		column_versions.push_back(table->GetColumnVersion(info.column_index));
 		update_types.emplace_back(table_types[info.column_index]);
 		column_indexes.push_back(StorageIndex(info.column_index));
@@ -211,7 +222,6 @@ void CDCWriteState::EmitUpdate(UpdateInfo &info) {
 			break;
 		}
 	}
-
 
 	if (CanApplyUpdate(info)) {
 		info.segment->FetchAndApplyUpdate(info, previous_update_chunk->data[update_offset]);
@@ -286,9 +296,13 @@ void CDCWriteState::Flush() {
 			column_names_cstrings.push_back(strdup(column_name.c_str()));
 		}
 
+		std::ostringstream oss;
+		oss << transaction.meta_startTime.value << ":" << transaction.meta_sequenceNumber;
+		const auto t_id = strdup(oss.str().c_str());
+
 		config.change_data_capture.EmitChange(
 			DUCKDB_CDC_EVENT_UPDATE,
-			transaction.transaction_id,
+			t_id,
 			column_names_cstrings.size(),
 			update_table_version,
 			nullptr,
@@ -301,9 +315,11 @@ void CDCWriteState::Flush() {
 
 		if (!column_names_cstrings.empty()) {
 			for (idx_t i = 0; i < column_names_cstrings.size(); i++) {
-				delete[] column_names_cstrings[i];
+				free((void *) column_names_cstrings[i]);
 			}
 		}
+
+		free(t_id);
 	}
 }
 
@@ -357,9 +373,13 @@ void CDCWriteState::EmitTransactionEntry(CDC_EVENT_TYPE type){
 
 	auto context = transaction.context.lock();
 	auto &config = DBConfig::GetConfig(*context);
+	std::ostringstream oss;
+	oss << transaction.meta_startTime.value << ":" << transaction.meta_sequenceNumber;
+	const auto t_id = strdup(oss.str().c_str());
+
 	config.change_data_capture.EmitChange(
 		type,
-		transaction.transaction_id,
+		t_id,
 		0,
 		0,
 		nullptr,
@@ -369,5 +389,7 @@ void CDCWriteState::EmitTransactionEntry(CDC_EVENT_TYPE type){
 		nullptr,
 		nullptr
 		);
+
+	free(t_id);
 }
 } // namespace duckdb

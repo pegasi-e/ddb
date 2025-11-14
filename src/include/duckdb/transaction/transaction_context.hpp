@@ -20,6 +20,7 @@ class ClientContext;
 class MetaTransaction;
 class Transaction;
 class TransactionManager;
+struct timestamp_t;
 
 //! The transaction context keeps track of all the information relating to the
 //! current transaction
@@ -65,9 +66,9 @@ private:
 
 // start Anybase changes
 public:
-	string Snapshot();
 	uint64_t GetSnapshotId();
 	uint64_t CheckpointAndGetSnapshotId();
+	void BeginTransaction(timestamp_t timestamp, transaction_t sequenceNumber);
 // end Anybase changes
 };
 

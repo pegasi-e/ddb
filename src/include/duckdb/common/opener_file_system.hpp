@@ -24,10 +24,10 @@ public:
 
 	void Read(FileHandle &handle, void *buffer, int64_t nr_bytes, idx_t location) override {
 		GetFileSystem().Read(handle, buffer, nr_bytes, location);
-	};
+	}
 
 	void Write(FileHandle &handle, void *buffer, int64_t nr_bytes, idx_t location) override {
-		GetFileSystem().Write(handle, buffer, nr_bytes, location);
+		throw InternalException("writing on the OpenerFileSystem is undefined");
 	}
 
 	int64_t Read(FileHandle &handle, void *buffer, int64_t nr_bytes) override {
@@ -41,7 +41,7 @@ public:
 	int64_t GetFileSize(FileHandle &handle) override {
 		return GetFileSystem().GetFileSize(handle);
 	}
-	time_t GetLastModifiedTime(FileHandle &handle) override {
+	timestamp_t GetLastModifiedTime(FileHandle &handle) override {
 		return GetFileSystem().GetLastModifiedTime(handle);
 	}
 	string GetVersionTag(FileHandle &handle) override {
@@ -143,6 +143,10 @@ public:
 		GetFileSystem().SetDisabledFileSystems(names);
 	}
 
+	bool SubSystemIsDisabled(const string &name) override {
+		return GetFileSystem().SubSystemIsDisabled(name);
+	}
+
 	vector<string> ListSubSystems() override {
 		return GetFileSystem().ListSubSystems();
 	}
@@ -172,13 +176,6 @@ protected:
 
 private:
 	void VerifyCanAccessFileInternal(const string &path, FileType type);
-
-// start Anybase changes
-public:
-	void CopyFile(const string &source, const string &target) override {
-		GetFileSystem().CopyFile(source, target);
-	}
-// end Anybase changes
 };
 
 } // namespace duckdb

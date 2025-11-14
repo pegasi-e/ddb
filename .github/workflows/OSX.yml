@@ -1,18 +1,34 @@
 name: OSX
 on:
+  workflow_call:
+    inputs:
+      override_git_describe:
+        type: string
+      git_ref:
+        type: string
+      skip_tests:
+        type: string
+      run_all:
+        type: string
   workflow_dispatch:
-  repository_dispatch:
+    inputs:
+      override_git_describe:
+        type: string
+      git_ref:
+        type: string
+      skip_tests:
+        type: string
+      run_all:
+        type: string
   push:
-    branches:
-      - '**'
-      - '!main'
-      - '!feature'
-    tags:
-      - '**'
+    branches-ignore:
+      - 'main'
+      - 'feature'
+      - 'v*.*-*'
     paths-ignore:
       - '**.md'
+      - 'test/configs/**'
       - 'tools/**'
-      - '!tools/odbc/**'
       - '!tools/shell/**'
       - '.github/patches/duckdb-wasm/**'
       - '.github/workflows/**'
@@ -20,11 +36,12 @@ on:
 
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}-${{ github.head_ref || '' }}-${{ github.base_ref || '' }}-${{ github.ref != 'refs/heads/main' || github.sha }}
+  group: osx-${{ github.workflow }}-${{ github.ref }}-${{ github.head_ref || '' }}-${{ github.base_ref || '' }}-${{ github.ref != 'refs/heads/main' || github.sha }}-${{ inputs.override_git_describe }}
   cancel-in-progress: true
 
 env:
   GH_TOKEN: ${{ secrets.GH_TOKEN }}
+  OVERRIDE_GIT_DESCRIBE: ${{ inputs.override_git_describe }}
 
 jobs:
   # xcode-debug:
@@ -50,7 +67,7 @@ jobs:
   #     uses: hendrikmuhs/ccache-action@main
   #     with:
   #       key: ${{ github.job }}
-  #       save: ${{ github.ref == 'refs/heads/main' || github.repository != 'duckdb/duckdb' }}
+  #       save: ${{ vars.BRANCHES_TO_BE_CACHED == '' || contains(vars.BRANCHES_TO_BE_CACHED, github.ref) }}
 
   #   - name: Install ninja
   #     shell: bash
@@ -86,7 +103,6 @@ jobs:
     # Builds binaries for osx_arm64 and osx_amd64
     name: OSX Release
     runs-on: macos-14
-    #    needs: xcode-debug
     env:
       EXTENSION_CONFIGS: '${GITHUB_WORKSPACE}/.github/config/bundled_extensions.cmake'
       ENABLE_EXTENSION_AUTOLOADING: 1
@@ -98,6 +114,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          ref: ${{ inputs.git_ref }}
 
       - uses: actions/setup-python@v5
         with:
@@ -110,69 +127,19 @@ jobs:
         uses: hendrikmuhs/ccache-action@main
         with:
           key: ${{ github.job }}
-          save: ${{ github.ref == 'refs/heads/main' || github.repository != 'duckdb/duckdb' }}
+          save: ${{ vars.BRANCHES_TO_BE_CACHED == '' || contains(vars.BRANCHES_TO_BE_CACHED, github.ref) }}
 
       - name: Install pytest
         run: |
           python -m pip install pytest
 
-      # Note instead of using scripts/setup_manylinux2014.sh vcpkg, we prefer to use
-      # lukka/run-vcpkg@v11.1 here as it configures vcpkg to cache to GH actions.
-      - name: Setup vcpkg
-        uses: lukka/run-vcpkg@v11.1
-        with:
-          vcpkgGitCommitId: a1a1cbc975abf909a6c8985a6a2b8fe20bbd9bd6
-
-      - name: Install librdkafka
-        shell: bash
-        run: |
-          cd $VCPKG_ROOT && ./vcpkg install librdkafka --triplet=${{ 'arm64-osx' }}
-          cd $VCPKG_ROOT && ./vcpkg install librdkafka --triplet=${{ 'x64-osx' }}
-
-      - name: Lipo librdkafka
-        shell: bash
-        run: |
-          cd ${VCPKG_ROOT}/installed
-          python3  ${GITHUB_WORKSPACE}/scripts/lipo-dir-merge.py arm64-osx x64-osx uni-osx
-          cd ${GITHUB_WORKSPACE}
-
       - name: Build
         shell: bash
-        env:
-          CMAKE_TOOLCHAIN_FILE: ${VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake
-          VCPKG_TOOLCHAIN_PATH: ${VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake
-          CMAKE_OSX_ARCHITECTURES: "x86_64;arm64"
-          VCPKG_OSX_ARCHITECTURES: "x86_64;arm64"
-          VCPKG_TARGET_TRIPLET: uni-osx
-          VCPKG_CMAKE_SYSTEM_NAME: Darwin
-          CMAKE_BUILD_TYPE: Release
-        run: |
-          echo "vcp: ${VCPKG_OSX_ARCHITECTURES}"
-          echo "cm: ${CMAKE_OSX_ARCHITECTURES}"
-          echo "cm: ${CMAKE_BUILD_TYPE}"
-          make
+        run: make
 
       - name: Print platform
         shell: bash
         run: ./build/release/duckdb -c "PRAGMA platform;"
-
-        # - name: Unit Test
-        #   shell: bash
-        #   if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
-        #   run: make allunit
-
-        # - name: Tools Tests
-        #   shell: bash
-        #   if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
-        #   run: |
-        #     python -m pytest tools/shell/tests --shell-binary build/release/duckdb
-
-        #      - name: Examples
-        #        shell: bash
-        #        if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
-        #        run: |
-        #          (cd examples/embedded-c; make)
-        #          (cd examples/embedded-c++; make)
 
         #     from https://docs.github.com/en/actions/deployment/deploying-xcode-applications/installing-an-apple-certificate-on-macos-runners-for-xcode-development
       - name: Sign Binaries
@@ -181,21 +148,38 @@ jobs:
           BUILD_CERTIFICATE_BASE64: ${{ secrets.OSX_CODESIGN_BUILD_CERTIFICATE_BASE64 }}
           P12_PASSWORD: ${{ secrets.OSX_CODESIGN_P12_PASSWORD }}
           KEYCHAIN_PASSWORD: ${{ secrets.OSX_CODESIGN_KEYCHAIN_PASSWORD }}
+          TEAM_ID : ${{ secrets.OSX_NOTARIZE_TEAM_ID }}
+          APPLE_ID: ${{ secrets.OSX_NOTARIZE_APPLE_ID }}
+          PASSWORD: ${{ secrets.OSX_NOTARIZE_PASSWORD }}
         run: |
           if [[ "$GITHUB_REPOSITORY" = "duckdb/duckdb" ]] ; then
             . scripts/osx_import_codesign_certificate.sh
-
-            codesign --all-architectures --force --sign "Developer ID Application: Stichting DuckDB Foundation" build/release/duckdb
-            codesign --all-architectures --force --sign "Developer ID Application: Stichting DuckDB Foundation" build/release/src/libduckdb*.dylib
+            
+            echo -e '<?xml version="1.0" encoding="UTF-8"?>\n<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">\n<plist version="1.0">\n<dict>\n  <key>com.apple.security.cs.disable-library-validation</key>\n  <true/>\n</dict>\n</plist>' > entitlements.plist
+            codesign --options runtime --entitlements entitlements.plist --all-architectures --force --sign "Developer ID Application: Stichting DuckDB Foundation" build/release/duckdb
+            codesign --options runtime --entitlements entitlements.plist --all-architectures --force --sign "Developer ID Application: Stichting DuckDB Foundation" build/release/src/libduckdb*.dylib
+          
+            zip -j notarize.zip build/release/duckdb build/release/src/libduckdb.dylib 
+            export XCRUN_RESPONSE=$(xcrun notarytool submit --progress --apple-id "$APPLE_ID" --password "$PASSWORD" --team-id "$TEAM_ID" --wait -f json notarize.zip)
+            rm notarize.zip
+            if [[ $(./build/release/duckdb -csv -noheader -c "SELECT (getenv('XCRUN_RESPONSE')::JSON)->>'status'") != "Accepted" ]] ; then 
+              echo "Notarization failed!"
+              echo $XCRUN_RESPONSE
+              exit 1
+            fi
           fi
 
       - name: Deploy
         shell: bash
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.S3_DUCKDB_STAGING_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.S3_DUCKDB_STAGING_KEY }}
         run: |
           python scripts/amalgamation.py
           zip -j duckdb_cli-osx-universal.zip build/release/duckdb
+          gzip -9 -k -n -c build/release/duckdb > duckdb_cli-osx-universal.gz
           zip -j libduckdb-osx-universal.zip build/release/src/libduckdb*.dylib src/amalgamation/duckdb.hpp src/include/duckdb.h
-          python scripts/asset-upload-gha.py libduckdb-osx-universal.zip duckdb_cli-osx-universal.zip
+          ./scripts/upload-assets-to-staging.sh github_release libduckdb-osx-universal.zip duckdb_cli-osx-universal.zip duckdb_cli-osx-universal.gz
 
       - uses: actions/upload-artifact@v4
         with:
@@ -204,125 +188,20 @@ jobs:
             libduckdb-osx-universal.zip
             duckdb_cli-osx-universal.zip
 
-#  xcode-extensions:
-#    # Builds extensions for osx_arm64 and osx_amd64
-#    name: OSX Extensions Release
-#    runs-on: macos-latest
-#    needs: xcode-debug
-#    strategy:
-#      matrix:
-#        label: [ 'x86_64', 'arm64' ]
-#        include:
-#          - label: x86_64
-#            osx_arch: x86_64
-#            duckdb_arch: osx_amd64
-#            vcpkg_triplet: x64-osx
-#            run_autoload_tests: 1
-#          - label: arm64
-#            osx_arch: arm64
-#            duckdb_arch: osx_arm64
-#            vcpkg_triplet: arm64-osx
-#            run_autoload_tests: 0
-#
-#    env:
-#      DUCKDB_EXTENSION_SIGNING_PK: ${{ secrets.DUCKDB_EXTENSION_SIGNING_PK }}
-#      AWS_DEFAULT_REGION: us-east-1
-#      VCPKG_TARGET_TRIPLET: ${{ matrix.vcpkg_triplet }}
-#      GEN: ninja
-#
-#    steps:
-#      - uses: actions/checkout@v3
-#        with:
-#          fetch-depth: 0
-#
-#      - uses: actions/setup-python@v4
-#        with:
-#          python-version: '3.7'
-#
-#      - name: Install Ninja and Pkg-config
-#        run: brew install pkg-config ninja
-#
-#      - name: Setup Ccache
-#        uses: hendrikmuhs/ccache-action@main
-#        with:
-#          key: ${{ github.job }}-${{ matrix.label }}
-#          save: ${{ github.ref == 'refs/heads/main' || github.repository != 'duckdb/duckdb' }}
-#
-#      - uses: ./.github/actions/build_extensions
-#        with:
-#          treat_warn_as_error: 0
-#          run_tests: 0
-#          osx_arch: ${{ matrix.osx_arch }}
-#          vcpkg_target_triplet: ${{ matrix.vcpkg_triplet }}
-#          build_in_tree_extensions: 1
-#          build_out_of_tree_extensions: 1
-#          run_autoload_tests: ${{ matrix.run_autoload_tests }}
-#          ninja: 1
-#
-#      - name: Test statically linked extensions
-#        if: ${{ matrix.osx_arch == 'x86_64' }}
-#        shell: bash
-#        run: |
-#          python3 scripts/run_tests_one_by_one.py ./build/release/test/unittest
-#
-#      - name: Sign Extension Binaries
-#        env:
-#          BUILD_CERTIFICATE_BASE64: ${{ secrets.OSX_CODESIGN_BUILD_CERTIFICATE_BASE64 }}
-#          P12_PASSWORD: ${{ secrets.OSX_CODESIGN_P12_PASSWORD }}
-#          KEYCHAIN_PASSWORD: ${{ secrets.OSX_CODESIGN_KEYCHAIN_PASSWORD }}
-#        run: |
-#          if [[ "$GITHUB_REPOSITORY" = "duckdb/duckdb" ]] ; then
-#          . scripts/osx_import_codesign_certificate.sh
-#          codesign --all-architectures --force --sign "Developer ID Application: Stichting DuckDB Foundation" build/release/extension/*/*.duckdb_extension
-#          fi
-#
-#      - name: Deploy
-#        shell: bash
-#        env:
-#          AWS_ACCESS_KEY_ID: ${{secrets.S3_ID}}
-#          AWS_SECRET_ACCESS_KEY: ${{secrets.S3_KEY}}
-#          DUCKDB_DEPLOY_SCRIPT_MODE: for_real
-#        run: |
-#          if [[ "$GITHUB_REF" =~ ^(refs/tags/v.+)$ && "$GITHUB_REPOSITORY" = "duckdb/duckdb" ]] ; then
-#            pip install awscli
-#            ./scripts/extension-upload-all.sh ${{ matrix.duckdb_arch }} ${{ github.ref_name }}
-#          elif [[ "$GITHUB_REF" =~ ^(refs/heads/main)$ && "$GITHUB_REPOSITORY" = "duckdb/duckdb" ]] ; then
-#            pip install awscli
-#            ./scripts/extension-upload-all.sh ${{ matrix.duckdb_arch }} `git log -1 --format=%h`
-#          else
-#            echo "would do: ./scripts/extension-upload-all.sh ${{ matrix.duckdb_arch }} ${{ github.ref_name }}"
-#          fi
-#
-#      - name: Test loadable extensions
-#        if: ${{ matrix.osx_arch == 'x86_64' }}
-#        shell: bash
-#        env:
-#          AWS_ACCESS_KEY_ID: ${{secrets.S3_ID}}
-#          AWS_SECRET_ACCESS_KEY: ${{secrets.S3_KEY}}
-#          AWS_DEFAULT_REGION: us-east-1
-#        run: |
-#          if [[ "$GITHUB_REF" =~ ^(refs/heads/main|refs/tags/v.+)$ && "$GITHUB_REPOSITORY" = "duckdb/duckdb" ]] ; then
-#            ./scripts/extension-upload-test.sh
-#          fi
-#
-#      - name: Rebuild DuckDB without any extensions linked, but with same extension config
-#        if: ${{ matrix.osx_arch == 'x86_64' }}
-#        shell: bash
-#        env:
-#          EXTENSION_TESTS_ONLY: 1
-#          ENABLE_EXTENSION_AUTOLOADING: 1
-#          ENABLE_EXTENSION_AUTOINSTALL: 1
-#        run: |
-#          rm -rf build/release
-#          make
-#
-#      # Run autoload unittests (including the out-of-tree tests) without any extensions linked, relying on the autoloader
-#      - name: Run tests with auto loading
-#        if: ${{ matrix.osx_arch == 'x86_64' && !startsWith(github.ref, 'refs/tags/v') }}
-#        shell: bash
-#        env:
-#          LOCAL_EXTENSION_REPO: ${{ github.workspace }}
-#        run: |
-#          python3 scripts/get_test_list.py --file-contains 'require ' --list '"*.test"' > test.list
-#          python3 scripts/get_test_list.py --file-contains 'require-env LOCAL_EXTENSION_REPO' --list '"*.test"' >> test.list
-#          python3 scripts/run_tests_one_by_one.py ./build/release/test/unittest '-f test.list'
+      # - name: Unit Test
+      #   shell: bash
+      #   if: ${{ inputs.skip_tests != 'true' }}
+      #   run: make allunit
+
+      # - name: Tools Tests
+      #   shell: bash
+      #   if: ${{ inputs.skip_tests != 'true' }}
+      #   run: |
+      #     python -m pytest tools/shell/tests --shell-binary build/release/duckdb
+
+      # - name: Examples
+      #   shell: bash
+      #   if: ${{ inputs.skip_tests != 'true' }}
+      #   run: |
+      #     (cd examples/embedded-c; make)
+      #     (cd examples/embedded-c++; make)

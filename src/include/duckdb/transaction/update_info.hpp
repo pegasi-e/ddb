@@ -13,16 +13,14 @@
 #include "duckdb/common/types/validity_mask.hpp"
 #include "duckdb/transaction/undo_buffer_allocator.hpp"
 #include "duckdb/common/atomic.hpp"
-// start Anybase changes
-#include "duckdb/storage/table/column_data.hpp"
-// end Anybase changes
 
 namespace duckdb {
 class UpdateSegment;
+struct DataTableInfo;
+class DataTable;
 // start Anybase changes
 class ColumnData;
 // end Anybase changes
-struct DataTableInfo;
 
 //! UpdateInfo is a class that represents a set of updates applied to a single vector.
 //! The UpdateInfo struct contains metadata associated with the update.
@@ -32,6 +30,8 @@ struct DataTableInfo;
 struct UpdateInfo {
 	//! The update segment that this update info affects
 	UpdateSegment *segment;
+	//! The table this was update was made on
+	DataTable *table;
 	//! The column index of which column we are updating
 	idx_t column_index;
 	//! The version number
@@ -66,7 +66,7 @@ struct UpdateInfo {
 			if ((fetch_current_update && version_number != transaction_id) ||
 				(!fetch_current_update && version_number == transaction_id)) {
 				return true;
-			}
+				}
 		}
 
 		return false;
@@ -102,11 +102,10 @@ struct UpdateInfo {
 	//! Returns the total allocation size for an UpdateInfo entry, together with space for the tuple data
 	static idx_t GetAllocSize(idx_t type_size);
 	//! Initialize an UpdateInfo struct that has been allocated using GetAllocSize (i.e. has extra space after it)
-	static void Initialize(UpdateInfo &info, transaction_t transaction_id);
+	static void Initialize(UpdateInfo &info, DataTable &data_table, transaction_t transaction_id);
 
 // start Anybase changes
 	ColumnData *column;
-	DataTable *table;
 	sel_t *cdc_tuples;
 // end Anybase changes
 };

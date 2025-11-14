@@ -51,6 +51,7 @@ public:
 	LocalStorage &GetLocalStorage();
 
 	void PushCatalogEntry(CatalogEntry &entry, data_ptr_t extra_data, idx_t extra_data_size);
+	void PushAttach(AttachedDatabase &db);
 
 	void SetReadWrite() override;
 
@@ -75,7 +76,7 @@ public:
 	                idx_t base_row);
 	void PushSequenceUsage(SequenceCatalogEntry &entry, const SequenceData &data);
 	void PushAppend(DataTable &table, idx_t row_start, idx_t row_count);
-	UndoBufferReference CreateUpdateInfo(idx_t type_size, idx_t entries);
+	UndoBufferReference CreateUpdateInfo(idx_t type_size, DataTable &data_table, idx_t entries);
 
 	bool IsDuckTransaction() const override {
 		return true;
@@ -89,6 +90,7 @@ public:
 	//! Get a shared lock on a table
 	shared_ptr<CheckpointLock> SharedLockTable(DataTableInfo &info);
 
+	//! Hold an owning reference of the table, needed to safely reference it inside the transaction commit/undo logic
 	void ModifyTable(DataTable &tbl);
 
 private:
@@ -104,6 +106,8 @@ private:
 	mutex sequence_lock;
 	//! Map of all sequences that were used during the transaction and the value they had in this transaction
 	reference_map_t<SequenceCatalogEntry, reference<SequenceValue>> sequence_usage;
+	//! Lock for modified_tables
+	mutex modified_tables_lock;
 	//! Tables that are modified by this transaction
 	reference_map_t<DataTable, shared_ptr<DataTable>> modified_tables;
 	//! Lock for the active_locks map
@@ -118,6 +122,10 @@ private:
 public:
 	void PublishCdcMessages();
 	bool ShouldPublishCDCEvent() override;
+	DuckTransaction(DuckTransactionManager &manager, ClientContext &context, transaction_t start_time,
+					transaction_t transaction_id, idx_t catalog_version, timestamp_t meta_start_time, transaction_t meta_transaction_id);
+	transaction_t meta_sequenceNumber;
+	timestamp_t meta_startTime;
 // end Anybase changes
 };
 

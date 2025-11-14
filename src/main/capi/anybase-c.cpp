@@ -4,6 +4,7 @@
 #include "duckdb/common/arrow/arrow.hpp"
 #include "duckdb/common/arrow/arrow_converter.hpp"
 #include "duckdb/common/arrow/arrow_appender.hpp"
+#include "duckdb/common/types/timestamp.hpp"
 #include "duckdb/main/prepared_statement_data.hpp"
 #include "duckdb/common/types.hpp"
 #include "duckdb/storage/data_table.hpp"
@@ -34,24 +35,6 @@ uint64_t duckdb_checkpoint_and_get_snapshot_id(duckdb_connection connection)
 {
   Connection *conn = reinterpret_cast<Connection *>(connection);
   return conn->CheckpointAndGetSnapshotId();
-}
-
-duckdb_state duckdb_create_snapshot(duckdb_connection connection, duckdb_result *out_result, char **out_snapshot_file_name)
-{
-  Connection *conn = reinterpret_cast<Connection *>(connection);
-  auto result = conn->CreateSnapshot();
-  if (! result.second) {
-    return DuckDBError;
-  }
-  *out_snapshot_file_name = (char *)duckdb_malloc(result.first.length() + 1);
-  memcpy(*out_snapshot_file_name, result.first.c_str(), result.first.length() + 1);
-  return DuckDBTranslateResult(std::move(result.second), out_result);
-}
-
-void duckdb_remove_snapshot(duckdb_connection connection, const char *snapshot_file_name)
-{
-  Connection *conn = reinterpret_cast<Connection *>(connection);
-  conn->RemoveSnapshot(snapshot_file_name);
 }
 
 duckdb_state duckdb_result_to_arrow(duckdb_result result, duckdb_arrow_array *out_array) {
@@ -186,6 +169,26 @@ idx_t duckdb_get_column_version(const duckdb_connection connection, const char *
 		}
 		return 0;
 	} // LCOV_EXCL_STOP
+}
+
+duckdb_state duckdb_begin_transaction(const duckdb_connection connection, const int64_t micro_seconds, const uint64_t sequence, char **error) {
+	const auto *ddbConnection = reinterpret_cast<Connection *>(connection);
+
+	try {
+		ddbConnection->context->BeginTransaction(duckdb::timestamp_t(micro_seconds), sequence);
+		return DuckDBSuccess;
+	} catch (std::exception &ex) {
+		if (error) {
+			ErrorData parsed_error(ex);
+			*error = strdup(parsed_error.Message().c_str());
+		}
+	} catch (...) { // LCOV_EXCL_START
+		if (error) {
+			*error = strdup("Unknown error");
+		}
+	} // LCOV_EXCL_STOP
+
+	return DuckDBError;
 }
 
 idx_t duckdb_estimated_row_count(const duckdb_connection connection, const char *catalog, const char *schema, const char *table, char **error) {

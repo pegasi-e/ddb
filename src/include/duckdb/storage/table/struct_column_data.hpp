@@ -47,11 +47,11 @@ public:
 // start Anybase changes
 	void FetchRow(TransactionData transaction, ColumnFetchState &state, row_t row_id, Vector &result,
 	              idx_t result_idx, bool fetch_current_update = true) override;
-	void Update(TransactionData transaction, DataTable &table, idx_t column_index, Vector &update_vector, row_t *row_ids,
-	            idx_t update_count) override;
-	void UpdateColumn(TransactionData transaction, DataTable &table, const vector<column_t> &column_path, Vector &update_vector,
-	                  row_t *row_ids, idx_t update_count, idx_t depth) override;
 // end Anybase changes
+	void Update(TransactionData transaction, DataTable &data_table, idx_t column_index, Vector &update_vector,
+	            row_t *row_ids, idx_t update_count) override;
+	void UpdateColumn(TransactionData transaction, DataTable &data_table, const vector<column_t> &column_path,
+	                  Vector &update_vector, row_t *row_ids, idx_t update_count, idx_t depth) override;
 	unique_ptr<BaseStatistics> GetUpdateStatistics() override;
 
 	void CommitDropColumn() override;
@@ -61,6 +61,7 @@ public:
 	unique_ptr<ColumnCheckpointState> Checkpoint(RowGroup &row_group, ColumnCheckpointInfo &info) override;
 
 	bool IsPersistent() override;
+	bool HasAnyChanges() const override;
 	PersistentColumnData Serialize() override;
 	void InitializeColumn(PersistentColumnData &column_data, BaseStatistics &target_stats) override;
 

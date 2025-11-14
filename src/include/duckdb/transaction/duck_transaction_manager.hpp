@@ -70,6 +70,7 @@ public:
 
 	void PushCatalogEntry(Transaction &transaction_p, CatalogEntry &entry, data_ptr_t extra_data = nullptr,
 	                      idx_t extra_data_size = 0);
+	void PushAttach(Transaction &transaction_p, AttachedDatabase &db);
 
 protected:
 	struct CheckpointDecision {
@@ -138,7 +139,6 @@ protected:
 
 // start Anybase changes
 public:
-	string Snapshot(ClientContext &context) override;
 	uint64_t GetSnapshotId(ClientContext &context) override;
 	uint64_t CheckpointAndGetSnapshotId(ClientContext &context) override;
 // end Anybase changes

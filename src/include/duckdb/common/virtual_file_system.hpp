@@ -11,6 +11,7 @@
 #include "duckdb/common/file_system.hpp"
 #include "duckdb/common/map.hpp"
 #include "duckdb/common/unordered_set.hpp"
+#include "duckdb/main/extension_helper.hpp"
 
 namespace duckdb {
 
@@ -22,13 +23,11 @@ public:
 
 	void Read(FileHandle &handle, void *buffer, int64_t nr_bytes, idx_t location) override;
 	void Write(FileHandle &handle, void *buffer, int64_t nr_bytes, idx_t location) override;
-
 	int64_t Read(FileHandle &handle, void *buffer, int64_t nr_bytes) override;
-
 	int64_t Write(FileHandle &handle, void *buffer, int64_t nr_bytes) override;
 
 	int64_t GetFileSize(FileHandle &handle) override;
-	time_t GetLastModifiedTime(FileHandle &handle) override;
+	timestamp_t GetLastModifiedTime(FileHandle &handle) override;
 	string GetVersionTag(FileHandle &handle) override;
 	FileType GetFileType(FileHandle &handle) override;
 
@@ -65,6 +64,7 @@ public:
 	std::string GetName() const override;
 
 	void SetDisabledFileSystems(const vector<string> &names) override;
+	bool SubSystemIsDisabled(const string &name) override;
 
 	string PathSeparator(const string &path) override;
 
@@ -83,19 +83,16 @@ protected:
 	}
 
 private:
+	FileSystem &FindFileSystem(const string &path, optional_ptr<FileOpener> file_opener);
+	FileSystem &FindFileSystem(const string &path, optional_ptr<DatabaseInstance> database_instance);
 	FileSystem &FindFileSystem(const string &path);
-	FileSystem &FindFileSystemInternal(const string &path);
+	optional_ptr<FileSystem> FindFileSystemInternal(const string &path);
 
 private:
 	vector<unique_ptr<FileSystem>> sub_systems;
 	map<FileCompressionType, unique_ptr<FileSystem>> compressed_fs;
 	const unique_ptr<FileSystem> default_fs;
 	unordered_set<string> disabled_file_systems;
-
-// start Anybase changes
-public:
-	void CopyFile(const string &source, const string &target) override;
-// end Anybase changes
 };
 
 } // namespace duckdb

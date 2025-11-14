@@ -24,13 +24,13 @@
 #include "duckdb/main/external_dependencies.hpp"
 #include "duckdb/main/pending_query_result.hpp"
 #include "duckdb/main/prepared_statement.hpp"
-#include "duckdb/main/settings.hpp"
 #include "duckdb/main/stream_query_result.hpp"
 #include "duckdb/main/table_description.hpp"
 #include "duckdb/planner/expression/bound_parameter_data.hpp"
 #include "duckdb/transaction/transaction_context.hpp"
 
 namespace duckdb {
+
 class Appender;
 class Catalog;
 class CatalogSearchPath;
@@ -140,6 +140,10 @@ public:
 	                       optional_ptr<const vector<LogicalIndex>> column_ids = nullptr);
 	// end Anybase changes
 
+	//! Execute a query with the given collection "attached" to the query using a CTE
+	DUCKDB_API void Append(ColumnDataCollection &collection, const string &query, const vector<string> &column_names,
+						   const string &collection_name);
+
 	//! Try to bind a relation in the current client context; either throws an exception or fills the result_columns
 	//! list with the set of returned columns
 	DUCKDB_API void TryBindRelation(Relation &relation, vector<ColumnDefinition> &result_columns);
@@ -195,7 +199,7 @@ public:
 	                                                 bool requires_valid_transaction = true);
 
 	//! Equivalent to CURRENT_SETTING(key) SQL function.
-	DUCKDB_API SettingLookupResult TryGetCurrentSetting(const std::string &key, Value &result) const;
+	DUCKDB_API SettingLookupResult TryGetCurrentSetting(const string &key, Value &result) const;
 
 	//! Returns the parser options for this client context
 	DUCKDB_API ParserOptions GetParserOptions() const;
@@ -229,8 +233,7 @@ public:
 
 private:
 	//! Parse statements and resolve pragmas from a query
-	bool ParseStatements(ClientContextLock &lock, const string &query, vector<unique_ptr<SQLStatement>> &result,
-	                     ErrorData &error);
+	vector<unique_ptr<SQLStatement>> ParseStatements(ClientContextLock &lock, const string &query);
 	//! Issues a query to the database and returns a Pending Query Result
 	unique_ptr<PendingQueryResult> PendingQueryInternal(ClientContextLock &lock, unique_ptr<SQLStatement> statement,
 	                                                    const PendingQueryParameters &parameters, bool verify = true);
@@ -255,7 +258,7 @@ private:
 	                                                        shared_ptr<PreparedStatementData> statement_p,
 	                                                        const PendingQueryParameters &parameters);
 	unique_ptr<PendingQueryResult> PendingPreparedStatementInternal(ClientContextLock &lock,
-	                                                                shared_ptr<PreparedStatementData> statement_p,
+	                                                                shared_ptr<PreparedStatementData> statement_data_p,
 	                                                                const PendingQueryParameters &parameters);
 	void CheckIfPreparedStatementIsExecutable(PreparedStatementData &statement);
 
@@ -307,6 +310,8 @@ private:
 	CreatePreparedStatementInternal(ClientContextLock &lock, const string &query, unique_ptr<SQLStatement> statement,
 	                                optional_ptr<case_insensitive_map_t<BoundParameterData>> values);
 
+	SettingLookupResult TryGetCurrentSettingInternal(const string &key, Value &result) const;
+
 private:
 	//! Lock on using the ClientContext in parallel
 	mutex context_lock;
@@ -319,18 +324,20 @@ private:
 
 // start Anybase changes
 public:
-	//! Merges a DataChunk to the specified table.  This works much like upsert.  Primary key is assumed to be the conflict target
+	//! Merges a DataChunk to the specified table.  This works much like upsert.  The Primary key is assumed to be the conflict target
 	DUCKDB_API void Merge(TableDescription &description, DataChunk &chunk, optional_ptr<const vector<LogicalIndex>> column_ids);
-	//! Merges a ColumnDataCollection to the specified table.  This works much like upsert.  Primary key is assumed to be the conflict target
+	//! Merges a ColumnDataCollection to the specified table.  This works much like upsert.  The Primary key is assumed to be the conflict target
 	DUCKDB_API void Merge(TableDescription &description, ColumnDataCollection &collection, optional_ptr<const vector<LogicalIndex>> column_ids);
 	DUCKDB_API uint64_t GetSnapshotId();
 	DUCKDB_API uint64_t CheckpointAndGetSnapshotId();
-	DUCKDB_API pair<string, unique_ptr<QueryResult>> CreateSnapshot();
-	DUCKDB_API void RemoveSnapshot(const char *snapshot_file_name);
 	DUCKDB_API void SetActiveResult(ClientContextLock &lock, BaseQueryResult &result);
 	DUCKDB_API idx_t GetTableVersion(const char *schema, const char *table);
 	DUCKDB_API idx_t GetTotalRows(const char *catalog, const char *schema, const char *table);
 	DUCKDB_API idx_t GetColumnVersion(const char *schema, const char *table, const char *column);
+	DUCKDB_API void BeginTransaction(const timestamp_t timestamp, const transaction_t sequenceNumber) {
+		transaction.BeginTransaction(timestamp, sequenceNumber);
+		transaction.SetAutoCommit(false);
+	}
 // end Anybase changes
 };
 
@@ -344,6 +351,27 @@ public:
 
 private:
 	lock_guard<mutex> client_guard;
+};
+
+//! The QueryContext wraps an optional client context.
+//! It makes query-related information available to operations.
+class QueryContext {
+public:
+	QueryContext() : context(nullptr) {
+	}
+	QueryContext(optional_ptr<ClientContext> context) : context(context) { // NOLINT: allow implicit construction
+	}
+
+public:
+	bool Valid() const {
+		return context != nullptr;
+	}
+	optional_ptr<ClientContext> GetClientContext() const {
+		return context;
+	}
+
+private:
+	optional_ptr<ClientContext> context;
 };
 
 } // namespace duckdb
