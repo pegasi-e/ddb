@@ -2904,7 +2904,7 @@ TEST_CASE("Test WAL Generation", "[capi]") {
     // REQUIRE(duckdb_query(connection1, "INSERT INTO FOO VALUES (2, 8, 31, 125)", nullptr) != DuckDBError);
     // REQUIRE(duckdb_query(connection1, "BEGIN TRANSACTION", nullptr) != DuckDBError);
 
-	
+
 	// // REQUIRE(duckdb_begin_transaction(connection1, 12345, 2, nullptr) != DuckDBError);
 	// REQUIRE(duckdb_query(connection1, "BEGIN TRANSACTION", nullptr) != DuckDBError);
  //    // REQUIRE(duckdb_query(connection1, "UPDATE FOO SET val = 5 where id = 2", nullptr) != DuckDBError);
