@@ -540,22 +540,22 @@ void some_func2(cdc_event_type type,
 				duckdb_data_chunk values,
 				duckdb_data_chunk previous_values) {
 
-	printf("type: %d\n", type);
-	printf("time: %s\n", transaction_id);
-	printf("column_count: %llu\n", column_count);
-	printf("table_version: %llu\n", table_version);
-
-	int totalSize = sizeof(column_names);
-	printf("columns: ");
-	if (column_count > 0) {
-		for (auto i = 0; i < column_count; i++) {
-			printf(column_names[i]);
-			if (i != column_count - 1) {
-				printf(", ");
-			}
-		}
-	}
-	printf("\n");
+	// printf("type: %d\n", type);
+	// printf("time: %s\n", transaction_id);
+	// printf("column_count: %llu\n", column_count);
+	// printf("table_version: %llu\n", table_version);
+	//
+	// int totalSize = sizeof(column_names);
+	// printf("columns: ");
+	// if (column_count > 0) {
+	// 	for (auto i = 0; i < column_count; i++) {
+	// 		printf(column_names[i]);
+	// 		if (i != column_count - 1) {
+	// 			printf(", ");
+	// 		}
+	// 	}
+	// }
+	// printf("\n");
 
 	if (values != nullptr) {
 		duckdb_destroy_data_chunk(&values);
