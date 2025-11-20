@@ -46,27 +46,38 @@ void CDCWriteState::EmitDelete(DeleteInfo &info) {
 	auto number_of_rows = info.count;
 	auto ptr = transaction.context.lock();
 
-	table->ScanTableSegment(transaction, info.base_row, number_of_rows, [&](DataChunk &chunk) {
-		auto &config = DBConfig::GetConfig(info.table->db.GetDatabase());
-		auto table_version = table->GetVersion();
-		auto &column_definitions = table->Columns();
-		auto columnCount = column_definitions.size();
-		auto column_names = vector<const char*>(columnCount);
-		auto column_versions = vector<uint64_t>(columnCount);
-		for (idx_t i = 0; i < columnCount; i++) {
-			column_names[i] = strdup(column_definitions[i].GetName().c_str());
-			column_versions[i] = table->GetColumnVersion(i);
-		}
+	auto &config = DBConfig::GetConfig(info.table->db.GetDatabase());
+	auto table_version = table->GetVersion();
+	auto &column_definitions = table->Columns();
+	auto columnCount = column_definitions.size();
+	auto column_names = vector<const char*>(columnCount);
+	auto deleted_column_versions = vector<uint64_t>(columnCount);
+	for (idx_t i = 0; i < columnCount; i++) {
+		column_names[i] = strdup(column_definitions[i].GetName().c_str());
+		deleted_column_versions[i] = table->GetColumnVersion(i);
+	}
 
-		if (!info.is_consecutive) {
-			for (idx_t i = 0; i < info.count; i++) {
-				const auto row_offset = info.GetRows()[i] + 1U;
-				if (row_offset > number_of_rows) {
-					number_of_rows = row_offset;
-				}
+
+	auto base_row = info.base_row;
+	if (!info.is_consecutive) {
+		idx_t lowest_row = UINT64_MAX;
+		idx_t highest_row = 0;
+		for (idx_t i = 0; i < info.count; i++) {
+			const auto row_offset = info.GetRows()[i];
+			if (row_offset < lowest_row) {
+				lowest_row = row_offset;
+			}
+
+			if (row_offset > highest_row) {
+				highest_row = row_offset;
 			}
 		}
 
+		number_of_rows = highest_row - lowest_row + 1;
+		base_row = lowest_row;
+	}
+
+	table->ScanTableSegment(transaction, base_row, number_of_rows, [&](DataChunk &chunk) {
 		auto delete_chunk = make_uniq<DataChunk>();
 		delete_chunk->Initialize(*ptr, chunk.GetTypes(), chunk.size());
 		delete_chunk->Append(chunk);
@@ -76,7 +87,7 @@ void CDCWriteState::EmitDelete(DeleteInfo &info) {
 			SelectionVector sel(info.count);
 			auto delete_rows = info.GetRows();
 			for (idx_t i = 0; i < info.count; i++) {
-				sel.set_index(i, delete_rows[i]);
+				sel.set_index(i, delete_rows[i] - base_row);
 			}
 			delete_chunk->Slice(sel, info.count);
 		}
@@ -94,7 +105,7 @@ void CDCWriteState::EmitDelete(DeleteInfo &info) {
 			nullptr,
 			table->GetTableName().c_str(),
 			column_names.data(),
-			column_versions.data(),
+			deleted_column_versions.data(),
 			nullptr,
 			reinterpret_cast<duckdb_data_chunk>(delete_chunk.release())
 			);
@@ -259,10 +270,10 @@ void CDCWriteState::EmitUpdate(UpdateInfo &info) {
 			column_indexes, update_types, [&](DataChunk &chunk) {
 			current_update_chunk->Append(chunk);
 			previous_update_chunk->Append(chunk);
-		});
 
-		info.segment->FetchAndApplyUpdate(info, previous_update_chunk->data[update_offset]);
-		info.segment->FetchCommitted(info.vector_index, current_update_chunk->data[update_offset]);
+			info.segment->FetchAndApplyUpdate(info, previous_update_chunk->data[update_offset]);
+			info.segment->FetchCommitted(info.vector_index, current_update_chunk->data[update_offset]);
+		});
 	}
 }
 
