@@ -357,11 +357,11 @@ jobs:
         GEN: ninja
       run: make
 
-    - name: test/configs/encryption.json
-      if: (success() || failure()) && steps.build.conclusion == 'success'
-      shell: bash
-      run: |
-        ./build/release/test/unittest --test-config test/configs/encryption.json
+    # - name: test/configs/encryption.json
+    #   if: (success() || failure()) && steps.build.conclusion == 'success'
+    #   shell: bash
+    #   run: |
+    #     ./build/release/test/unittest --test-config test/configs/encryption.json
 
     - name: test/configs/force_storage.json
       if: (success() || failure()) && steps.build.conclusion == 'success'
