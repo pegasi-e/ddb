@@ -236,7 +236,6 @@ void CDCWriteState::EmitUpdate(UpdateInfo &info) {
 
 	if (CanApplyUpdate(info)) {
 		info.segment->FetchAndApplyUpdate(info, previous_update_chunk->data[update_offset]);
-		info.segment->FetchCommitted(info.vector_index, current_update_chunk->data[update_offset]);
 	} else {
 		Flush();
 
@@ -272,7 +271,6 @@ void CDCWriteState::EmitUpdate(UpdateInfo &info) {
 			previous_update_chunk->Append(chunk);
 
 			info.segment->FetchAndApplyUpdate(info, previous_update_chunk->data[update_offset]);
-			info.segment->FetchCommitted(info.vector_index, current_update_chunk->data[update_offset]);
 		});
 	}
 }
