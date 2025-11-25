@@ -235,6 +235,10 @@ transaction_t DuckTransactionManager::GetCommitTimestamp() {
 	return commit_ts;
 }
 
+uint64_t DuckTransactionManager::GetLastCommitTimestamp() {
+	return last_commit;
+}
+
 ErrorData DuckTransactionManager::CommitTransaction(ClientContext &context, Transaction &transaction_p) {
 	auto &transaction = transaction_p.Cast<DuckTransaction>();
 	unique_lock<mutex> t_lock(transaction_lock);

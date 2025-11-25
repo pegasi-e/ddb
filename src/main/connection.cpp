@@ -188,6 +188,10 @@ uint64_t Connection::GetSnapshotId() {
 	return context->GetSnapshotId();
 }
 
+uint64_t Connection::GetLastCommitTimestamp() {
+	return context->GetLastCommitTimestamp();
+}
+
 uint64_t Connection::CheckpointAndGetSnapshotId() {
 	return context->CheckpointAndGetSnapshotId();
 }

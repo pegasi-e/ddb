@@ -257,6 +257,11 @@ uint64_t MetaTransaction::GetSnapshotId(optional_ptr<AttachedDatabase> db) {
 	return transaction_manager.GetSnapshotId(context);
 }
 
+uint64_t MetaTransaction::GetLastCommitTimestamp(optional_ptr<AttachedDatabase> db) {
+	auto &transaction_manager = db->GetTransactionManager();
+	return transaction_manager.GetLastCommitTimestamp();
+}
+
 uint64_t MetaTransaction::CheckpointAndGetSnapshotId(optional_ptr<AttachedDatabase> db) {
 	auto &transaction_manager = db->GetTransactionManager();
 	return transaction_manager.CheckpointAndGetSnapshotId(context);

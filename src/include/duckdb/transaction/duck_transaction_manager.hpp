@@ -86,6 +86,7 @@ protected:
 private:
 	//! Generates a new commit timestamp
 	transaction_t GetCommitTimestamp();
+        uint64_t GetLastCommitTimestamp() override;
 	//! Remove the given transaction from the list of active transactions
 	unique_ptr<DuckCleanupInfo> RemoveTransaction(DuckTransaction &transaction) noexcept;
 	//! Remove the given transaction from the list of active transactions

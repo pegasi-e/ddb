@@ -5166,6 +5166,7 @@ DUCKDB_C_API duckdb_error_data duckdb_expression_fold(duckdb_client_context cont
 // Anybase API functions
 //===--------------------------------------------------------------------===//
 DUCKDB_C_API uint64_t duckdb_get_hlc_timestamp();
+DUCKDB_C_API uint64_t duckdb_get_last_commit_timestamp(duckdb_connection connection);
 DUCKDB_C_API void duckdb_set_hlc_timestamp(uint64_t ts);
 DUCKDB_C_API uint64_t duckdb_get_snapshot_id(duckdb_connection con);
 DUCKDB_C_API uint64_t duckdb_checkpoint_and_get_snapshot_id(duckdb_connection con);

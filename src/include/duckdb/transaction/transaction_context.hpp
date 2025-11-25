@@ -67,6 +67,7 @@ private:
 // start Anybase changes
 public:
 	uint64_t GetSnapshotId();
+        uint64_t GetLastCommitTimestamp();
 	uint64_t CheckpointAndGetSnapshotId();
 	void BeginTransaction(timestamp_t timestamp, transaction_t sequenceNumber);
 // end Anybase changes

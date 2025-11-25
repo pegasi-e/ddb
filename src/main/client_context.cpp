@@ -1606,6 +1606,16 @@ uint64_t ClientContext::GetSnapshotId() {
 	return result;
 }
 
+uint64_t ClientContext::GetLastCommitTimestamp() {
+	uint64_t result;
+	RunFunctionInTransaction([&]() {
+	result = transaction.GetLastCommitTimestamp();
+	}, false);
+
+	return result;
+}
+
+  
 uint64_t ClientContext::CheckpointAndGetSnapshotId() {
 	uint64_t result;
 	RunFunctionInTransaction([&]() {
