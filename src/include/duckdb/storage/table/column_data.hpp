@@ -156,7 +156,7 @@ public:
 	// start Anybase changes
 	//! Fetch a specific row id and append it to the vector
 	virtual void FetchRow(TransactionData transaction, ColumnFetchState &state, row_t row_id, Vector &result,
-	                      idx_t result_idx, bool fetch_current_update = true);
+				  idx_t result_idx, bool fetch_current_update = true);
 	// end Anybase changes
 	virtual void Update(TransactionData transaction, DataTable &data_table, idx_t column_index, Vector &update_vector,
 	                    row_t *row_ids, idx_t update_count);

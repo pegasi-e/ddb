@@ -13,7 +13,71 @@
 #endif
 using namespace duckdb;
 using namespace std;
-
+//
+// TEST_CASE("merger increments versions", "[merger]") {
+// 	duckdb::unique_ptr<QueryResult> result;
+// 	DuckDB db(nullptr);
+// 	Connection con(db);
+//
+// 	REQUIRE_NO_FAIL(con.Query("CREATE TABLE integers(i INTEGER PRIMARY KEY, j INTEGER)"));
+// 	REQUIRE_NO_FAIL(con.Query("INSERT INTO integers VALUES (1, 16)"));
+//
+// 	idx_t tableVersion = 0;
+// 	idx_t iColumnVersion = 0;
+// 	idx_t jColumnVersion = 0;
+//
+// 	tableVersion = con.context->GetTableVersion("", "integers");
+// 	jColumnVersion = con.context->GetColumnVersion("", "integers", "j");
+// 	iColumnVersion = con.context->GetColumnVersion("", "integers", "i");
+//
+// 	result = con.Query("SELECT j FROM integers");
+// 	REQUIRE(CHECK_COLUMN(result, 0, {16}));
+//
+// 	// REQUIRE_NO_FAIL(con.Query("BEGIN TRANSACTION"));
+// 	con.context->BeginTransaction(duckdb::timestamp_t(1000), 1);
+//
+// 	Merger merger(con, "integers");
+// 	merger.BeginRow();
+// 	merger.Append<int32_t>(1);
+// 	merger.Append<int32_t>(18);
+// 	merger.EndRow();
+//
+// 	merger.Flush();
+//
+// 	REQUIRE_NO_FAIL(con.Query("COMMIT TRANSACTION"));
+//
+// 	auto newTableVersion = con.context->GetTableVersion("", "integers");
+// 	auto newJColumnVersion = con.context->GetColumnVersion("", "integers", "j");
+// 	auto newIColumnVersion = con.context->GetColumnVersion("", "integers", "i");
+//
+// 	REQUIRE(tableVersion + 1 == newTableVersion);
+// 	REQUIRE(jColumnVersion + 1 == newJColumnVersion);
+// 	REQUIRE(iColumnVersion == newIColumnVersion);
+//
+// 	con.context->BeginTransaction(duckdb::timestamp_t(2000), 1);
+//
+// 	Merger merger2(con, "integers");
+// 	merger2.BeginRow();
+// 	merger2.Append<int32_t>(1);
+// 	merger2.Append<int32_t>(22);
+// 	merger2.EndRow();
+//
+// 	merger2.Flush();
+//
+// 	REQUIRE_NO_FAIL(con.Query("COMMIT TRANSACTION"));
+//
+// 	newTableVersion = con.context->GetTableVersion("", "integers");
+// 	newJColumnVersion = con.context->GetColumnVersion("", "integers", "j");
+// 	newIColumnVersion = con.context->GetColumnVersion("", "integers", "i");
+//
+// 	REQUIRE(tableVersion + 2 == newTableVersion);
+// 	REQUIRE(jColumnVersion + 2 == newJColumnVersion);
+// 	REQUIRE(iColumnVersion == newIColumnVersion);
+//
+// 	result = con.Query("SELECT j FROM integers");
+// 	REQUIRE(CHECK_COLUMN(result, 0, {22}));
+// }
+//
 // TEST_CASE("Basic merger tests", "[merger]") {
 // 	duckdb::unique_ptr<QueryResult> result;
 // 	DuckDB db(nullptr);
@@ -25,6 +89,7 @@ using namespace std;
 // 	result = con.Query("SELECT j FROM integers");
 // 	REQUIRE(CHECK_COLUMN(result, 0, {16}));
 //
+// 	REQUIRE_NO_FAIL(con.Query("BEGIN TRANSACTION"));
 // 	Merger merger(con, "integers");
 // 	merger.BeginRow();
 // 	merger.Append<int32_t>(1);
@@ -33,10 +98,12 @@ using namespace std;
 //
 // 	merger.Flush();
 //
+// 	REQUIRE_NO_FAIL(con.Query("COMMIT TRANSACTION"));
+//
 // 	result = con.Query("SELECT j FROM integers");
 // 	REQUIRE(CHECK_COLUMN(result, 0, {18}));
 // }
-
+//
 // TEST_CASE("Test multiple AppendRow", "[merger]") {
 // 	duckdb::unique_ptr<QueryResult> result;
 // 	DuckDB db(nullptr);
@@ -73,7 +140,7 @@ using namespace std;
 // 	result = con.Query("SELECT j FROM integers");
 // 	REQUIRE(CHECK_COLUMN(result, 0, values));
 // }
-
+//
 // TEST_CASE("Test merging out of key order", "[merger]") {
 // 	duckdb::unique_ptr<QueryResult> result;
 // 	DuckDB db(nullptr);
@@ -119,7 +186,7 @@ using namespace std;
 // 	REQUIRE(CHECK_COLUMN(result, 1, j_values));
 // 	REQUIRE(CHECK_COLUMN(result, 2, b_values));
 // }
-
+//
 // TEST_CASE("Partial merge tests", "[merger]") {
 // 	duckdb::unique_ptr<QueryResult> result;
 // 	DuckDB db(nullptr);

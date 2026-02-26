@@ -17,11 +17,10 @@ using duckdb::uhugeint_t;
 
 // start Anybase changes
 using duckdb::Merger;
-
 template <class TYPE>
-// End Anybase Changes
+//Rename ext to base to avoid conflicts
 duckdb_state duckdb_appender_create_base(duckdb_connection connection, const char *catalog, const char *schema,
-const char *table, duckdb_appender *out_appender) {
+										 const char *table, duckdb_appender *out_appender) {
 	Connection *conn = reinterpret_cast<Connection *>(connection);
 
 	if (!connection || !table || !out_appender) {
@@ -37,9 +36,7 @@ const char *table, duckdb_appender *out_appender) {
 	auto wrapper = new AppenderWrapper();
 	*out_appender = reinterpret_cast<duckdb_appender>(wrapper);
 	try {
-		// Start Anybase Changes
 		wrapper->appender = duckdb::make_uniq<TYPE>(*conn, catalog, schema, table);
-		// End Anybase Changes
 	} catch (std::exception &ex) {
 		wrapper->error_data = ErrorData(ex);
 		return DuckDBError;
@@ -49,6 +46,7 @@ const char *table, duckdb_appender *out_appender) {
 	} // LCOV_EXCL_STOP
 	return DuckDBSuccess;
 }
+// End Anybase Changes
 
 duckdb_state duckdb_appender_create_query(duckdb_connection connection, const char *query, idx_t column_count,
                                           duckdb_logical_type *types_p, const char *table_name_p,
@@ -93,35 +91,6 @@ duckdb_state duckdb_appender_create_query(duckdb_connection connection, const ch
 	} // LCOV_EXCL_STOP
 	return DuckDBSuccess;
 }
-
-// start Anybase changes
-duckdb_state duckdb_appender_create_ext(duckdb_connection connection, const char *catalog, const char *schema,
-										const char *table, duckdb_appender *out_appender) {
-	return duckdb_appender_create_base<Appender>(connection, catalog, schema, table, out_appender);
-}
-
-duckdb_state duckdb_merger_create(duckdb_connection connection, const char *schema, const char *table,
-									duckdb_appender *out_appender) {
-	return duckdb_merger_create_ext(connection, INVALID_CATALOG, schema, table, out_appender);
-}
-
-duckdb_state duckdb_merger_create_ext(duckdb_connection connection, const char *catalog, const char *schema, const char *table,
-									duckdb_appender *out_appender) {
-
-	return duckdb_appender_create_base<Merger>(connection, catalog, schema, table, out_appender);
-}
-
-duckdb_state duckdb_appender_create(duckdb_connection connection, const char *catalog, const char *schema,
-									const char *table, duckdb_appender *out_appender) {
-	return duckdb_appender_create_base<Appender>(connection, catalog, schema, table, out_appender);
-}
-
-duckdb_state duckdb_appender_create(duckdb_connection connection, const char *schema, const char *table,
-									duckdb_appender *out_appender) {
-	return duckdb_appender_create_base<Appender>(connection, INVALID_CATALOG, schema, table, out_appender);
-}
-
-// end Anybase changes
 
 duckdb_state duckdb_appender_destroy(duckdb_appender *appender) {
 	if (!appender || !*appender) {
@@ -392,3 +361,32 @@ duckdb_state duckdb_append_data_chunk(duckdb_appender appender_p, duckdb_data_ch
 	return duckdb_appender_run_function(appender_p,
 	                                    [&](BaseAppender &appender) { appender.AppendDataChunk(*data_chunk); });
 }
+
+// start Anybase changes
+duckdb_state duckdb_appender_create_ext(duckdb_connection connection, const char *catalog, const char *schema,
+										const char *table, duckdb_appender *out_appender) {
+	return duckdb_appender_create_base<Appender>(connection, catalog, schema, table, out_appender);
+}
+
+duckdb_state duckdb_merger_create(duckdb_connection connection, const char *schema, const char *table,
+									duckdb_appender *out_appender) {
+	return duckdb_merger_create_ext(connection, INVALID_CATALOG, schema, table, out_appender);
+}
+
+duckdb_state duckdb_merger_create_ext(duckdb_connection connection, const char *catalog, const char *schema, const char *table,
+									duckdb_appender *out_appender) {
+
+	return duckdb_appender_create_base<Merger>(connection, catalog, schema, table, out_appender);
+}
+
+duckdb_state duckdb_appender_create(duckdb_connection connection, const char *catalog, const char *schema,
+									const char *table, duckdb_appender *out_appender) {
+	return duckdb_appender_create_base<Appender>(connection, catalog, schema, table, out_appender);
+}
+
+duckdb_state duckdb_appender_create(duckdb_connection connection, const char *schema, const char *table,
+									duckdb_appender *out_appender) {
+	return duckdb_appender_create_base<Appender>(connection, INVALID_CATALOG, schema, table, out_appender);
+}
+
+// end Anybase changes

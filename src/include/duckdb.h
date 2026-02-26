@@ -5160,7 +5160,6 @@ Folds an expression creating a folded value.
 */
 DUCKDB_C_API duckdb_error_data duckdb_expression_fold(duckdb_client_context context, duckdb_expression expr,
                                                       duckdb_value *out_value);
-
 // start Anybase changes
 //===--------------------------------------------------------------------===//
 // Anybase API functions

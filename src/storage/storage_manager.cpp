@@ -234,6 +234,8 @@ void SingleFileStorageManager::LoadDatabase(QueryContext context) {
 		// create a new file
 
 		auto wal_path = GetWALPath();
+		// try to remove the WAL file if it exists
+		fs.TryRemoveFile(wal_path);
 
 		// Set the block allocation size for the new database file.
 		if (storage_options.block_alloc_size.IsValid()) {

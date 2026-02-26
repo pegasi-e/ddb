@@ -186,7 +186,7 @@ struct ArrowOutputVersionSetting {
 	using RETURN_TYPE = ArrowFormatVersion;
 	static constexpr const char *Name = "arrow_output_version";
 	static constexpr const char *Description =
-		"Whether strings should be produced by DuckDB in Utf8View format instead of Utf8";
+	    "Whether strings should be produced by DuckDB in Utf8View format instead of Utf8";
 	static constexpr const char *InputType = "VARCHAR";
 	static constexpr const char *DefaultValue = "1.0";
 	static constexpr SetScope DefaultScope = SetScope::GLOBAL;
@@ -332,6 +332,15 @@ struct DebugSkipCheckpointOnCommitSetting {
 	using RETURN_TYPE = bool;
 	static constexpr const char *Name = "debug_skip_checkpoint_on_commit";
 	static constexpr const char *Description = "DEBUG SETTING: skip checkpointing on commit";
+	static constexpr const char *InputType = "BOOLEAN";
+	static constexpr const char *DefaultValue = "false";
+	static constexpr SetScope DefaultScope = SetScope::GLOBAL;
+};
+
+struct DebugVerifyBlocksSetting {
+	using RETURN_TYPE = bool;
+	static constexpr const char *Name = "debug_verify_blocks";
+	static constexpr const char *Description = "DEBUG SETTING: verify block metadata during checkpointing";
 	static constexpr const char *InputType = "BOOLEAN";
 	static constexpr const char *DefaultValue = "false";
 	static constexpr SetScope DefaultScope = SetScope::GLOBAL;

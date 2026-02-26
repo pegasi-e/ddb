@@ -109,13 +109,14 @@ void RowIdColumnData::SelectCommitted(idx_t vector_index, ColumnScanState &state
 idx_t RowIdColumnData::Fetch(ColumnScanState &state, row_t row_id, Vector &result) {
 	throw InternalException("Fetch is not supported for row id columns");
 }
-
+//Start Anybase Changes
 void RowIdColumnData::FetchRow(TransactionData transaction, ColumnFetchState &state, row_t row_id, Vector &result,
                                idx_t result_idx, bool fetch_current_update) {
 	result.SetVectorType(VectorType::FLAT_VECTOR);
 	auto data = FlatVector::GetData<row_t>(result);
 	data[result_idx] = row_id;
 }
+//End Anybase Changes
 void RowIdColumnData::Skip(ColumnScanState &state, idx_t count) {
 	state.row_index += count;
 	state.internal_index = state.row_index;

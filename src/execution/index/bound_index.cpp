@@ -48,7 +48,7 @@ ErrorData BoundIndex::Append(DataChunk &chunk, Vector &row_ids, IndexAppendInfo 
 	InitializeLock(l);
 	return Append(l, chunk, row_ids, info);
 }
-
+// Start Anybase Change
 void BoundIndex::VerifyAppend(DataChunk &chunk, IndexAppendInfo &info, optional_ptr<ConflictManager> manager, bool allow_non_standard_vector_size) {
 	throw NotImplementedException("this implementation of VerifyAppend does not exist.");
 }
@@ -56,7 +56,7 @@ void BoundIndex::VerifyAppend(DataChunk &chunk, IndexAppendInfo &info, optional_
 void BoundIndex::VerifyConstraint(DataChunk &chunk, IndexAppendInfo &info, ConflictManager &manager, bool allow_non_standard_vector_size) {
 	throw NotImplementedException("this implementation of VerifyConstraint does not exist.");
 }
-
+// End Anybase Change
 void BoundIndex::CommitDrop() {
 	IndexLock index_lock;
 	InitializeLock(index_lock);
@@ -154,28 +154,39 @@ string BoundIndex::AppendRowError(DataChunk &input, idx_t index) {
 	return error;
 }
 
-void BoundIndex::ApplyBufferedAppends(const vector<LogicalType> &table_types, ColumnDataCollection &buffered_appends,
+void BoundIndex::ApplyBufferedReplays(const vector<LogicalType> &table_types,
+                                      vector<BufferedIndexData> &buffered_replays,
                                       const vector<StorageIndex> &mapped_column_ids) {
-	IndexAppendInfo index_append_info(IndexAppendMode::INSERT_DUPLICATES, nullptr);
+	for (auto &replay : buffered_replays) {
+		ColumnDataScanState state;
+		auto &buffered_data = *replay.data;
+		buffered_data.InitializeScan(state);
 
-	ColumnDataScanState state;
-	buffered_appends.InitializeScan(state);
+		DataChunk scan_chunk;
+		buffered_data.InitializeScanChunk(scan_chunk);
+		DataChunk table_chunk;
+		table_chunk.InitializeEmpty(table_types);
 
-	DataChunk scan_chunk;
-	buffered_appends.InitializeScanChunk(scan_chunk);
-	DataChunk table_chunk;
-	table_chunk.InitializeEmpty(table_types);
+		while (buffered_data.Scan(state, scan_chunk)) {
+			for (idx_t i = 0; i < scan_chunk.ColumnCount() - 1; i++) {
+				auto col_id = mapped_column_ids[i].GetPrimaryIndex();
+				table_chunk.data[col_id].Reference(scan_chunk.data[i]);
+			}
+			table_chunk.SetCardinality(scan_chunk.size());
 
-	while (buffered_appends.Scan(state, scan_chunk)) {
-		for (idx_t i = 0; i < scan_chunk.ColumnCount() - 1; i++) {
-			auto col_id = mapped_column_ids[i].GetPrimaryIndex();
-			table_chunk.data[col_id].Reference(scan_chunk.data[i]);
-		}
-		table_chunk.SetCardinality(scan_chunk.size());
-
-		auto error = Append(table_chunk, scan_chunk.data.back(), index_append_info);
-		if (error.HasError()) {
-			throw InternalException("error while applying buffered appends: " + error.Message());
+			switch (replay.type) {
+			case BufferedIndexReplay::INSERT_ENTRY: {
+				IndexAppendInfo index_append_info(IndexAppendMode::INSERT_DUPLICATES, nullptr);
+				auto error = Append(table_chunk, scan_chunk.data.back(), index_append_info);
+				if (error.HasError()) {
+					throw InternalException("error while applying buffered appends: " + error.Message());
+				}
+				continue;
+			}
+			case BufferedIndexReplay::DEL_ENTRY: {
+				Delete(table_chunk, scan_chunk.data.back());
+			}
+			}
 		}
 	}
 }

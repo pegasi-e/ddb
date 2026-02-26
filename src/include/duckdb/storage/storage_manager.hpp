@@ -206,5 +206,6 @@ public:
 // start Anybase changes
 	uint64_t GetSnapshotId() override;
 // end Anybase changes
+
 };
 } // namespace duckdb

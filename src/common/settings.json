@@ -120,17 +120,6 @@
         "default_value": "1.0"
     },
     {
-        "name": "arrow_output_version",
-        "description": "Whether strings should be produced by DuckDB in Utf8View format instead of Utf8",
-        "type": "VARCHAR",
-        "scope": "global",
-        "internal_setting": "arrow_output_version",
-        "custom_implementation": [
-            "set",
-            "get"
-        ]
-    },
-    {
         "name": "asof_loop_join_threshold",
         "description": "The maximum number of rows we need on the left side of an ASOF join to use a nested loop join",
         "type": "UBIGINT",
@@ -232,6 +221,13 @@
     {
         "name": "debug_skip_checkpoint_on_commit",
         "description": "DEBUG SETTING: skip checkpointing on commit",
+        "type": "BOOLEAN",
+        "default_scope": "global",
+        "default_value": "false"
+    },
+    {
+        "name": "debug_verify_blocks",
+        "description": "DEBUG SETTING: verify block metadata during checkpointing",
         "type": "BOOLEAN",
         "default_scope": "global",
         "default_value": "false"

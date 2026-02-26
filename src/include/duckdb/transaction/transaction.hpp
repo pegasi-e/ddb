@@ -85,7 +85,7 @@ public:
 		return false;
 	}
 
-	void AddInvolvedColumn(const string &table_name, std::vector<idx_t> &column_indices) {
+	void AddInvolvedColumn(const string &table_name, std::unordered_set<idx_t> &column_indices) {
 		std::lock_guard<std::mutex> lock(mu_);
 		auto& dest = involved_columns[table_name];
 		dest.insert(column_indices.begin(), column_indices.end());

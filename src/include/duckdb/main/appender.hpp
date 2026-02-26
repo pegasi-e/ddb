@@ -141,7 +141,6 @@ public:
 	void ClearColumns() override;
 
 private:
-	//! All table default values.
 	unordered_map<column_t, Value> default_values;
 
 protected:
@@ -159,7 +158,7 @@ protected:
 	//! If not empty, then this holds all logical column IDs of columns provided by the appender.
 	//! Any other columns default to NULL, or their default values.
 	vector<LogicalIndex> column_ids;
-// end Anybase changes
+	// end Anybase changes
 };
 
 class QueryAppender : public BaseAppender {
@@ -212,7 +211,7 @@ class Merger : public Appender {
 	protected:
 		void FlushInternal(ColumnDataCollection &collection) override;
 	};
-	// end Anybase changes
+// end Anybase changes
 
 template <>
 DUCKDB_API void BaseAppender::Append(bool value);

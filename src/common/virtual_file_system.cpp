@@ -288,4 +288,5 @@ optional_ptr<FileSystem> VirtualFileSystem::FindFileSystemInternal(const string 
 	// We could use default_fs, that's on the caller
 	return nullptr;
 }
+
 } // namespace duckdb

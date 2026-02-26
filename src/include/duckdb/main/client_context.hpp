@@ -125,24 +125,21 @@ public:
 
 	//! Destroy the client context
 	DUCKDB_API void Destroy();
-
-	// start Anybase changes
+// start Anybase changes
 	//! Get the table info of a specific table, or nullptr if it cannot be found.
 	DUCKDB_API unique_ptr<TableDescription> TableInfo(const string &database_name, const string &schema_name,
-	                                                  const string &table_name,
-	                                                  const optional_ptr<const vector<string>> column_names = nullptr);
+													  const string &table_name,
+													  const optional_ptr<const vector<string>> column_names = nullptr);
 	//! Get the table info of a specific table, or nullptr if it cannot be found. Uses INVALID_CATALOG.
 	DUCKDB_API unique_ptr<TableDescription> TableInfo(const string &schema_name, const string &table_name,
 												const optional_ptr<const vector<string>> column_names = nullptr);
-
+// end Anybase changes
+	//! Execute a query with the given collection "attached" to the query using a CTE
+	DUCKDB_API void Append(ColumnDataCollection &collection, const string &query, const vector<string> &column_names,
+	                       const string &collection_name);
 	//! Appends a DataChunk and its default columns to the specified table.
 	DUCKDB_API void Append(TableDescription &description, ColumnDataCollection &collection,
 	                       optional_ptr<const vector<LogicalIndex>> column_ids = nullptr);
-	// end Anybase changes
-
-	//! Execute a query with the given collection "attached" to the query using a CTE
-	DUCKDB_API void Append(ColumnDataCollection &collection, const string &query, const vector<string> &column_names,
-						   const string &collection_name);
 
 	//! Try to bind a relation in the current client context; either throws an exception or fills the result_columns
 	//! list with the set of returned columns

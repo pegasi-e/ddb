@@ -21,6 +21,9 @@
         "name": "cte_map",
         "type": "CommonTableExpressionMap"
       }
+    ],
+    "finalize_deserialization": [
+        "ExtractCTENodes(result);"
     ]
   },
   {
@@ -183,6 +186,7 @@
         "type": "CTEMaterialize",
         "default": "CTEMaterialize::CTE_MATERIALIZE_DEFAULT"
       }
-    ]
+    ],
+    "custom_implementation": true
   }
 ]

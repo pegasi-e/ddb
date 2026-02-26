@@ -96,6 +96,7 @@ private:
 	reference_map_t<AttachedDatabase, shared_ptr<AttachedDatabase>> referenced_databases;
 	//! Map of name -> used database for databases that are in-use by this transaction
 	case_insensitive_map_t<reference<AttachedDatabase>> used_databases;
+
 // start Anybase changes
 public:
 	DUCKDB_API MetaTransaction(ClientContext &context, timestamp_t start_timestamp,

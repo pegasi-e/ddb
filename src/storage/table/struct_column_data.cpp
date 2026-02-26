@@ -231,7 +231,6 @@ void StructColumnData::UpdateColumn(TransactionData transaction, DataTable &data
 		if (update_column > sub_columns.size()) {
 			throw InternalException("Update column_path out of range");
 		}
-
 		sub_columns[update_column - 1]->UpdateColumn(transaction, data_table, column_path, update_vector, row_ids,
 		                                             update_count, depth + 1);
 	}
@@ -252,9 +251,10 @@ unique_ptr<BaseStatistics> StructColumnData::GetUpdateStatistics() {
 	}
 	return stats.ToUnique();
 }
+
 // start Anybase changes
 void StructColumnData::FetchRow(TransactionData transaction, ColumnFetchState &state, row_t row_id, Vector &result,
-                                idx_t result_idx, bool fetch_current_update) {
+									idx_t result_idx, bool fetch_current_update) {
 // end Anybase changes
 	// fetch validity mask
 	auto &child_entries = StructVector::GetEntries(result);

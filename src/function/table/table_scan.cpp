@@ -32,8 +32,6 @@
 #include "duckdb/main/settings.hpp"
 #include <list>
 
-#include <list>
-
 namespace duckdb {
 
 struct TableScanLocalState : public LocalTableFunctionState {

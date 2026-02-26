@@ -481,11 +481,11 @@ Appender::Appender(Connection &con, const string &database_name, const string &s
 }
 
 Appender::Appender(Connection &con, const string &schema_name, const string &table_name)
-		: Appender(con, INVALID_CATALOG, schema_name, table_name) {
+    : Appender(con, INVALID_CATALOG, schema_name, table_name) {
 }
 
 Appender::Appender(Connection &con, const string &table_name)
-		: Appender(con, INVALID_CATALOG, DEFAULT_SCHEMA, table_name) {
+    : Appender(con, INVALID_CATALOG, DEFAULT_SCHEMA, table_name) {
 }
 
 Appender::~Appender() {
@@ -622,15 +622,15 @@ void BaseAppender::Close() {
 
 // Start Anybase changes
 Merger::Merger(Connection &con, const string &database_name, const string &schema_name, const string &table_name)
-	: Appender(con, database_name, schema_name, table_name) {
+		: Appender(con, database_name, schema_name, table_name) {
 }
 
 Merger::Merger(Connection &con, const string &schema_name, const string &table_name)
-	: Merger(con, INVALID_CATALOG, schema_name, table_name) {
+		: Merger(con, INVALID_CATALOG, schema_name, table_name) {
 }
 
 Merger::Merger(Connection &con, const string &table_name)
-	: Merger(con, DEFAULT_SCHEMA, table_name) {
+		: Merger(con, DEFAULT_SCHEMA, table_name) {
 }
 
 void Merger::FlushInternal(ColumnDataCollection &collection) {
@@ -641,7 +641,7 @@ void Merger::FlushInternal(ColumnDataCollection &collection) {
 	context_ref->Merge(*description, collection, column_ids);
 }
 
-Merger::~Merger() {
+	Merger::~Merger() {
 	Destructor();
 }
 // End Anybase changes

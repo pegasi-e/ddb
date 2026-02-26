@@ -77,8 +77,9 @@ public:
 
 // start Anybase changes
 	void Fetch(TransactionData transaction, DataChunk &result, const vector<StorageIndex> &column_ids,
-	           const Vector &row_identifiers, idx_t fetch_count, ColumnFetchState &state, bool fetch_current_update = true);
+			   const Vector &row_identifiers, idx_t fetch_count, ColumnFetchState &state, bool fetch_current_update = true);
 // end Anybase changes
+
 	//! Returns true, if the row group can fetch the row id for the transaction.
 	bool CanFetch(TransactionData, const row_t row_id);
 
@@ -102,7 +103,6 @@ public:
 	void RemoveFromIndexes(TableIndexList &indexes, Vector &row_identifiers, idx_t count);
 
 	idx_t Delete(TransactionData transaction, DataTable &table, row_t *ids, idx_t count);
-
 	void Update(TransactionData transaction, DataTable &table, row_t *ids, const vector<PhysicalIndex> &column_ids,
 	            DataChunk &updates);
 	void UpdateColumn(TransactionData transaction, DataTable &table, Vector &row_ids,
