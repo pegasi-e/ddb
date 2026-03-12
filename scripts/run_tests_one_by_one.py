@@ -63,6 +63,7 @@ parser.add_argument(
     type=valid_timeout,
 )
 parser.add_argument('--valgrind', action='store_true', help='Run the tests with valgrind', default=False)
+parser.add_argument("--test-config", action='store', help='Path to the test configuration file', default=None)
 
 args, extra_args = parser.parse_known_args()
 
@@ -84,17 +85,6 @@ profile = args.profile
 assertions = args.no_assertions
 time_execution = args.time_execution
 timeout = args.timeout
-tests_per_invocation = args.tests_per_invocation
-
-summarize_failures = args.summarize_failures
-if summarize_failures is None:
-    # get from env
-    summarize_failures = False
-    if 'SUMMARIZE_FAILURES' in os.environ:
-        summarize_failures = os.environ['SUMMARIZE_FAILURES'] == '1'
-    elif 'CI' in os.environ:
-        # enable by default in CI if not set explicitly
-        summarize_failures = True
 
 summarize_failures = args.summarize_failures
 if summarize_failures is None:
@@ -208,6 +198,8 @@ def launch_test(test, list_of_tests=False):
             env['NO_DUPLICATING_HEADERS'] = '1'
         else:
             env['SUMMARIZE_FAILURES'] = '0'
+        if args.test_config:
+            test_cmd = test_cmd + ['--test-config', args.test_config]
         res = subprocess.run(test_cmd, stdout=unittest_stdout, stderr=unittest_stderr, timeout=timeout, env=env)
     except subprocess.TimeoutExpired as e:
         if list_of_tests:
