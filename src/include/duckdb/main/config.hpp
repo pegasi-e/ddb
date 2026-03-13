@@ -36,6 +36,9 @@
 #include "duckdb/main/user_settings.hpp"
 #include "duckdb/parser/parsed_data/create_info.hpp"
 #include "duckdb/common/types/type_manager.hpp"
+// start Anybase changes
+#include "duckdb/function/change_data_capature_function.hpp"
+// end Anybase changes
 
 namespace duckdb {
 
@@ -319,6 +322,11 @@ private:
 	unique_ptr<IndexTypeSet> index_types;
 	unique_ptr<ExtensionCallbackManager> callback_manager;
 	bool is_user_config = true;
+
+// start Anybase changes
+public:
+	ChangeDataCapture change_data_capture;
+// end Anybase changes
 };
 
 } // namespace duckdb

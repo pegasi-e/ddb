@@ -602,14 +602,16 @@ ErrorData ART::Append(IndexLock &l, DataChunk &chunk, Vector &row_ids, IndexAppe
 	return Insert(l, expr_chunk, row_ids, info);
 }
 
-void ART::VerifyAppend(DataChunk &chunk, IndexAppendInfo &info, optional_ptr<ConflictManager> manager) {
+// start Anybase changes
+void ART::VerifyAppend(DataChunk &chunk, IndexAppendInfo &info, optional_ptr<ConflictManager> manager, bool allow_non_standard_vector_size) {
 	if (manager) {
 		D_ASSERT(manager->GetVerifyExistenceType() == VerifyExistenceType::APPEND);
-		return VerifyConstraint(chunk, info, *manager);
+		return VerifyConstraint(chunk, info, *manager, allow_non_standard_vector_size);
 	}
 	ConflictManager local_manager(VerifyExistenceType::APPEND, chunk.size());
-	VerifyConstraint(chunk, info, local_manager);
+	VerifyConstraint(chunk, info, local_manager, allow_non_standard_vector_size);
 }
+// end Anybase changes
 
 //===--------------------------------------------------------------------===//
 // Drop and Delete
@@ -640,8 +642,8 @@ idx_t ART::TryDelete(IndexLock &state, DataChunk &entries, Vector &row_ids, opti
 	return DeleteKeys(keys, row_id_keys, row_count, deleted_sel, non_deleted_sel);
 }
 
-idx_t ART::DeleteKeys(unsafe_vector<ARTKey> &keys, unsafe_vector<ARTKey> &row_id_keys, idx_t row_count,
-                      optional_ptr<SelectionVector> deleted_sel, optional_ptr<SelectionVector> non_deleted_sel) {
+	idx_t ART::DeleteKeys(unsafe_vector<ARTKey> &keys, unsafe_vector<ARTKey> &row_id_keys, idx_t row_count,
+						  optional_ptr<SelectionVector> deleted_sel, optional_ptr<SelectionVector> non_deleted_sel) {
 	idx_t delete_count = 0;
 	for (idx_t i = 0; i < row_count; i++) {
 		bool deleted = true;
@@ -924,12 +926,19 @@ void ART::VerifyLeaf(const Node &leaf, const ARTKey &key, DeleteIndexInfo delete
 	manager.AddSecondHit(i, *row_id_it);
 }
 
-void ART::VerifyConstraint(DataChunk &chunk, IndexAppendInfo &info, ConflictManager &manager) {
+// start Anybase changes
+void ART::VerifyConstraint(DataChunk &chunk, IndexAppendInfo &info, ConflictManager &manager, bool allow_non_standard_vector_size) {
+// end Anybase changes
 	// Lock the index during constraint checking.
 	lock_guard<mutex> l(lock);
 
+// start Anybase changes
+	idx_t capacity = allow_non_standard_vector_size && chunk.size() > STANDARD_VECTOR_SIZE ? chunk.size() : STANDARD_VECTOR_SIZE;
+// end Anybase changes
 	DataChunk expr_chunk;
-	expr_chunk.Initialize(Allocator::DefaultAllocator(), logical_types);
+// start Anybase changes
+	expr_chunk.Initialize(Allocator::DefaultAllocator(), logical_types, capacity);
+// end Anybase changes
 	ExecuteExpressions(chunk, expr_chunk);
 
 	ArenaAllocator arena_allocator(BufferAllocator::Get(db));

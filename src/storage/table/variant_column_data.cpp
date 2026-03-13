@@ -450,15 +450,19 @@ void VariantColumnData::UpdateColumn(TransactionData transaction, DataTable &dat
 unique_ptr<BaseStatistics> VariantColumnData::GetUpdateStatistics() {
 	return nullptr;
 }
-
+// start Anybase changes
 void VariantColumnData::FetchRow(TransactionData transaction, ColumnFetchState &state,
-                                 const StorageIndex &storage_index, row_t row_id, Vector &result, idx_t result_idx) {
+                                 const StorageIndex &storage_index, row_t row_id, Vector &result, idx_t result_idx,
+                                 bool fetch_current_update) {
+// end Anybase changes
 	if (storage_index.IsPushdownExtract() && IsShredded()) {
 		StorageIndex struct_extract;
 		if (PushdownShreddedFieldExtract(storage_index.GetChildIndex(0), struct_extract)) {
 			//! Shredded field exists and is fully shredded,
 			//! add the storage index to create a pushed-down 'struct_extract' to get the leaf
-			sub_columns[1]->FetchRow(transaction, state, struct_extract, row_id, result, result_idx);
+// start Anybase changes
+			sub_columns[1]->FetchRow(transaction, state, struct_extract, row_id, result, result_idx, fetch_current_update);
+// end Anybase changes
 			return;
 		}
 	}

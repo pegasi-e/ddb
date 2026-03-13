@@ -80,9 +80,11 @@ Transaction &DuckTransactionManager::StartTransaction(ClientContext &context) {
 		lowest_active_start = start_time;
 		lowest_active_id = transaction_id;
 	}
-
+// start Anybase changes
 	// create the actual transaction
-	auto transaction = make_uniq<DuckTransaction>(*this, context, start_time, transaction_id, last_committed_version);
+	auto transaction = make_uniq<DuckTransaction>(*this, context, start_time, transaction_id, last_committed_version,
+		meta_transaction.meta_start_timestamp, meta_transaction.meta_global_transaction_id);
+// end Anybase changes
 	auto &transaction_ref = *transaction;
 
 	// store it in the set of active transactions
@@ -596,4 +598,16 @@ void DuckTransactionManager::PushAttach(Transaction &transaction_p, AttachedData
 	transaction.PushAttach(attached_db);
 }
 
+// start Anybase changes
+uint64_t DuckTransactionManager::GetSnapshotId(ClientContext &context) {
+	auto &storage_manager = db.GetStorageManager();
+	return storage_manager.GetSnapshotId();
+}
+
+uint64_t DuckTransactionManager::CheckpointAndGetSnapshotId(ClientContext &context) {
+	Checkpoint(context, true);
+	auto &storage_manager = db.GetStorageManager();
+	return storage_manager.GetSnapshotId();
+}
+// end Anybase changes
 } // namespace duckdb

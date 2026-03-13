@@ -1820,6 +1820,10 @@ unique_ptr<FunctionData> DatePartBind(ClientContext &context, ScalarFunction &bo
 			bound_function.SetFunctionCallback(DatePart::UnaryFunction<dtime_ns_t, double, DatePart::EpochOperator>);
 			bound_function.SetStatisticsCallback(DatePart::EpochOperator::template PropagateStatistics<dtime_ns_t>);
 			break;
+		case LogicalType::TIME_NS:
+			bound_function.function = DatePart::UnaryFunction<dtime_ns_t, double, DatePart::EpochOperator>;
+			bound_function.statistics = DatePart::EpochOperator::template PropagateStatistics<dtime_ns_t>;
+			break;
 		case LogicalType::TIME_TZ:
 			bound_function.SetFunctionCallback(DatePart::UnaryFunction<dtime_tz_t, double, DatePart::EpochOperator>);
 			bound_function.SetStatisticsCallback(DatePart::EpochOperator::template PropagateStatistics<dtime_tz_t>);

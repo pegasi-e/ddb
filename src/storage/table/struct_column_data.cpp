@@ -296,9 +296,10 @@ unique_ptr<BaseStatistics> StructColumnData::GetUpdateStatistics() {
 	}
 	return stats.ToUnique();
 }
-
+// start Anybase changes
 void StructColumnData::FetchRow(TransactionData transaction, ColumnFetchState &state, const StorageIndex &storage_index,
-                                row_t row_id, Vector &result, idx_t result_idx) {
+                                row_t row_id, Vector &result, idx_t result_idx, bool fetch_current_update) {
+// end Anybase changes
 	// fetch the validity state
 	validity->FetchRow(transaction, state, storage_index, row_id, result, result_idx);
 	if (storage_index.IsPushdownExtract()) {
@@ -311,13 +312,17 @@ void StructColumnData::FetchRow(TransactionData transaction, ColumnFetchState &s
 		if (!child_storage_index.HasChildren() && child_storage_index.HasType() &&
 		    child_storage_index.GetType() != child_type) {
 			Vector intermediate(child_type, 1);
-			sub_column.FetchRow(transaction, state, child_storage_index, row_id, intermediate, 0);
+// start Anybase changes
+			sub_column.FetchRow(transaction, state, child_storage_index, row_id, intermediate, 0, fetch_current_update);
+// end Anybase changes
 			auto context = transaction.transaction->context.lock();
 			auto fetched_row = intermediate.GetValue(0).CastAs(*context, result.GetType());
 			result.SetValue(result_idx, fetched_row);
 			return;
 		} else {
-			sub_column.FetchRow(transaction, state, child_storage_index, row_id, result, result_idx);
+// start Anybase changes
+			sub_column.FetchRow(transaction, state, child_storage_index, row_id, result, result_idx, fetch_current_update);
+// end Anybase changes
 			return;
 		}
 	}

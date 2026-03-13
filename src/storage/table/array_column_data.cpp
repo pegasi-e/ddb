@@ -235,9 +235,10 @@ void ArrayColumnData::UpdateColumn(TransactionData transaction, DataTable &data_
 unique_ptr<BaseStatistics> ArrayColumnData::GetUpdateStatistics() {
 	return nullptr;
 }
-
+// start Anybase change
 void ArrayColumnData::FetchRow(TransactionData transaction, ColumnFetchState &state, const StorageIndex &storage_index,
-                               row_t row_id, Vector &result, idx_t result_idx) {
+                               row_t row_id, Vector &result, idx_t result_idx, bool fetch_current_update) {
+// end Anybase change
 	// Create state for validity & child column
 	if (state.child_states.empty()) {
 		state.child_states.push_back(make_uniq<ColumnFetchState>());
