@@ -31,8 +31,11 @@ enum class DeletedScanType {
 enum class UpdateScanType {
 	//! allow updates
 	STANDARD,
+// start Anybase changes
 	// disallow updates - throw on updates
-	DISALLOW_UPDATES
+	DISALLOW_UPDATES,
+	ALLOW_UPDATES
+// end Anybase changes
 };
 
 struct ScanOptions {
@@ -54,7 +57,7 @@ enum class TableScanType {
 	//! Scan the latest committed rows
 	TABLE_SCAN_COMMITTED_ROWS = 3,
 	//! Scan the latest committed rows within a transaction
-	TABLE_SCAN_TRANSACTIONALLY_COMMITTED_ROWS = 127
+	TABLE_SCAN_TRANSACTION_ROWS = 127
 // end Anybase change
 };
 

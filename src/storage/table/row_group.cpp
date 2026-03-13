@@ -757,7 +757,8 @@ void RowGroup::Scan(CollectionScanState &state, DataChunk &result, TableScanType
 		options.update_type = UpdateScanType::DISALLOW_UPDATES;
 		break;
 // start Anybase changes
-	case TableScanType::TABLE_SCAN_TRANSACTIONALLY_COMMITTED_ROWS:
+	case TableScanType::TABLE_SCAN_TRANSACTION_ROWS:
+		options.update_type = UpdateScanType::ALLOW_UPDATES;
 		options.delete_type = DeletedScanType::OMIT_COMMITTED_DELETES;
 		break;
 // end Anybase changes

@@ -75,14 +75,19 @@ jobs:
     runs-on: ${{ matrix.config.runner }}
 
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
       with:
         fetch-depth: 0
         ref: ${{ inputs.git_ref }}
 
+    - name: Install tools
+      run: make toolsci        
+
     - name: Install pytest
       run: |
         python3 -m pip install pytest
+
+    - uses: ./.github/actions/ccache-action
 
     - name: Build
       shell: bash
@@ -90,25 +95,49 @@ jobs:
         export PWD=`pwd`
         docker run                                                             \
         -v$PWD:$PWD                                                            \
-        -e CMAKE_BUILD_PARALLEL_LEVEL=2                                        \
+        -e GEN=ninja                                                           \
+        -e CC='ccache gcc'                                                     \
+        -e CXX='ccache g++'                                                    \
+        -e CCACHE_DIR=$PWD/.ccache                                             \
         -e OVERRIDE_GIT_DESCRIBE=$OVERRIDE_GIT_DESCRIBE                        \
         -e EXTENSION_CONFIGS="$PWD/.github/config/bundled_extensions.cmake"    \
         -e ENABLE_EXTENSION_AUTOLOADING=1                                      \
         -e ENABLE_EXTENSION_AUTOINSTALL=1                                      \
         -e BUILD_BENCHMARK=1                                                   \
         -e FORCE_WARN_UNUSED=1                                                 \
-        quay.io/pypa/manylinux_2_28_${{ matrix.config.image }}                  \
+        quay.io/pypa/manylinux_2_28_${{ matrix.config.image }}                 \
         bash -c "
           set -e
-          yum install -y perl-IPC-Cmd gcc-toolset-12 gcc-toolset-12-gcc-c++
-        
-          source /opt/rh/gcc-toolset-12/enable
-          export CC=gcc
-          export CXX=g++
-
+          cat /etc/os-release
+          dnf install -y \
+            ccache       \
+            ninja-build  \
+            perl-IPC-Cmd
           git config --global --add safe.directory $PWD
           make -C $PWD
-        "
+
+        # export PWD=`pwd`
+        # docker run                                                             \
+        # -v$PWD:$PWD                                                            \
+        # -e CMAKE_BUILD_PARALLEL_LEVEL=2                                        \
+        # -e OVERRIDE_GIT_DESCRIBE=$OVERRIDE_GIT_DESCRIBE                        \
+        # -e EXTENSION_CONFIGS="$PWD/.github/config/bundled_extensions.cmake"    \
+        # -e ENABLE_EXTENSION_AUTOLOADING=1                                      \
+        # -e ENABLE_EXTENSION_AUTOINSTALL=1                                      \
+        # -e BUILD_BENCHMARK=1                                                   \
+        # -e FORCE_WARN_UNUSED=1                                                 \
+        # quay.io/pypa/manylinux_2_28_${{ matrix.config.image }}                  \
+        # bash -c "
+        #   set -e
+        #   yum install -y perl-IPC-Cmd gcc-toolset-12 gcc-toolset-12-gcc-c++
+        
+        #   source /opt/rh/gcc-toolset-12/enable
+        #   export CC=gcc
+        #   export CXX=g++
+
+        #   git config --global --add safe.directory $PWD
+        #   make -C $PWD
+        # "
 
     - name: Print platform
       shell: bash

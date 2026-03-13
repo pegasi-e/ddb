@@ -2183,7 +2183,7 @@ void DataTable::ScanTableSegment(DuckTransaction &transaction, idx_t row_start, 
 	// idx_t current_row = row_start;//row_start_aligned;
 	idx_t current_row = row_start_aligned;
 	while (current_row < end) {
-		state.table_state.Scan(chunk, TableScanType::TABLE_SCAN_TRANSACTIONALLY_COMMITTED_ROWS);
+		state.table_state.Scan(chunk, TableScanType::TABLE_SCAN_TRANSACTION_ROWS);
 		if (chunk.size() == 0) {
 			break;
 		}

@@ -420,124 +420,124 @@ TEST_CASE("Test DataChunk C API reference", "[cAnybaseApi]") {
     printf("Test DataChunk C API reference passed\n");
 }
 
-// TEST_CASE("Test MergeDataChunk in C API", "[cAnybaseApi]") {
-// 	CAPITester tester;
-// 	REQUIRE(tester.OpenDatabase(nullptr));
-// 	REQUIRE(duckdb_vector_size() == STANDARD_VECTOR_SIZE);
-//
-// 	tester.Query("CREATE TABLE test(i INT PRIMARY KEY, j INT);");
-// 	tester.Query("INSERT INTO test VALUES (1, 2);");
-//
-// 	duckdb_logical_type types[2];
-// 	types[0] = duckdb_create_logical_type(DUCKDB_TYPE_INTEGER);
-// 	types[1] = duckdb_create_logical_type(DUCKDB_TYPE_INTEGER);
-//
-// 	auto data_chunk = duckdb_create_data_chunk(types, 2);
-// 	REQUIRE(data_chunk);
-//
-// 	auto i_data = (int32_t *) duckdb_vector_get_data(duckdb_data_chunk_get_vector(data_chunk, 0));
-// 	auto j_data = (int32_t *) duckdb_vector_get_data(duckdb_data_chunk_get_vector(data_chunk, 1));
-// 	i_data[0] = 1;
-// 	j_data[0] = 1;
-//
-// 	duckdb_data_chunk_set_size(data_chunk, 1);
-//
-// 	duckdb_appender appender;
-// 	auto status = duckdb_merger_create(tester.connection, nullptr, "test", &appender);
-// 	REQUIRE(status == DuckDBSuccess);
-//
-// 	REQUIRE(duckdb_append_data_chunk(appender, data_chunk) == DuckDBSuccess);
-// 	duckdb_appender_close(appender);
-//
-// 	auto result = tester.Query("SELECT i, j FROM test;");
-// 	auto i = result->Fetch<int>(0, 0);
-// 	REQUIRE(1 == i);
-// 	auto j = result->Fetch<int>(1, 0);
-// 	REQUIRE(1 == j);
-//
-// 	duckdb_appender_destroy(&appender);
-// 	duckdb_destroy_data_chunk(&data_chunk);
-// 	duckdb_destroy_logical_type(&types[0]);
-// 	duckdb_destroy_logical_type(&types[1]);
-// }
+TEST_CASE("Test MergeDataChunk in C API", "[cAnybaseApi]") {
+	CAPITester tester;
+	REQUIRE(tester.OpenDatabase(nullptr));
+	REQUIRE(duckdb_vector_size() == STANDARD_VECTOR_SIZE);
 
-// TEST_CASE("Test MergeDataChunk updates versions in C API", "[cAnybaseApi]") {
-// 	CAPITester tester;
-// 	REQUIRE(tester.OpenDatabase(nullptr));
-// 	REQUIRE(duckdb_vector_size() == STANDARD_VECTOR_SIZE);
-//
-// 	tester.Query("CREATE TABLE test(i INT PRIMARY KEY, j INT, f INT);");
-// 	tester.Query("INSERT INTO test VALUES (1, 2, 3);");
-//
-// 	auto tableVersion = duckdb_get_table_version(tester.connection, nullptr, "test", nullptr);
-// 	auto iColumnVersion = duckdb_get_column_version(tester.connection, nullptr, "test", "i", nullptr);
-// 	auto jColumnVersion = duckdb_get_column_version(tester.connection, nullptr, "test", "j", nullptr);
-//
-// 	duckdb_logical_type types[2];
-// 	types[0] = duckdb_create_logical_type(DUCKDB_TYPE_INTEGER);
-// 	types[1] = duckdb_create_logical_type(DUCKDB_TYPE_INTEGER);
-//
-// 	auto data_chunk = duckdb_create_data_chunk(types, 2);
-// 	REQUIRE(data_chunk);
-//
-// 	auto i_data = (int32_t *) duckdb_vector_get_data(duckdb_data_chunk_get_vector(data_chunk, 0));
-// 	auto j_data = (int32_t *) duckdb_vector_get_data(duckdb_data_chunk_get_vector(data_chunk, 1));
-// 	i_data[0] = 1;
-// 	j_data[0] = 1;
-//
-// 	duckdb_data_chunk_set_size(data_chunk, 1);
-//
-// 	REQUIRE(duckdb_begin_transaction(tester.connection, 1000, 2, nullptr) == DuckDBSuccess);
-// 	duckdb_appender appender;
-// 	auto status = duckdb_merger_create(tester.connection, nullptr, "test", &appender);
-// 	REQUIRE(status == DuckDBSuccess);
-//
-// 	duckdb_appender_add_column(appender, "i");
-// 	duckdb_appender_add_column(appender, "j");
-// 	REQUIRE(duckdb_append_data_chunk(appender, data_chunk) == DuckDBSuccess);
-// 	duckdb_appender_close(appender);
-// 	tester.Query("COMMIT;");
-//
-// 	duckdb_appender_destroy(&appender);
-//
-// 	i_data = (int32_t *) duckdb_vector_get_data(duckdb_data_chunk_get_vector(data_chunk, 0));
-// 	j_data = (int32_t *) duckdb_vector_get_data(duckdb_data_chunk_get_vector(data_chunk, 1));
-// 	i_data[0] = 1;
-// 	j_data[0] = 22;
-//
-// 	duckdb_data_chunk_set_size(data_chunk, 1);
-//
-// 	// tester.Query("BEGIN TRANSACTION;");
-// 	REQUIRE(duckdb_begin_transaction(tester.connection, 2000, 2, nullptr) == DuckDBSuccess);
-// 	status = duckdb_merger_create(tester.connection, nullptr, "test", &appender);
-// 	REQUIRE(status == DuckDBSuccess);
-//
-// 	duckdb_appender_add_column(appender, "i");
-// 	duckdb_appender_add_column(appender, "j");
-//
-// 	REQUIRE(duckdb_append_data_chunk(appender, data_chunk) == DuckDBSuccess);
-// 	duckdb_appender_close(appender);
-// 	tester.Query("COMMIT;");
-//
-// 	auto newTableVersion = duckdb_get_table_version(tester.connection, nullptr, "test", nullptr);
-// 	auto newIColumnVersion = duckdb_get_column_version(tester.connection, nullptr, "test", "i", nullptr);
-// 	auto newJColumnVersion = duckdb_get_column_version(tester.connection, nullptr, "test", "j", nullptr);
-//
-// 	auto result = tester.Query("SELECT i, j FROM test;");
-// 	auto i = result->Fetch<int>(0, 0);
-// 	REQUIRE(1 == i);
-// 	auto j = result->Fetch<int>(1, 0);
-// 	REQUIRE(22 == j);
-//
-// 	REQUIRE(tableVersion + 2 == newTableVersion);
-// 	REQUIRE(iColumnVersion == newIColumnVersion);
-// 	REQUIRE(jColumnVersion + 2 == newJColumnVersion);
-//
-// 	duckdb_appender_destroy(&appender);
-// 	duckdb_destroy_data_chunk(&data_chunk);
-// 	duckdb_destroy_logical_type(&types[0]);
-// 	duckdb_destroy_logical_type(&types[1]);
-// }
+	tester.Query("CREATE TABLE test(i INT PRIMARY KEY, j INT);");
+	tester.Query("INSERT INTO test VALUES (1, 2);");
+
+	duckdb_logical_type types[2];
+	types[0] = duckdb_create_logical_type(DUCKDB_TYPE_INTEGER);
+	types[1] = duckdb_create_logical_type(DUCKDB_TYPE_INTEGER);
+
+	auto data_chunk = duckdb_create_data_chunk(types, 2);
+	REQUIRE(data_chunk);
+
+	auto i_data = (int32_t *) duckdb_vector_get_data(duckdb_data_chunk_get_vector(data_chunk, 0));
+	auto j_data = (int32_t *) duckdb_vector_get_data(duckdb_data_chunk_get_vector(data_chunk, 1));
+	i_data[0] = 1;
+	j_data[0] = 1;
+
+	duckdb_data_chunk_set_size(data_chunk, 1);
+
+	duckdb_appender appender;
+	auto status = duckdb_merger_create(tester.connection, nullptr, "test", &appender);
+	REQUIRE(status == DuckDBSuccess);
+
+	REQUIRE(duckdb_append_data_chunk(appender, data_chunk) == DuckDBSuccess);
+	duckdb_appender_close(appender);
+
+	auto result = tester.Query("SELECT i, j FROM test;");
+	auto i = result->Fetch<int>(0, 0);
+	REQUIRE(1 == i);
+	auto j = result->Fetch<int>(1, 0);
+	REQUIRE(1 == j);
+
+	duckdb_appender_destroy(&appender);
+	duckdb_destroy_data_chunk(&data_chunk);
+	duckdb_destroy_logical_type(&types[0]);
+	duckdb_destroy_logical_type(&types[1]);
+}
+
+TEST_CASE("Test MergeDataChunk updates versions in C API", "[cAnybaseApi]") {
+	CAPITester tester;
+	REQUIRE(tester.OpenDatabase(nullptr));
+	REQUIRE(duckdb_vector_size() == STANDARD_VECTOR_SIZE);
+
+	tester.Query("CREATE TABLE test(i INT PRIMARY KEY, j INT, f INT);");
+	tester.Query("INSERT INTO test VALUES (1, 2, 3);");
+
+	auto tableVersion = duckdb_get_table_version(tester.connection, nullptr, "test", nullptr);
+	auto iColumnVersion = duckdb_get_column_version(tester.connection, nullptr, "test", "i", nullptr);
+	auto jColumnVersion = duckdb_get_column_version(tester.connection, nullptr, "test", "j", nullptr);
+
+	duckdb_logical_type types[2];
+	types[0] = duckdb_create_logical_type(DUCKDB_TYPE_INTEGER);
+	types[1] = duckdb_create_logical_type(DUCKDB_TYPE_INTEGER);
+
+	auto data_chunk = duckdb_create_data_chunk(types, 2);
+	REQUIRE(data_chunk);
+
+	auto i_data = (int32_t *) duckdb_vector_get_data(duckdb_data_chunk_get_vector(data_chunk, 0));
+	auto j_data = (int32_t *) duckdb_vector_get_data(duckdb_data_chunk_get_vector(data_chunk, 1));
+	i_data[0] = 1;
+	j_data[0] = 1;
+
+	duckdb_data_chunk_set_size(data_chunk, 1);
+
+	REQUIRE(duckdb_begin_transaction(tester.connection, 1000, 2, nullptr) == DuckDBSuccess);
+	duckdb_appender appender;
+	auto status = duckdb_merger_create(tester.connection, nullptr, "test", &appender);
+	REQUIRE(status == DuckDBSuccess);
+
+	duckdb_appender_add_column(appender, "i");
+	duckdb_appender_add_column(appender, "j");
+	REQUIRE(duckdb_append_data_chunk(appender, data_chunk) == DuckDBSuccess);
+	duckdb_appender_close(appender);
+	tester.Query("COMMIT;");
+
+	duckdb_appender_destroy(&appender);
+
+	i_data = (int32_t *) duckdb_vector_get_data(duckdb_data_chunk_get_vector(data_chunk, 0));
+	j_data = (int32_t *) duckdb_vector_get_data(duckdb_data_chunk_get_vector(data_chunk, 1));
+	i_data[0] = 1;
+	j_data[0] = 22;
+
+	duckdb_data_chunk_set_size(data_chunk, 1);
+
+	// tester.Query("BEGIN TRANSACTION;");
+	REQUIRE(duckdb_begin_transaction(tester.connection, 2000, 2, nullptr) == DuckDBSuccess);
+	status = duckdb_merger_create(tester.connection, nullptr, "test", &appender);
+	REQUIRE(status == DuckDBSuccess);
+
+	duckdb_appender_add_column(appender, "i");
+	duckdb_appender_add_column(appender, "j");
+
+	REQUIRE(duckdb_append_data_chunk(appender, data_chunk) == DuckDBSuccess);
+	duckdb_appender_close(appender);
+	tester.Query("COMMIT;");
+
+	auto newTableVersion = duckdb_get_table_version(tester.connection, nullptr, "test", nullptr);
+	auto newIColumnVersion = duckdb_get_column_version(tester.connection, nullptr, "test", "i", nullptr);
+	auto newJColumnVersion = duckdb_get_column_version(tester.connection, nullptr, "test", "j", nullptr);
+
+	auto result = tester.Query("SELECT i, j FROM test;");
+	auto i = result->Fetch<int>(0, 0);
+	REQUIRE(1 == i);
+	auto j = result->Fetch<int>(1, 0);
+	REQUIRE(22 == j);
+
+	REQUIRE(tableVersion + 2 == newTableVersion);
+	REQUIRE(iColumnVersion == newIColumnVersion);
+	REQUIRE(jColumnVersion + 2 == newJColumnVersion);
+
+	duckdb_appender_destroy(&appender);
+	duckdb_destroy_data_chunk(&data_chunk);
+	duckdb_destroy_logical_type(&types[0]);
+	duckdb_destroy_logical_type(&types[1]);
+}
 
 // void some_func2(cdc_event_type type,
 // 				const char *transaction_id,
@@ -576,7 +576,7 @@ TEST_CASE("Test DataChunk C API reference", "[cAnybaseApi]") {
 // 		previous_values = nullptr;
 // 	}
 // }
-
+//
 // TEST_CASE("Test WAL Generation2", "[capi]") {
 // 	duckdb_database db;
 // 	duckdb_connection connection1;
@@ -594,13 +594,14 @@ TEST_CASE("Test DataChunk C API reference", "[cAnybaseApi]") {
 // 	// REQUIRE(duckdb_query(connection1, "INSERT INTO FOO VALUES (1, 22, 11, 124), (2, 8, 31, 125), (3, 3, 3, 3), (2, 7, 4, 1)", nullptr) != DuckDBError);
 //
 // 	REQUIRE(duckdb_begin_transaction(connection1, 12345, 1, nullptr) != DuckDBError);
-// 	// REQUIRE(duckdb_query(connection1, "UPDATE person SET \"name\" = 'The Dude', age = 44 where id = 1", nullptr) != DuckDBError);
+// 	REQUIRE(duckdb_query(connection1, "UPDATE person SET \"name\" = 'The Dude', age = 44 where id = 1", nullptr) != DuckDBError);
+// 	// REQUIRE(duckdb_query(connection1, "DELETE FROM person", nullptr) != DuckDBError);
+// 	REQUIRE(duckdb_query(connection1, "COMMIT", nullptr) != DuckDBError);
+// 	REQUIRE(duckdb_begin_transaction(connection1, 12345, 2, nullptr) != DuckDBError);
 // 	REQUIRE(duckdb_query(connection1, "DELETE FROM person", nullptr) != DuckDBError);
+// 	// REQUIRE(duckdb_query(connection1, "INSERT INTO person VALUES (2, 'Jen', '132 fake street', 67, 'HM', true)", nullptr) != DuckDBError);
 // 	REQUIRE(duckdb_query(connection1, "COMMIT", nullptr) != DuckDBError);
-// 	REQUIRE(duckdb_begin_transaction(connection1, 12345, 1, nullptr) != DuckDBError);
-// 	REQUIRE(duckdb_query(connection1, "INSERT INTO person VALUES (2, 'Jen', '132 fake street', 67, 'HM', true)", nullptr) != DuckDBError);
-// 	REQUIRE(duckdb_query(connection1, "COMMIT", nullptr) != DuckDBError);
-// 	duckdb_query(connection1, "DELETE FROM person", nullptr);
+// 	// duckdb_query(connection1, "DELETE FROM person", nullptr);
 // 	duckdb_disconnect(&connection1);
 // 	duckdb_close(&db);
 // }

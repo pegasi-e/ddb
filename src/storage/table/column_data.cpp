@@ -271,7 +271,13 @@ void ColumnData::FetchUpdates(TransactionData transaction, idx_t vector_index, V
 		throw TransactionException("Cannot create index with outstanding updates");
 	}
 	result.Flatten(scan_count);
-	updates->FetchUpdates(transaction, vector_index, result);
+// start Anybase changes
+	if (update_type == UpdateScanType::ALLOW_UPDATES) {
+		updates->FetchCommitted(vector_index, result);
+	} else {
+		updates->FetchUpdates(transaction, vector_index, result);
+	}
+// end Anybase changes
 }
 // start Anybase changes
 void ColumnData::FetchUpdateRow(TransactionData transaction, row_t row_id, Vector &result, idx_t result_idx, bool fetch_current_update) {
@@ -299,7 +305,9 @@ void ColumnData::UpdateInternal(TransactionData transaction, DataTable &data_tab
 idx_t ColumnData::ScanVector(TransactionData transaction, idx_t vector_index, ColumnScanState &state, Vector &result,
                              idx_t target_scan, ScanVectorType scan_type, UpdateScanType update_type) {
 	auto scan_count = ScanVector(state, result, target_scan, scan_type);
-	if (scan_type != ScanVectorType::SCAN_ENTIRE_VECTOR) {
+// start Anybase change
+	if (scan_type != ScanVectorType::SCAN_ENTIRE_VECTOR || update_type == UpdateScanType::ALLOW_UPDATES) {
+// end Anybase change
 		// if we are scanning an entire vector we cannot have updates
 		FetchUpdates(transaction, vector_index, result, scan_count, update_type);
 	}
