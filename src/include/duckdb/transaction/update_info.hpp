@@ -73,26 +73,31 @@ struct UpdateInfo {
 
 		return false;
 	}
-
+// end Anybase changes
 	//! Loop over the update chain and execute the specified callback on all UpdateInfo's that are relevant for that
 	//! transaction in-order of newest to oldest
 	template <class T>
+// start Anybase changes
 	static void UpdatesForTransaction(UpdateInfo &current, transaction_t start_time, transaction_t transaction_id,
 	                                  bool fetch_current_update, T &&callback) {
+// end Anybase changes
+// start Anybase changes
 		if (current.AppliesToTransaction(start_time, transaction_id, fetch_current_update)) {
+// end Anybase changes
 			callback(current);
 		}
 		auto update_ptr = current.next;
 		while (update_ptr.IsSet()) {
 			auto pin = update_ptr.Pin();
 			auto &info = Get(pin);
+// start Anybase changes
 			if (info.AppliesToTransaction(start_time, transaction_id, fetch_current_update)) {
+// end Anybase changes
 				callback(info);
 			}
 			update_ptr = info.next;
 		}
 	}
-// end Anybase changes
 
 	Value GetValue(idx_t index);
 	string ToString();

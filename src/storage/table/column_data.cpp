@@ -798,7 +798,7 @@ void PersistentColumnData::Serialize(Serializer &serializer) const {
 			serializer.WriteProperty(103, "shredded", child_columns[2]);
 		}
 // start Anybase changes
-		serializer.WriteProperty(104, "commit_version", commit_version);
+		serializer.WriteProperty(999, "commit_version", commit_version);
 // end Anybase changes
 		return;
 	}
@@ -827,7 +827,7 @@ void PersistentColumnData::Serialize(Serializer &serializer) const {
 	}
 
 // start Anybase changes
-	serializer.WriteProperty(103, "commit_version", commit_version);
+	serializer.WriteProperty(999, "commit_version", commit_version);
 // end Anybase changes
 }
 
@@ -881,7 +881,7 @@ PersistentColumnData PersistentColumnData::Deserialize(Deserializer &deserialize
 			result.DeserializeField(deserializer, 103, "shredded", variant_data.logical_type);
 		}
 // start Anybase changes
-		deserializer.ReadPropertyWithDefault(104, "commit_version", result.commit_version);
+		deserializer.ReadPropertyWithDefault(999, "commit_version", result.commit_version);
 // end Anybase changes
 		return result;
 	}
@@ -961,7 +961,7 @@ PersistentColumnData PersistentColumnData::Deserialize(Deserializer &deserialize
 	}
 
 // start Anybase changes
-	deserializer.ReadPropertyWithDefault(103, "commit_version", result.commit_version);
+	deserializer.ReadPropertyWithDefault(999, "commit_version", result.commit_version);
 // end Anybase changes
 	return result;
 }
