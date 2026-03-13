@@ -80,8 +80,8 @@ jobs:
         fetch-depth: 0
         ref: ${{ inputs.git_ref }}
 
-    - name: Install tools
-      run: make toolsci        
+    # - name: Install tools
+    #   run: make toolsci        
 
     - name: Install pytest
       run: |
