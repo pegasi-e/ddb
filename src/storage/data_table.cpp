@@ -420,13 +420,9 @@ TableStorageInfo DataTable::GetStorageInfo() {
 //===--------------------------------------------------------------------===//
 // Fetch
 //===--------------------------------------------------------------------===//
-// start Anybase changes
 void DataTable::Fetch(DuckTransaction &transaction, DataChunk &result, const vector<StorageIndex> &column_ids,
-                      const Vector &row_identifiers, idx_t fetch_count, ColumnFetchState &state, bool fetch_current_update) {
-// end Anybase changes
-// start Anybase changes
-	row_groups->Fetch(transaction, result, column_ids, row_identifiers, fetch_count, state, fetch_current_update);
-// end Anybase changes
+                      const Vector &row_identifiers, idx_t fetch_count, ColumnFetchState &state) {
+	row_groups->Fetch(transaction, result, column_ids, row_identifiers, fetch_count, state);
 }
 
 void DataTable::FetchCommitted(DataChunk &result, const vector<StorageIndex> &column_ids, const Vector &row_identifiers,

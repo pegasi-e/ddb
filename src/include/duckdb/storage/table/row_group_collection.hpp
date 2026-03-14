@@ -82,10 +82,8 @@ public:
 	RowGroupIterationHelper Chunks(DuckTransaction &transaction);
 	RowGroupIterationHelper Chunks(DuckTransaction &transaction, const vector<StorageIndex> &column_ids);
 
-// start Anybase changes
 	void Fetch(TransactionData transaction, DataChunk &result, const vector<StorageIndex> &column_ids,
-			   const Vector &row_identifiers, idx_t fetch_count, ColumnFetchState &state, bool fetch_current_update = true);
-// end Anybase changes
+			   const Vector &row_identifiers, idx_t fetch_count, ColumnFetchState &state);
 
 	//! Returns true, if the row group can fetch the row id for the transaction.
 	bool CanFetch(TransactionData, const row_t row_id);

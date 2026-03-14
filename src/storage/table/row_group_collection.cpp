@@ -397,10 +397,8 @@ RowGroupIterationHelper RowGroupCollection::Chunks(DuckTransaction &transaction,
 //===--------------------------------------------------------------------===//
 // Fetch
 //===--------------------------------------------------------------------===//
-// start Anybase changes
 void RowGroupCollection::Fetch(TransactionData transaction, DataChunk &result, const vector<StorageIndex> &column_ids,
-                               const Vector &row_identifiers, idx_t fetch_count, ColumnFetchState &state, bool fetch_current_update) {
-// end Anybase changes
+                               const Vector &row_identifiers, idx_t fetch_count, ColumnFetchState &state) {
 	// figure out which row_group to fetch from
 	auto row_ids = FlatVector::GetData<row_t>(row_identifiers);
 	idx_t count = 0;
@@ -420,16 +418,14 @@ void RowGroupCollection::Fetch(TransactionData transaction, DataChunk &result, c
 		auto &current_row_group = row_group->GetNode();
 		auto offset_in_row_group = UnsafeNumericCast<idx_t>(row_id) - row_group->GetRowStart();
 // start Anybase changes
-		if ((state.fetch_type == FetchType::TRANSACTIONAL_FETCH || fetch_current_update) &&
+		if (state.fetch_type == FetchType::TRANSACTIONAL_FETCH &&
 		    !current_row_group.Fetch(transaction, offset_in_row_group)) {
 // end Anybase changes
 			continue;
 		}
 		state.row_group = row_group;
-// start Anybase changes
 		current_row_group.FetchRow(transaction, state, column_ids, UnsafeNumericCast<row_t>(offset_in_row_group),
-		                           result, count, fetch_current_update);
-// end Anybase changes
+		                           result, count);
 		count++;
 	}
 	result.SetCardinality(count);

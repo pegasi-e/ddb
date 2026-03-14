@@ -60,29 +60,20 @@ struct UpdateInfo {
 		return reinterpret_cast<T *>(GetValues());
 	}
 
-// start Anybase changes
-	bool AppliesToTransaction(transaction_t start_time, transaction_t transaction_id, bool fetch_current_update) {
+	bool AppliesToTransaction(transaction_t start_time, transaction_t transaction_id) {
 		// these tuples were either committed AFTER this transaction started or are not committed yet, use
 		// tuples stored in this version
-		if (version_number > start_time) {
-			if ((fetch_current_update && version_number != transaction_id) ||
-				(!fetch_current_update && version_number == transaction_id)) {
-				return true;
-				}
-		}
-
-		return false;
+		return version_number > start_time && version_number != transaction_id;
 	}
-// end Anybase changes
 	//! Loop over the update chain and execute the specified callback on all UpdateInfo's that are relevant for that
 	//! transaction in-order of newest to oldest
 	template <class T>
 // start Anybase changes
 	static void UpdatesForTransaction(UpdateInfo &current, transaction_t start_time, transaction_t transaction_id,
-	                                  bool fetch_current_update, T &&callback) {
+	                                  T &&callback) {
 // end Anybase changes
 // start Anybase changes
-		if (current.AppliesToTransaction(start_time, transaction_id, fetch_current_update)) {
+		if (current.AppliesToTransaction(start_time, transaction_id)) {
 // end Anybase changes
 			callback(current);
 		}
@@ -91,7 +82,7 @@ struct UpdateInfo {
 			auto pin = update_ptr.Pin();
 			auto &info = Get(pin);
 // start Anybase changes
-			if (info.AppliesToTransaction(start_time, transaction_id, fetch_current_update)) {
+			if (info.AppliesToTransaction(start_time, transaction_id)) {
 // end Anybase changes
 				callback(info);
 			}
