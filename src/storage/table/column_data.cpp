@@ -958,7 +958,12 @@ PersistentColumnData PersistentColumnData::Deserialize(Deserializer &deserialize
 	}
 
 // start Anybase changes
-	deserializer.ReadPropertyWithDefault(971, "commit_version", result.commit_version);
+	//Legacy - remove when upgrading to DDB > 1.5.0
+	if (deserializer.CanDeserializeProperty(103, nullptr)) {
+		deserializer.ReadPropertyWithDefault(103, "commit_version", result.commit_version);
+	} else {
+		deserializer.ReadPropertyWithDefault(971, "commit_version", result.commit_version);
+	}
 // end Anybase changes
 	return result;
 }
