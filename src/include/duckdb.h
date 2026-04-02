@@ -5185,6 +5185,7 @@ DUCKDB_C_API duckdb_state duckdb_data_chunks_to_arrow_array(duckdb_connection  c
 DUCKDB_C_API duckdb_state duckdb_data_chunk_column_to_arrow_array(duckdb_connection  connection, duckdb_data_chunk *chunks, idx_t number_of_chunks, idx_t column_index, duckdb_arrow_array *out_array);
 DUCKDB_C_API uint64_t duckdb_get_hlc_timestamp();
 DUCKDB_C_API void duckdb_set_hlc_timestamp(uint64_t ts);
+DUCKDB_C_API duckdb_error_data duckdb_append_arrow(duckdb_connection connection, duckdb_appender appender, struct ArrowArray *arrow_array, struct ArrowSchema *schema);
 
 /*!
 Creates an merger object that allows upsert style merges with existing data while appending new data.

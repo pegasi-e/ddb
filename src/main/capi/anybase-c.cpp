@@ -8,6 +8,11 @@
 #include "duckdb/main/prepared_statement_data.hpp"
 #include "duckdb/common/types.hpp"
 #include "duckdb/storage/data_table.hpp"
+#include "duckdb/common/arrow/arrow.hpp"
+#include "duckdb/common/arrow/arrow_converter.hpp"
+#include "duckdb/function/table/arrow.hpp"
+#include "duckdb/main/capi/capi_internal.hpp"
+#include "duckdb/common/helper.hpp"
 
 using duckdb::ArrowConverter;
 using duckdb::ArrowAppender;
@@ -16,6 +21,9 @@ using duckdb::Connection;
 using duckdb::DataChunk;
 using duckdb::LogicalType;
 using duckdb::ErrorData;
+using duckdb::ArrowTableFunction;
+using duckdb::Appender;
+using duckdb::AppenderWrapper;
 
 uint64_t duckdb_get_hlc_timestamp() {
 	return duckdb::TimestampManager::GetHLCTimestamp();
@@ -214,5 +222,94 @@ void duckdb_set_cdc_callback(duckdb_database db, duckdb_change_data_capture_call
 	auto wrapper = reinterpret_cast<duckdb::DatabaseWrapper *>(db);
 	auto &config = duckdb::DBConfig::GetConfig(*wrapper->database->instance);
 	config.change_data_capture.function = function;
+}
+
+duckdb_error_data duckdb_append_arrow(duckdb_connection connection, duckdb_appender appender, struct ArrowArray *arrow_array, struct ArrowSchema *schema) {
+	if (!connection || !schema || !arrow_array || !appender) {
+		return duckdb_create_error_data(DUCKDB_ERROR_INVALID_INPUT,
+										"Invalid argument(s) to duckdb_append_arrow");
+	}
+
+	const auto ddbConnection = reinterpret_cast<Connection *>(connection);
+	auto arrow_schema = duckdb::make_uniq<duckdb::ArrowTableSchema>();
+	try {
+		duckdb::ArrowTableFunction::PopulateArrowTableSchema(duckdb::DBConfig::GetConfig(*ddbConnection->context), *arrow_schema, *schema);
+	} catch (const duckdb::Exception &ex) {
+		return duckdb_create_error_data(DUCKDB_ERROR_INVALID_INPUT, ex.what());
+	} catch (const std::exception &ex) {
+		return duckdb_create_error_data(DUCKDB_ERROR_INVALID_INPUT, ex.what());
+	} catch (...) {
+		return duckdb_create_error_data(DUCKDB_ERROR_INVALID_INPUT, "Unknown error occurred during conversion");
+	}
+
+	auto &types = arrow_schema->GetTypes();
+	auto &arrow_types = arrow_schema->GetColumns();
+	auto *appender_wrapper = reinterpret_cast<AppenderWrapper *>(appender);
+	auto &appender_instance = appender_wrapper->appender;
+
+	auto dchunk = duckdb::make_uniq<duckdb::DataChunk>();
+	dchunk->Initialize(duckdb::Allocator::DefaultAllocator(), types, duckdb::NumericCast<idx_t>(arrow_array->length));
+	dchunk->SetCardinality(duckdb::NumericCast<idx_t>(arrow_array->length));
+
+	for (idx_t i = 0; i < dchunk->ColumnCount(); i++) {
+		auto &parent_array = *arrow_array;
+		auto &array = parent_array.children[i];
+		auto arrow_type = arrow_types.at(i);
+		auto array_physical_type = arrow_type->GetPhysicalType();
+		auto array_state = duckdb::make_uniq<duckdb::ArrowArrayScanState>(*ddbConnection->context);
+		// We need to make sure that our chunk will hold the ownership
+		array_state->owned_data = duckdb::make_shared_ptr<duckdb::ArrowArrayWrapper>();
+		array_state->owned_data->arrow_array = *arrow_array;
+		// We set it to nullptr to effectively transfer the ownership
+		arrow_array->release = nullptr;
+
+		try {
+			switch (array_physical_type) {
+			case duckdb::ArrowArrayPhysicalType::DICTIONARY_ENCODED:
+				duckdb::ArrowToDuckDBConversion::ColumnArrowToDuckDBDictionary(dchunk->data[i], *array, 0, *array_state,
+				                                                               dchunk->size(), *arrow_type);
+				break;
+			case duckdb::ArrowArrayPhysicalType::RUN_END_ENCODED:
+				duckdb::ArrowToDuckDBConversion::ColumnArrowToDuckDBRunEndEncoded(
+				    dchunk->data[i], *array, 0, *array_state, dchunk->size(), *arrow_type);
+				break;
+			case duckdb::ArrowArrayPhysicalType::DEFAULT:
+				duckdb::ArrowToDuckDBConversion::SetValidityMask(dchunk->data[i], *array, 0, dchunk->size(),
+				                                                 parent_array.offset, -1);
+
+				duckdb::ArrowToDuckDBConversion::ColumnArrowToDuckDB(dchunk->data[i], *array, 0, *array_state,
+				                                                     dchunk->size(), *arrow_type);
+				break;
+			default:
+				return duckdb_create_error_data(DUCKDB_ERROR_NOT_IMPLEMENTED,
+				                                "Only Default Physical Types are currently supported");
+			}
+		} catch (const duckdb::Exception &ex) {
+			return duckdb_create_error_data(DUCKDB_ERROR_INVALID_INPUT, ex.what());
+		} catch (const std::exception &ex) {
+			return duckdb_create_error_data(DUCKDB_ERROR_INVALID_INPUT, ex.what());
+		} catch (...) {
+			return duckdb_create_error_data(DUCKDB_ERROR_INVALID_INPUT, "Unknown error occurred during conversion");
+		}
+	}
+
+	DataChunk slice;
+	slice.InitializeEmpty(types);
+	const idx_t total_size = dchunk->size();
+
+	for (idx_t offset = 0; offset < total_size; offset += STANDARD_VECTOR_SIZE) {
+		idx_t count = duckdb::MinValue<idx_t>(STANDARD_VECTOR_SIZE, total_size - offset);
+		slice.Reference(*dchunk);
+		slice.Slice(offset, count);
+		try {
+			appender_instance->AppendDataChunk(slice);
+		} catch (std::exception &ex) {
+			return duckdb_create_error_data(DUCKDB_ERROR_INVALID_INPUT, ex.what());
+		} catch (...) { // LCOV_EXCL_START
+			return duckdb_create_error_data(DUCKDB_ERROR_INVALID_INPUT, "Unknown appender error");
+		} // LCOV_EXCL_STOP
+	}
+
+	return nullptr;
 }
 
