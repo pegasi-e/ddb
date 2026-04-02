@@ -149,7 +149,7 @@ public:
 	bool Fetch(TransactionData transaction, idx_t row);
 	//! Fetch a specific row from the row_group and insert it into the result at the specified index
 	void FetchRow(TransactionData transaction, ColumnFetchState &state, const vector<StorageIndex> &column_ids,
-	              row_t row_id, DataChunk &result, idx_t result_idx);
+				  row_t row_id, DataChunk &result, idx_t result_idx);
 
 	//! Append count rows to the version info
 	void AppendVersionInfo(TransactionData transaction, idx_t count);
@@ -248,6 +248,11 @@ private:
 	//! Whether or not `row_id_column_data` is loaded (mutable because `const` can lazy load)
 	mutable atomic<bool> row_id_is_loaded;
 	atomic<bool> has_changes;
+// start Anybase changes
+public:
+	idx_t GetColumnVersion(idx_t vector_idx);
+	void UpdateColumnVersions(transaction_t commit_id);
+// end Anybase changes
 };
 
 } // namespace duckdb

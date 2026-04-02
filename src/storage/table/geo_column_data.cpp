@@ -142,9 +142,7 @@ void GeoColumnData::FetchRow(TransactionData transaction, ColumnFetchState &stat
 	// Otherwise, we need to fetch and reassemble
 	DataChunk chunk;
 	chunk.Initialize(Allocator::DefaultAllocator(), {base_column->GetType()}, 1);
-
 	base_column->FetchRow(transaction, state, storage_index, row_id, chunk.data[0], 0);
-
 	Reassemble(chunk.data[0], result, 1, storage_type, result_idx);
 }
 

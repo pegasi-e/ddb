@@ -235,7 +235,6 @@ void ArrayColumnData::UpdateColumn(TransactionData transaction, DataTable &data_
 unique_ptr<BaseStatistics> ArrayColumnData::GetUpdateStatistics() {
 	return nullptr;
 }
-
 void ArrayColumnData::FetchRow(TransactionData transaction, ColumnFetchState &state, const StorageIndex &storage_index,
                                row_t row_id, Vector &result, idx_t result_idx) {
 	// Create state for validity & child column

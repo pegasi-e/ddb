@@ -756,6 +756,12 @@ void RowGroup::Scan(CollectionScanState &state, DataChunk &result, TableScanType
 		options.delete_type = DeletedScanType::OMIT_COMMITTED_DELETES;
 		options.update_type = UpdateScanType::DISALLOW_UPDATES;
 		break;
+// start Anybase changes
+	case TableScanType::TABLE_SCAN_TRANSACTION_ROWS:
+		options.update_type = UpdateScanType::ALLOW_UPDATES;
+		options.delete_type = DeletedScanType::OMIT_COMMITTED_DELETES;
+		break;
+// end Anybase changes
 	default:
 		throw InternalException("Unrecognized table scan type");
 	}
@@ -859,7 +865,7 @@ bool RowGroup::Fetch(TransactionData transaction, idx_t row) {
 }
 
 void RowGroup::FetchRow(TransactionData transaction, ColumnFetchState &state, const vector<StorageIndex> &column_ids,
-                        row_t row_id, DataChunk &result, idx_t result_idx) {
+							row_t row_id, DataChunk &result, idx_t result_idx) {
 	if (UnsafeNumericCast<idx_t>(row_id) > count) {
 		throw InternalException("RowGroup::FetchRow - row_id out of range for row group");
 	}
@@ -1545,5 +1551,18 @@ void VersionDeleteState::Flush() {
 	}
 	count = 0;
 }
+
+// start Anybase changes
+idx_t RowGroup::GetColumnVersion(const idx_t vector_idx) {
+	return GetColumn(vector_idx).commit_version_manager.GetVersion();
+}
+
+void RowGroup::UpdateColumnVersions(const transaction_t commit_id) {
+	const auto count = GetColumnCount();
+	for (idx_t col_idx = 0; col_idx < count; col_idx++) {
+		GetColumn(col_idx).commit_version_manager.DidCommitTransaction(commit_id);
+	}
+}
+// end Anybase changes
 
 } // namespace duckdb

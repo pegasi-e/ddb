@@ -803,4 +803,13 @@ BlockManager &SingleFileStorageManager::GetBlockManager() {
 	return *block_manager;
 }
 
+// start Anybase changes
+uint64_t SingleFileStorageManager::GetSnapshotId() {
+	if (InMemory() || read_only) {
+		return 0;
+	}
+	return dynamic_cast<SingleFileBlockManager *>(block_manager.get())->GetSnapshotId();
+}
+// end Anybase changes
+
 } // namespace duckdb

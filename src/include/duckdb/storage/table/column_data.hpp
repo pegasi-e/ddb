@@ -18,6 +18,9 @@
 #include "duckdb/common/enums/scan_vector_type.hpp"
 #include "duckdb/common/serializer/serialization_traits.hpp"
 #include "duckdb/common/atomic_ptr.hpp"
+// start Anybase changes
+#include "duckdb/storage/table/commit_version_manager.hpp"
+// end Anybase changes
 
 namespace duckdb {
 class ColumnData;
@@ -165,7 +168,7 @@ public:
 	virtual idx_t Fetch(ColumnScanState &state, row_t row_id, Vector &result);
 	//! Fetch a specific row id and append it to the vector
 	virtual void FetchRow(TransactionData transaction, ColumnFetchState &state, const StorageIndex &storage_index,
-	                      row_t row_id, Vector &result, idx_t result_idx);
+						  row_t row_id, Vector &result, idx_t result_idx);
 
 	virtual void Update(TransactionData transaction, DataTable &data_table, idx_t column_index, Vector &update_vector,
 	                    row_t *row_ids, idx_t update_count, idx_t row_group_start);
@@ -276,6 +279,9 @@ public:
 		DynamicCastCheck<TARGET>(this);
 		return reinterpret_cast<const TARGET &>(*this);
 	}
+// start Anybase changes
+	CommitVersionManager commit_version_manager;
+// end Anybase changes
 };
 
 enum class ExtraPersistentColumnDataType : uint8_t {
@@ -367,6 +373,9 @@ public:
 
 	//! Extra persistent data for specific column types
 	unique_ptr<ExtraPersistentColumnData> extra_data;
+// start Anybase changes
+	idx_t commit_version = 0;
+// end Anybase changes
 };
 
 struct PersistentRowGroupData {

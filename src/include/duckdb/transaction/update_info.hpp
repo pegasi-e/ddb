@@ -18,6 +18,9 @@ namespace duckdb {
 class UpdateSegment;
 struct DataTableInfo;
 class DataTable;
+// start Anybase changes
+class ColumnData;
+// end Anybase changes
 
 //! UpdateInfo is a class that represents a set of updates applied to a single vector.
 //! The UpdateInfo struct contains metadata associated with the update.
@@ -66,20 +69,25 @@ struct UpdateInfo {
 		}
 		return version_number > start_time && version_number != transaction_id;
 	}
-
 	//! Loop over the update chain and execute the specified callback on all UpdateInfo's that are relevant for that
 	//! transaction in-order of newest to oldest
 	template <class T>
+// start Anybase changes
 	static void UpdatesForTransaction(UpdateInfo &current, transaction_t start_time, transaction_t transaction_id,
 	                                  T &&callback) {
+// end Anybase changes
+// start Anybase changes
 		if (current.AppliesToTransaction(start_time, transaction_id)) {
+// end Anybase changes
 			callback(current);
 		}
 		auto update_ptr = current.next;
 		while (update_ptr.IsSet()) {
 			auto pin = update_ptr.Pin();
 			auto &info = Get(pin);
+// start Anybase changes
 			if (info.AppliesToTransaction(start_time, transaction_id)) {
+// end Anybase changes
 				callback(info);
 			}
 			update_ptr = info.next;
@@ -98,6 +106,10 @@ struct UpdateInfo {
 	//! Initialize an UpdateInfo struct that has been allocated using GetAllocSize (i.e. has extra space after it)
 	static void Initialize(UpdateInfo &info, DataTable &data_table, transaction_t transaction_id,
 	                       idx_t row_group_start);
+// start Anybase changes
+	ColumnData *column;
+	sel_t *cdc_tuples;
+// end Anybase changes
 };
 
 } // namespace duckdb

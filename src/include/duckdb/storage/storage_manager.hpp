@@ -184,6 +184,10 @@ public:
 		DynamicCastCheck<TARGET>(this);
 		return reinterpret_cast<const TARGET &>(*this);
 	}
+
+// start Anybase changes
+	virtual uint64_t GetSnapshotId() = 0;
+// end Anybase changes
 };
 
 //! Stores the database in a single file.
@@ -212,5 +216,10 @@ protected:
 	void LoadDatabase(QueryContext context) override;
 
 	unique_ptr<CheckpointWriter> CreateCheckpointWriter(QueryContext context, CheckpointOptions options);
+
+// start Anybase changes
+public:
+	uint64_t GetSnapshotId() override;
+// end Anybase changes
 };
 } // namespace duckdb

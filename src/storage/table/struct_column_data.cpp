@@ -305,7 +305,6 @@ unique_ptr<BaseStatistics> StructColumnData::GetUpdateStatistics() {
 	}
 	return stats.ToUnique();
 }
-
 void StructColumnData::FetchRow(TransactionData transaction, ColumnFetchState &state, const StorageIndex &storage_index,
                                 row_t row_id, Vector &result, idx_t result_idx) {
 	// fetch the validity state

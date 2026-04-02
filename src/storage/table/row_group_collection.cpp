@@ -417,8 +417,10 @@ void RowGroupCollection::Fetch(TransactionData transaction, DataChunk &result, c
 		}
 		auto &current_row_group = row_group->GetNode();
 		auto offset_in_row_group = UnsafeNumericCast<idx_t>(row_id) - row_group->GetRowStart();
+// start Anybase changes
 		if (state.fetch_type == FetchType::TRANSACTIONAL_FETCH &&
 		    !current_row_group.Fetch(transaction, offset_in_row_group)) {
+// end Anybase changes
 			continue;
 		}
 		state.row_group = row_group;
@@ -1991,5 +1993,40 @@ void RowGroupCollection::SetDistinct(column_t column_id, unique_ptr<DistinctStat
 	auto stats_lock = stats.GetLock();
 	stats.GetStats(*stats_lock, column_id).SetDistinct(std::move(distinct_stats));
 }
+
+// start Anybase changes
+idx_t RowGroupCollection::GetVersion(const column_t column_idx) const {
+	auto row_groups = GetRowGroups();
+	const auto segmentCount = row_groups->GetSegmentCount();
+	if (segmentCount == 0) {
+		return 0;
+	}
+
+	auto row_group = row_groups->GetSegment(0);
+	D_ASSERT(row_group);
+
+	idx_t version = 0;
+	if (row_group) {
+		version = std::max(row_group->GetNode().GetColumnVersion(column_idx), version);
+	}
+
+	return version;
+}
+
+void RowGroupCollection::UpdateColumnVersions(const transaction_t commit_id) const {
+	auto row_groups = GetRowGroups();
+	auto row_group = row_groups->GetSegment(0);
+	D_ASSERT(row_group);
+
+	if (row_group) {
+		row_group->GetNode().UpdateColumnVersions(commit_id);
+	}
+}
+
+optional_ptr<SegmentNode<RowGroup>> RowGroupCollection::GetRowGroupByRowNumber(idx_t row_id) const {
+	auto row_groups = GetRowGroups();
+	return row_groups->GetSegment(row_id);
+}
+// end Anybase changes
 
 } // namespace duckdb

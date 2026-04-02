@@ -65,6 +65,11 @@ public:
 		D_ASSERT(dynamic_cast<const TARGET *>(this));
 		return reinterpret_cast<const TARGET &>(*this);
 	}
+
+// start Anybase changes
+	virtual uint64_t GetSnapshotId(ClientContext &context) = 0;
+	virtual uint64_t CheckpointAndGetSnapshotId(ClientContext &context) = 0;
+// end Anybase changes
 };
 
 } // namespace duckdb

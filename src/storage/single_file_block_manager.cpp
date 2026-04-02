@@ -1388,4 +1388,22 @@ void SingleFileBlockManager::TrimFreeBlocks(const set<block_id_t> &blocks) {
 	}
 }
 
+// start Anybase changes
+unique_ptr<FileHandle>& SingleFileBlockManager::GetFileHandle() {
+	return handle;
+}
+
+unique_ptr<FileHandle> SingleFileBlockManager::CloneEmptyDatabase() {
+	auto flags = GetFileFlags(true);
+
+	// open the RDBMS handleAdd commentMore actions
+	auto &fs = FileSystem::Get(db);
+	return fs.OpenFile(path, flags);
+}
+
+uint64_t SingleFileBlockManager::GetSnapshotId() {
+	return iteration_count;
+}
+// end Anybase changes
+
 } // namespace duckdb

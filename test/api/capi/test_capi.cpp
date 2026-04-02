@@ -28,6 +28,47 @@ static void require_uhugeint_eq(duckdb_uhugeint left, uint64_t lower, uint64_t u
 	require_uhugeint_eq(left, temp);
 }
 
+
+// TEST_CASE("Test merge into", "[capi]") {
+// 	duckdb_database db;
+// 	duckdb_connection con;
+// 	duckdb_result result;
+// 	duckdb_result result2;
+//
+// 	REQUIRE(duckdb_open(nullptr, &db) != DuckDBError);
+// 	REQUIRE(duckdb_connect(db, &con) != DuckDBError);
+//
+// 	REQUIRE(duckdb_query(con, "CREATE TABLE Accounts(id INTEGER, username VARCHAR PRIMARY KEY, favorite_numbers INT[]);", NULL) != DuckDBError);
+// 	REQUIRE(duckdb_query(con, "INSERT INTO Accounts VALUES (1, 'user1', NULL)", NULL) != DuckDBError);
+//
+// 	REQUIRE(duckdb_query(con, "MERGE INTO Accounts USING (VALUES (1, 'user2', [1, 2, 3])) new_account(id) USING (id) WHEN MATCHED THEN UPDATE WHEN NOT MATCHED THEN INSERT", &result) != DuckDBError);
+//
+// 	auto count = duckdb_result_chunk_count(result);
+// 	REQUIRE(count == 1);
+//
+// 	REQUIRE(duckdb_query(con, "select * FROM Accounts WHERE username='user2'", &result2) != DuckDBError);
+// 	auto select_count = duckdb_result_chunk_count(result2);
+// 	REQUIRE(select_count == 1);
+// 	auto chunk = duckdb_result_get_chunk(result2, 0);
+// 	auto column_count = duckdb_data_chunk_get_column_count(chunk);
+// 	REQUIRE(column_count == 3);
+//
+// 	auto ids = (int32_t *) duckdb_vector_get_data(duckdb_data_chunk_get_vector(chunk, 0));
+// 	auto names = (duckdb_string_t *) duckdb_vector_get_data(duckdb_data_chunk_get_vector(chunk, 1));
+// 	auto list_vector = duckdb_data_chunk_get_vector(chunk, 2);
+// 	auto values_vector = duckdb_list_vector_get_child(list_vector);
+// 	auto list_values = (int32_t *) duckdb_vector_get_data(values_vector);
+// 	REQUIRE(list_values[0] == 1);
+// 	REQUIRE(list_values[1] == 2);
+// 	REQUIRE(list_values[2] == 3);
+//
+// 	duckdb_destroy_data_chunk(&chunk);
+// 	duckdb_destroy_result(&result);
+// 	duckdb_destroy_result(&result2);
+// 	duckdb_disconnect(&con);
+// 	duckdb_close(&db);
+// }
+
 TEST_CASE("Basic test of C API", "[capi]") {
 	CAPITester tester;
 	duckdb::unique_ptr<CAPIResult> result;

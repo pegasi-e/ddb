@@ -104,7 +104,6 @@ void RowIdColumnData::Select(TransactionData transaction, idx_t vector_index, Co
 idx_t RowIdColumnData::Fetch(ColumnScanState &state, row_t row_id, Vector &result) {
 	throw InternalException("Fetch is not supported for row id columns");
 }
-
 void RowIdColumnData::FetchRow(TransactionData transaction, ColumnFetchState &state, const StorageIndex &storage_index,
                                row_t row_id, Vector &result, idx_t result_idx) {
 	result.SetVectorType(VectorType::FLAT_VECTOR);

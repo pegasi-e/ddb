@@ -7,6 +7,9 @@
 #include "duckdb/transaction/update_info.hpp"
 
 #include <algorithm>
+// start Anybase changes
+#include "duckdb/main/database.hpp"
+// end Anybase changes
 
 namespace duckdb {
 
@@ -502,6 +505,7 @@ void UpdateSegment::FetchRow(TransactionData transaction, idx_t row_id, Vector &
 	fetch_row_function(transaction.start_time, transaction.transaction_id, UpdateInfo::Get(pin), row_in_vector, result,
 	                   result_idx);
 }
+
 
 //===--------------------------------------------------------------------===//
 // Rollback update
@@ -1351,6 +1355,10 @@ void UpdateSegment::Update(TransactionData transaction, DataTable &data_table, i
 			node->vector_index = vector_index;
 			node->N = 0;
 			node->column_index = column_index;
+// start Anybase changes
+			node->column = &column_data;
+			node->table = &data_table;
+// end Anybase changes
 
 			// insert the new node into the chain
 			node->next = base_info.next;
@@ -1364,6 +1372,10 @@ void UpdateSegment::Update(TransactionData transaction, DataTable &data_table, i
 		} else {
 			// we already had updates made to this transaction
 			node = &UpdateInfo::Get(node_ref);
+// start Anybase changes
+			node->column = &column_data;
+			node->table = &data_table;
+// end Anybase changes
 		}
 		base_info.Verify();
 		node->Verify();
@@ -1406,6 +1418,10 @@ void UpdateSegment::Update(TransactionData transaction, DataTable &data_table, i
 		transaction_node->next = UndoBufferPointer();
 		transaction_node->prev = handle.GetBufferPointer();
 		transaction_node->column_index = column_index;
+// start Anybase changes
+		transaction_node->column = &column_data;
+		transaction_node->table = &data_table;
+// end Anybase changes
 
 		transaction_node->Verify();
 		update_info.Verify();
@@ -1452,5 +1468,15 @@ bool UpdateSegment::HasUpdates(idx_t start_row_index, idx_t end_row_index) {
 	}
 	return false;
 }
+// start Anybase changes
+void UpdateSegment::FetchAndApplyUpdate(UpdateInfo &info, Vector &result) {
+	auto lock_handle = lock.GetSharedLock();
+
+	// FIXME: normalify if this is not the case... need to pass in count?
+	D_ASSERT(result.GetVectorType() == VectorType::FLAT_VECTOR);
+
+	fetch_committed_function(info, result);
+}
+// end Anybase changes
 
 } // namespace duckdb
