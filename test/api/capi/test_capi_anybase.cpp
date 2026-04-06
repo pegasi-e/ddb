@@ -135,6 +135,108 @@ TEST_CASE("Ensure calling begin called twice by two different interfaces causes 
 	duckdb_close(&db);
 }
 
+TEST_CASE("Append C-Arrow Loop", "[cAnybaseApi]") {
+	duckdb_database db;
+	duckdb_connection con;
+	duckdb_result result;
+	duckdb_result append_result;
+	auto *arrow_array = new ArrowArray();
+	ArrowSchema arrow_schema;
+
+	REQUIRE(duckdb_open(nullptr, &db) != DuckDBError);
+	REQUIRE(duckdb_connect(db, &con) != DuckDBError);
+
+	REQUIRE(duckdb_query(con, "CREATE TABLE FOO(i INTEGER unique, v INTEGER, x VARCHAR);", NULL) != DuckDBError);
+	REQUIRE(duckdb_query(con, "CREATE TABLE BAR(i INTEGER unique, v INTEGER, x VARCHAR);", NULL) != DuckDBError);
+	REQUIRE(duckdb_query(con, "Insert INTO FOO VALUES (1, 5, '22'), (2, 5, 'You dirty bitch you');", NULL) != DuckDBError);
+
+	REQUIRE((duckdb_query(con, "SELECT * FROM FOO;", &result) != DuckDBError));
+
+	auto count = duckdb_result_chunk_count(result);
+	auto chunks = new duckdb_data_chunk[count];
+
+	for (auto i = 0UL; i < count; i++) {
+		chunks[i] = duckdb_result_get_chunk(result, i);
+	}
+
+	auto column_count = duckdb_data_chunk_get_column_count(chunks[0]);
+	auto *types = new duckdb_logical_type[column_count];
+
+	for (auto i = 0UL; i < column_count; i++) {
+		types[i] = duckdb_vector_get_column_type(duckdb_data_chunk_get_vector(chunks[0], i));
+	}
+
+	duckdb_arrow_options arrow_options;
+	duckdb_connection_get_arrow_options(con, &arrow_options);
+	const char *column_names[3];
+	column_names[0] = "i";
+	column_names[1] = "v";
+	column_names[2] = "x";
+
+
+	REQUIRE(duckdb_data_chunks_to_arrow_array(con, chunks, count, (duckdb_arrow_array *)&arrow_array) == DuckDBSuccess);
+
+	REQUIRE(duckdb_to_arrow_schema(arrow_options, types, column_names, column_count, &arrow_schema) == nullptr);
+	for (auto i = 0UL; i < 1000UL; i++) {
+		duckdb_appender appender;
+		duckdb_merger_create(con, nullptr, "BAR", &appender);
+		duckdb_appender_add_column(appender, "i");
+		duckdb_appender_add_column(appender, "v");
+		duckdb_appender_add_column(appender, "x");
+		REQUIRE(duckdb_append_arrow(con, appender, arrow_array, &arrow_schema) == nullptr);
+		REQUIRE(duckdb_appender_close(appender) == DuckDBSuccess);
+		duckdb_destroy_result(&result);
+		delete arrow_array;
+		arrow_array = new ArrowArray();
+		REQUIRE(duckdb_appender_destroy(&appender) == DuckDBSuccess);
+		REQUIRE((duckdb_query(con, "SELECT * FROM FOO;", &result) != DuckDBError));
+		for (auto i = 0UL; i < count; i++) {
+			chunks[i] = duckdb_result_get_chunk(result, i);
+		}
+		REQUIRE(duckdb_data_chunks_to_arrow_array(con, chunks, count, (duckdb_arrow_array *)&arrow_array) == DuckDBSuccess);
+	}
+
+	// REQUIRE(duckdb_data_chunks_to_arrow_array(con, chunks, count, (duckdb_arrow_array *)&arrow_array) == DuckDBSuccess);
+	// REQUIRE(duckdb_to_arrow_schema(arrow_options, types, column_names, column_count, &arrow_schema) == nullptr);
+	// REQUIRE(duckdb_append_arrow(con, appender, arrow_array, &arrow_schema) == nullptr);
+	// REQUIRE(duckdb_appender_close(appender) == DuckDBSuccess);
+
+	REQUIRE((duckdb_query(con, "SELECT * FROM BAR;", &append_result) != DuckDBError));
+
+	auto chunk = duckdb_result_get_chunk(append_result, 0);
+	REQUIRE(chunk != nullptr);
+	auto data_chunk = reinterpret_cast<duckdb::DataChunk *>(chunk);
+	REQUIRE(data_chunk->GetValue(0, 0) == 1);
+	REQUIRE(data_chunk->GetValue(1, 0) == 5);
+	REQUIRE(data_chunk->GetValue(2, 0) == "22");
+
+	REQUIRE(data_chunk->GetValue(0, 1) == 2);
+	REQUIRE(data_chunk->GetValue(1, 1) == 5);
+	REQUIRE(data_chunk->GetValue(2, 1) == "You dirty bitch you");
+
+	// REQUIRE(duckdb_appender_destroy(&appender) == DuckDBSuccess);
+	duckdb_destroy_data_chunk(&chunk);
+	if (arrow_schema.release) {
+		arrow_schema.release(&arrow_schema);
+	}
+	if (arrow_array->release) {
+		arrow_array->release(arrow_array);
+	}
+	for (auto i = 0UL; i < column_count; i++) {
+		duckdb_destroy_logical_type(&types[i]);
+	}
+	delete[] types;
+	delete arrow_array;
+	for (auto i = 0UL; i < count; i++) {
+		duckdb_destroy_data_chunk(&chunks[i]);
+	}
+	delete [] chunks;
+	duckdb_destroy_result(&result);
+	duckdb_destroy_result(&append_result);
+	duckdb_disconnect(&con);
+	duckdb_close(&db);
+}
+
 TEST_CASE("Append C-Arrow Table", "[cAnybaseApi]") {
 	duckdb_database db;
 	duckdb_connection con;

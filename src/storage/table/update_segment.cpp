@@ -1043,11 +1043,9 @@ idx_t UpdateStringStatistics(UpdateSegment *segment, SegmentStatistics &stats, U
 	if (mask.AllValid()) {
 		for (idx_t i = 0; i < count; i++) {
 			auto idx = update.sel->get_index(i);
-			auto &str = update_data[idx];
-			StringStats::Update(stats.statistics, str);
-			if (!str.IsInlined()) {
-				update_data[idx] = segment->GetStringHeap().AddBlob(str);
-			}
+// start anybase change - fixes a memory leak with binary/varchar - PR 21039 pending
+			StringStats::Update(stats.statistics, update_data[idx]);
+// end anybase change
 		}
 		sel.Initialize(nullptr);
 		return count;
@@ -1058,11 +1056,9 @@ idx_t UpdateStringStatistics(UpdateSegment *segment, SegmentStatistics &stats, U
 			auto idx = update.sel->get_index(i);
 			if (mask.RowIsValid(idx)) {
 				sel.set_index(not_null_count++, i);
-				auto &str = update_data[idx];
-				StringStats::Update(stats.statistics, str);
-				if (!str.IsInlined()) {
-					update_data[idx] = segment->GetStringHeap().AddBlob(str);
-				}
+// start anybase change	- fixes a memory leak with binary/varchar - PR 21039 pending
+				StringStats::Update(stats.statistics, update_data[idx]);
+// end anybase change
 			}
 		}
 		if (not_null_count == count) {

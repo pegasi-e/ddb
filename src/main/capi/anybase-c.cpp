@@ -248,7 +248,7 @@ duckdb_error_data duckdb_append_arrow(duckdb_connection connection, duckdb_appen
 	auto &appender_instance = appender_wrapper->appender;
 
 	auto dchunk = duckdb::make_uniq<duckdb::DataChunk>();
-	dchunk->Initialize(duckdb::Allocator::DefaultAllocator(), types, duckdb::NumericCast<idx_t>(arrow_array->length));
+	dchunk->Initialize(*ddbConnection->context, types, duckdb::NumericCast<idx_t>(arrow_array->length));
 	dchunk->SetCardinality(duckdb::NumericCast<idx_t>(arrow_array->length));
 
 	for (idx_t i = 0; i < dchunk->ColumnCount(); i++) {

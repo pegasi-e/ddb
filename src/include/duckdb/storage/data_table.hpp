@@ -328,19 +328,6 @@ public:
 	idx_t GetVersion() const;
 	void DidCommitTransaction(transaction_t commit_id, bool update_all_columns = true) const;
 	idx_t GetColumnVersion(column_t idx) const;
-	void Merge(TableCatalogEntry &table, ClientContext &context, DataChunk &chunk, const vector<unique_ptr<BoundConstraint>> &bound_constraints,
-						const unordered_set<column_t> &conflict_target, const vector<PhysicalIndex> &set_columns);
-	void Merge(TableCatalogEntry &table, ClientContext &context, DataChunk &chunk, const vector<unique_ptr<BoundConstraint>> &bound_constraints,
-					const unordered_set<column_t> &conflict_target, const vector<PhysicalIndex> &set_columns,
-					LocalAppendState &append_state, bool do_appends,
-					idx_t &update_count, idx_t &insert_count);
-	void Merge(TableCatalogEntry &table, ClientContext &context, DataChunk &chunk, const vector<unique_ptr<BoundConstraint>> &bound_constraints,
-					const unordered_set<column_t> &conflict_target, const vector<PhysicalIndex> &set_columns,
-					LocalAppendState &append_state, bool finalize_on_conflict, bool do_appends,
-					idx_t &update_count, idx_t &insert_count, const vector<LogicalType> &types_to_fetch,
-					const vector<LogicalType> &insert_types, const unique_ptr<Expression> &conflict_condition,
-					const vector<StorageIndex> &columns_to_fetch, const vector<unique_ptr<Expression>> &set_expressions,
-					const vector<LogicalType> &set_types, const unique_ptr<Expression> &do_update_condition);
 	void Merge(TableCatalogEntry &table, ClientContext &context, ColumnDataCollection &collection, const vector<unique_ptr<BoundConstraint>> &bound_constraints,
 					const unordered_set<column_t> &conflict_target, const vector<PhysicalIndex> &set_columns);
 // end Anybase additions
