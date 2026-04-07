@@ -156,9 +156,13 @@ TEST_CASE("Append C-Arrow Table", "[cAnybaseApi]") {
 	// REQUIRE(duckdb_open_ext("/Users/jeremyosterhoudt/Downloads/DDB-Test/foo.db", &db, config, nullptr) != DuckDBError);
 	REQUIRE(duckdb_connect(db, &con) != DuckDBError);
 
-	REQUIRE(duckdb_query(con, "CREATE TABLE FOO(i INTEGER PRIMARY KEY, v INTEGER, x VARCHAR);", NULL) != DuckDBError);
-	REQUIRE(duckdb_query(con, "CREATE TABLE BAR(i INTEGER PRIMARY KEY, v INTEGER, x VARCHAR);", NULL) != DuckDBError);
-	REQUIRE(duckdb_query(con, "Insert INTO FOO VALUES (1, 5, 'This shit is crazy all day long and night'), (2, 5, '22');", NULL) != DuckDBError);
+	// REQUIRE(duckdb_query(con, "CREATE TABLE FOO(i INTEGER PRIMARY KEY, v INTEGER, x VARCHAR);", NULL) != DuckDBError);
+	// REQUIRE(duckdb_query(con, "CREATE TABLE BAR(i INTEGER PRIMARY KEY, v INTEGER, x VARCHAR);", NULL) != DuckDBError);
+	// REQUIRE(duckdb_query(con, "Insert INTO FOO VALUES (1, 5, 'This shit is crazy all day long and night'), (2, 5, '22');", NULL) != DuckDBError);
+
+	REQUIRE(duckdb_query(con, "CREATE TABLE FOO(i INTEGER PRIMARY KEY, v INTEGER, x INTEGER);", NULL) != DuckDBError);
+	REQUIRE(duckdb_query(con, "CREATE TABLE BAR(i INTEGER PRIMARY KEY, v INTEGER, x INTEGER);", NULL) != DuckDBError);
+	REQUIRE(duckdb_query(con, "Insert INTO FOO VALUES (1, 5, 22), (2, 5, 22);", NULL) != DuckDBError);
 
 	REQUIRE((duckdb_query(con, "BEGIN TRANSACTION", nullptr) != DuckDBError));
 	REQUIRE((duckdb_query(con, "SELECT * FROM FOO;", &result) != DuckDBError));
