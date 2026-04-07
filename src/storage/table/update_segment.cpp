@@ -1038,7 +1038,9 @@ idx_t TemplatedUpdateNumericStatistics(UpdateSegment *segment, SegmentStatistics
 
 idx_t UpdateStringStatistics(UpdateSegment *segment, SegmentStatistics &stats, UnifiedVectorFormat &update, idx_t count,
                              SelectionVector &sel) {
-	auto update_data = update.GetDataNoConst<string_t>(update);
+//	start anybase change - fixes a memory leak with binary/varchar - PR 21039 pending
+	auto update_data = update.GetData<string_t>(update);
+//	end anybase change
 	auto &mask = update.validity;
 	if (mask.AllValid()) {
 		for (idx_t i = 0; i < count; i++) {
@@ -1307,6 +1309,20 @@ void UpdateSegment::Update(TransactionData transaction, DataTable &data_table, i
 			return;
 		}
 	}
+
+// start anybase change - fixes a memory leak with binary/varchar - PR 21039 pending
+	// for VARCHAR columns, copy non-inlined strings to the heap for long-term storage
+	if (column_data.type.InternalType() == PhysicalType::VARCHAR) {
+		auto update_data = update_format.GetDataNoConst<string_t>(update_format);
+		for (idx_t i = 0; i < count; i++) {
+			auto uidx = update_format.sel->get_index(sel.get_index(i));
+			auto &str = update_data[uidx];
+			if (!str.IsInlined()) {
+				str = heap.AddBlob(str);
+			}
+		}
+	}
+// end anybase change
 
 	InitializeUpdateInfo(vector_index);
 
