@@ -16,8 +16,8 @@
 #include "duckdb/transaction/rollback_state.hpp"
 #include "duckdb/transaction/wal_write_state.hpp"
 // start Anybase changes
-#include "duckdb/storage/table/update_segment.hpp"
 #include "duckdb/transaction/cdc_write_state.hpp"
+#include "duckdb/transaction/update_info.hpp"
 // end Anybase changes
 
 namespace duckdb {
@@ -131,10 +131,9 @@ UndoBufferProperties UndoBuffer::GetProperties() {
 	IteratorState iterator_state;
 	IterateEntries(iterator_state, [&](UndoFlags entry_type, data_ptr_t data) {
 		switch (entry_type) {
-		case UndoFlags::UPDATE_TUPLE: {
+		case UndoFlags::UPDATE_TUPLE:
 			properties.has_updates = true;
 			break;
-		}
 		case UndoFlags::DELETE_TUPLE: {
 			auto info = reinterpret_cast<DeleteInfo *>(data);
 			if (info->is_consecutive) {

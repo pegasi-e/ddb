@@ -400,9 +400,10 @@ static void TimeConversion(Vector &vector, ArrowArray &array, idx_t chunk_offset
 		}
 	}
 }
-
+// start Anybase changes
 static void UUIDConversion(Vector &vector, ArrowArray &array, const ArrowType &arrow_type, idx_t chunk_offset,
                            int64_t nested_offset, int64_t parent_offset, idx_t size) {
+// end Anybase changes
 	auto tgt_ptr = FlatVector::GetData<hugeint_t>(vector);
 	auto &validity_mask = FlatVector::Validity(vector);
 // start Anybase changes
