@@ -143,26 +143,12 @@ TEST_CASE("Append C-Arrow Table", "[cAnybaseApi]") {
 	auto *arrow_array = new ArrowArray();
 	ArrowSchema arrow_schema;
 
-	// duckdb_config config;
-	//
-	// // create the configuration object
-	// if (duckdb_create_config(&config) == DuckDBError) {
-	// 	REQUIRE(1 == 0);
-	// }
-	//
-	// duckdb_set_config(config, "checkpoint_threshold", "1KB");
-
 	REQUIRE(duckdb_open(nullptr, &db) != DuckDBError);
-	// REQUIRE(duckdb_open_ext("/Users/jeremyosterhoudt/Downloads/DDB-Test/foo.db", &db, config, nullptr) != DuckDBError);
 	REQUIRE(duckdb_connect(db, &con) != DuckDBError);
 
-	// REQUIRE(duckdb_query(con, "CREATE TABLE FOO(i INTEGER PRIMARY KEY, v INTEGER, x VARCHAR);", NULL) != DuckDBError);
-	// REQUIRE(duckdb_query(con, "CREATE TABLE BAR(i INTEGER PRIMARY KEY, v INTEGER, x VARCHAR);", NULL) != DuckDBError);
-	// REQUIRE(duckdb_query(con, "Insert INTO FOO VALUES (1, 5, 'This shit is crazy all day long and night'), (2, 5, '22');", NULL) != DuckDBError);
-
-	REQUIRE(duckdb_query(con, "CREATE TABLE FOO(i INTEGER PRIMARY KEY, v INTEGER, x INTEGER);", NULL) != DuckDBError);
-	REQUIRE(duckdb_query(con, "CREATE TABLE BAR(i INTEGER PRIMARY KEY, v INTEGER, x INTEGER);", NULL) != DuckDBError);
-	REQUIRE(duckdb_query(con, "Insert INTO FOO VALUES (1, 5, 22), (2, 5, 22);", NULL) != DuckDBError);
+	REQUIRE(duckdb_query(con, "CREATE TABLE FOO(i INTEGER PRIMARY KEY, v INTEGER, x INTEGER);", nullptr) != DuckDBError);
+	REQUIRE(duckdb_query(con, "CREATE TABLE BAR(i INTEGER PRIMARY KEY, v INTEGER, x INTEGER);", nullptr) != DuckDBError);
+	REQUIRE(duckdb_query(con, "Insert INTO FOO VALUES (1, 5, 22), (2, 5, 22);", nullptr) != DuckDBError);
 
 	REQUIRE((duckdb_query(con, "BEGIN TRANSACTION", nullptr) != DuckDBError));
 	REQUIRE((duckdb_query(con, "SELECT * FROM FOO;", &result) != DuckDBError));
@@ -180,10 +166,6 @@ TEST_CASE("Append C-Arrow Table", "[cAnybaseApi]") {
 	for (auto i = 0UL; i < column_count; i++) {
 		types[i] = duckdb_vector_get_column_type(duckdb_data_chunk_get_vector(chunks[0], i));
 	}
-
-	// auto s = "Some Really long string to set";
-	// auto vector = duckdb_data_chunk_get_vector(chunks[0], 2);
-	// duckdb_vector_assign_string_element_len(vector, 0, s, strlen(s));
 
 	duckdb_arrow_options arrow_options;
 	duckdb_connection_get_arrow_options(con, &arrow_options);
@@ -218,8 +200,8 @@ TEST_CASE("Append C-Arrow Table", "[cAnybaseApi]") {
 	REQUIRE(data_chunk->GetValue(1, 1) == 5);
 	REQUIRE(data_chunk->GetValue(2, 1) == 22);
 
-	// duckdb_destroy_config(&config);
 	REQUIRE(duckdb_appender_destroy(&appender) == DuckDBSuccess);
+	duckdb_destroy_arrow_options(&arrow_options);
 	duckdb_destroy_data_chunk(&chunk);
 	if (arrow_schema.release) {
 		arrow_schema.release(&arrow_schema);
