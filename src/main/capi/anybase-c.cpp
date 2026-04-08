@@ -107,7 +107,11 @@ duckdb_state duckdb_data_chunk_column_to_arrow_array(duckdb_connection connectio
 	auto options = ((Connection *)connection)->context->GetClientProperties();
 	auto chunk_count = number_of_chunks;
 	auto first_chunk = reinterpret_cast<duckdb::DataChunk *>(chunks[0]);
-	auto types = duckdb::vector<duckdb::LogicalType>{first_chunk->GetTypes()[column_index]};
+	auto type = first_chunk->GetTypes()[column_index];
+	if (type == LogicalType::UUID) {
+		options.uuid_as_binary_array = true;
+	}
+	auto types = duckdb::vector<duckdb::LogicalType>{type};
 	std::unordered_map<idx_t, const duckdb::shared_ptr<duckdb::ArrowTypeExtensionData>> extension_type_cast;
 	ArrowAppender appender(types, chunk_count * STANDARD_VECTOR_SIZE, options, extension_type_cast);
 	for (idx_t i = 0; i < chunk_count; i++) {

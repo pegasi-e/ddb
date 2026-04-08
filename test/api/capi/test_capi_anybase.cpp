@@ -483,6 +483,52 @@ TEST_CASE("Convert DuckDB Chunk column to Arrow Array in C API", "[cAnybaseApi]"
 	delete[] chunks;
 }
 
+TEST_CASE("Convert DuckDB UUID Chunk column to Arrow Array is 16 Byte Binary in C API", "[cAnybaseApi]") {
+	duckdb_database db;
+	duckdb_connection con;
+	duckdb_result result;
+	auto *i_arrow_array = new ArrowArray();
+	auto *s_arrow_array = new ArrowArray();
+
+	REQUIRE(duckdb_open(nullptr, &db) != DuckDBError);
+	REQUIRE(duckdb_connect(db, &con) != DuckDBError);
+
+	REQUIRE(duckdb_query(con, "CREATE TABLE test(i INTEGER, s UUID);", nullptr) != DuckDBError);
+	REQUIRE(duckdb_query(con, "Insert INTO test VALUES (1, '00000000-0000-0000-0000-000000000000'), (2, '00010203-0405-0607-0809-0a0b0c0d0e0f');", nullptr) != DuckDBError);
+	REQUIRE((duckdb_query(con, "SELECT * FROM test;", &result) != DuckDBError));
+
+	auto count = duckdb_result_chunk_count(result);
+	auto chunks = new duckdb_data_chunk[count];
+
+	for (auto i = 0UL; i < count; i++) {
+		chunks[i] = duckdb_result_get_chunk(result, i);
+	}
+
+	// Check column 0
+	REQUIRE(duckdb_data_chunk_column_to_arrow_array(con, chunks, count, 0, (duckdb_arrow_array *)&i_arrow_array) == DuckDBSuccess);
+	REQUIRE(i_arrow_array->length == 2);
+	REQUIRE(i_arrow_array->n_buffers == 1);
+	REQUIRE(i_arrow_array->n_children == 1);
+
+	// Check column 1
+	REQUIRE(duckdb_data_chunk_column_to_arrow_array(con, chunks, count, 1, (duckdb_arrow_array *)&s_arrow_array) == DuckDBSuccess);
+	REQUIRE(s_arrow_array->length == 2);
+	REQUIRE(s_arrow_array->n_buffers == 1);
+	REQUIRE(s_arrow_array->n_children == 1);
+
+	i_arrow_array->release(i_arrow_array);
+	s_arrow_array->release(s_arrow_array);
+	delete i_arrow_array;
+	delete s_arrow_array;
+	duckdb_destroy_result(&result); // segmentation failure happens here
+	duckdb_disconnect(&con);
+	duckdb_close(&db);
+	for (auto i = 0UL; i < count; i++) {
+		duckdb_destroy_data_chunk(&chunks[i]);
+	}
+	delete[] chunks;
+}
+
 TEST_CASE("Test DataChunk C API reference", "[cAnybaseApi]") {
 	duckdb_logical_type types[2];
 	types[0] = duckdb_create_logical_type(DUCKDB_TYPE_BIGINT);

@@ -186,6 +186,15 @@ static void InitializeFunctionPointers(ArrowAppendData &append_data, const Logic
 		InitializeAppenderForType<ArrowScalarData<int64_t>>(append_data);
 		break;
 	case LogicalTypeId::UUID:
+// start Anybase changes
+		if (append_data.options.uuid_as_binary_array) {
+			if (append_data.options.arrow_offset_size == ArrowOffsetSize::LARGE) {
+				InitializeAppenderForType<ArrowVarcharData<hugeint_t, ArrowUUIDBinaryConverter>>(append_data);
+			} else {
+				InitializeAppenderForType<ArrowVarcharData<hugeint_t, ArrowUUIDBinaryConverter, int32_t>>(append_data);
+			}
+		} else
+// end Anybase changes
 		if (append_data.options.arrow_lossless_conversion) {
 			InitializeAppenderForType<ArrowScalarData<hugeint_t, hugeint_t, ArrowUUIDBlobConverter>>(append_data);
 		} else {

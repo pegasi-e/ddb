@@ -365,9 +365,49 @@ struct ArrowBool8 {
 	}
 };
 
+// start Anybase changes
+struct ArrowUUID {
+	static unique_ptr<ArrowType> GetType(const ArrowSchema &schema, const ArrowSchemaMetadata &schema_metadata) {
+		const auto format = string(schema.format);
+		if (format == "z") {
+			return make_uniq<ArrowType>(LogicalType::UUID, make_uniq<ArrowStringInfo>(ArrowVariableSizeType::NORMAL));
+		}
+
+		if (format == "Z") {
+			return make_uniq<ArrowType>(LogicalType::UUID,
+										make_uniq<ArrowStringInfo>(ArrowVariableSizeType::SUPER_SIZE));
+		}
+
+		if (format == "w:16") {
+			return make_uniq<ArrowType>(LogicalType::UUID, make_uniq<ArrowStringInfo>(16));
+		}
+
+		throw InvalidInputException("Arrow extension type \"%s\" not supported for arrow.uuid", format.c_str());
+	}
+
+	static void PopulateSchema(DuckDBArrowSchemaHolder &root_holder, ArrowSchema &schema, const LogicalType &type,
+							   ClientContext &context, const ArrowTypeExtension &extension) {
+		const ArrowSchemaMetadata schema_metadata =
+			ArrowSchemaMetadata::ArrowCanonicalType(extension.GetInfo().GetExtensionName());
+		root_holder.metadata_info.emplace_back(schema_metadata.SerializeMetadata());
+		schema.metadata = root_holder.metadata_info.back().get();
+
+		const auto options = context.GetClientProperties();
+		if (options.uuid_as_binary_array) {
+			schema.format = options.arrow_offset_size == ArrowOffsetSize::LARGE ? "Z" : "z";
+		} else {
+			schema.format = "w:16";
+		}
+	}
+};
+// end Anybase chagnes
+
 void ArrowTypeExtensionSet::Initialize(const DBConfig &config) {
 	// Types that are 1:1
-	config.RegisterArrowExtension({"arrow.uuid", "w:16", make_shared_ptr<ArrowTypeExtensionData>(LogicalType::UUID)});
+// start Anybase changes
+	config.RegisterArrowExtension({"arrow.uuid", &ArrowUUID::PopulateSchema, &ArrowUUID::GetType,
+								   make_shared_ptr<ArrowTypeExtensionData>(LogicalType::UUID)});
+// end Anybase changes
 	config.RegisterArrowExtension(
 	    {"arrow.bool8", "c",
 	     make_shared_ptr<ArrowTypeExtensionData>(LogicalType::BOOLEAN, LogicalType::TINYINT, ArrowBool8::ArrowToDuck,
