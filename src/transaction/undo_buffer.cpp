@@ -18,7 +18,6 @@
 // start Anybase changes
 #include "duckdb/storage/table/update_segment.hpp"
 #include "duckdb/transaction/cdc_write_state.hpp"
-#include "duckdb/transaction/update_info.hpp"
 // end Anybase changes
 
 namespace duckdb {
@@ -132,14 +131,10 @@ UndoBufferProperties UndoBuffer::GetProperties() {
 	IteratorState iterator_state;
 	IterateEntries(iterator_state, [&](UndoFlags entry_type, data_ptr_t data) {
 		switch (entry_type) {
-// start anybase change - fixes a memory leak with binary/varchar - PR 21039 pending
 		case UndoFlags::UPDATE_TUPLE: {
 			properties.has_updates = true;
-			auto info = reinterpret_cast<UpdateInfo *>(data);
-			properties.estimated_size += info->segment->GetStringHeap().AllocationSize();
 			break;
 		}
-//end anybase change
 		case UndoFlags::DELETE_TUPLE: {
 			auto info = reinterpret_cast<DeleteInfo *>(data);
 			if (info->is_consecutive) {
