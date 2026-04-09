@@ -40,15 +40,15 @@ uint64_t duckdb_checkpoint_and_get_snapshot_id(duckdb_connection connection)
   return conn->CheckpointAndGetSnapshotId();
 }
 
-duckdb_state duckdb_result_to_arrow(duckdb_result result, duckdb_arrow_array *out_array) {
+duckdb_state duckdb_result_to_arrow(duckdb_result *result, duckdb_arrow_array *out_array) {
 	if (!out_array) {
 		return DuckDBSuccess;
 	}
 
-	if (!result.internal_data) {
+	if (!result->internal_data) {
 		return DuckDBError;
 	}
-	auto &result_data = *(reinterpret_cast<duckdb::DuckDBResultData *>(result.internal_data));
+	auto &result_data = *(reinterpret_cast<duckdb::DuckDBResultData *>(result->internal_data));
 	if (result_data.result_set_type == duckdb::CAPIResultSetType::CAPI_RESULT_TYPE_DEPRECATED) {
 		return DuckDBError;
 	}
@@ -59,10 +59,12 @@ duckdb_state duckdb_result_to_arrow(duckdb_result result, duckdb_arrow_array *ou
 	result_data.result_set_type = duckdb::CAPIResultSetType::CAPI_RESULT_TYPE_MATERIALIZED;
 	auto &materialized = reinterpret_cast<duckdb::MaterializedQueryResult &>(*result_data.result);
 	auto &collection = materialized.Collection();
+	auto options = materialized.client_properties;
+	options.uuid_as_binary_array = true;
 
 	auto chunk_count = collection.ChunkCount();
 	std::unordered_map<idx_t, const duckdb::shared_ptr<duckdb::ArrowTypeExtensionData>> extension_type_cast;
-	ArrowAppender appender(collection.Types(), chunk_count * STANDARD_VECTOR_SIZE, materialized.client_properties, extension_type_cast);
+	ArrowAppender appender(collection.Types(), chunk_count * STANDARD_VECTOR_SIZE, options, extension_type_cast);
 
 	for (idx_t i = 0; i < chunk_count; i++) {
 		auto chunk = duckdb::make_uniq<duckdb::DataChunk>();
@@ -70,6 +72,46 @@ duckdb_state duckdb_result_to_arrow(duckdb_result result, duckdb_arrow_array *ou
 		collection.FetchChunk(i, *chunk);
 		appender.Append(*chunk, 0, chunk->size(), chunk->size());
 	}
+
+	auto *p_array = reinterpret_cast<ArrowArray *>(*out_array);
+	*p_array = appender.Finalize();
+
+	return DuckDBSuccess;
+}
+
+duckdb_state duckdb_result_get_chuck_as_arrow(duckdb_result *result, idx_t chunk_index, duckdb_arrow_array *out_array) {
+	if (!out_array) {
+		return DuckDBSuccess;
+	}
+
+	if (!result->internal_data) {
+		return DuckDBError;
+	}
+	auto &result_data = *(reinterpret_cast<duckdb::DuckDBResultData *>(result->internal_data));
+	if (result_data.result_set_type == duckdb::CAPIResultSetType::CAPI_RESULT_TYPE_DEPRECATED) {
+		return DuckDBError;
+	}
+	if (result_data.result->type != duckdb::QueryResultType::MATERIALIZED_RESULT) {
+		// This API is only supported for materialized query results
+		return DuckDBError;
+	}
+	result_data.result_set_type = duckdb::CAPIResultSetType::CAPI_RESULT_TYPE_MATERIALIZED;
+	auto &materialized = reinterpret_cast<duckdb::MaterializedQueryResult &>(*result_data.result);
+	auto &collection = materialized.Collection();
+	auto options = materialized.client_properties;
+	options.uuid_as_binary_array = true;
+
+	auto chunk_count = collection.ChunkCount();
+	if (chunk_index >= chunk_count) {
+		return DuckDBError;
+	}
+	auto chunk = duckdb::make_uniq<duckdb::DataChunk>();
+	chunk->Initialize(duckdb::Allocator::DefaultAllocator(), collection.Types());
+	collection.FetchChunk(chunk_index, *chunk);
+	auto types = chunk->GetTypes();
+	std::unordered_map<idx_t, const duckdb::shared_ptr<duckdb::ArrowTypeExtensionData>> extension_type_cast;
+	ArrowAppender appender(types, chunk->size(), options, extension_type_cast);
+	appender.Append(*chunk, 0, chunk->size(), chunk->size());
 
 	auto *p_array = reinterpret_cast<ArrowArray *>(*out_array);
 	*p_array = appender.Finalize();

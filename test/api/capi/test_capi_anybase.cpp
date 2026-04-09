@@ -375,7 +375,7 @@ TEST_CASE("Convert DuckDBResult to Arrow Array in C API", "[cAnybaseApi]") {
 	REQUIRE(duckdb_query(con, "Insert INTO test VALUES (1), (2);", NULL) != DuckDBError);
 	REQUIRE((duckdb_query(con, "SELECT * FROM test;", &result) != DuckDBError));
 
-	REQUIRE(duckdb_result_to_arrow(result, (duckdb_arrow_array *)&arrow_array) == DuckDBSuccess);
+	REQUIRE(duckdb_result_to_arrow(&result, (duckdb_arrow_array *)&arrow_array) == DuckDBSuccess);
 	REQUIRE(arrow_array->length == 2);
 
 	arrow_array->release(arrow_array);

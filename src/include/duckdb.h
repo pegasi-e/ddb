@@ -5180,7 +5180,8 @@ Creates a new DataChunk that copy a given DataChunk
  * @return A new data chunk with a copied data from the given data chunk
  */
 DUCKDB_C_API duckdb_data_chunk duckdb_create_data_chunk_copy(duckdb_data_chunk *chunk);
-DUCKDB_C_API duckdb_state duckdb_result_to_arrow(duckdb_result result, duckdb_arrow_array *out_array);
+DUCKDB_C_API duckdb_state duckdb_result_to_arrow(duckdb_result *result, duckdb_arrow_array *out_array);
+DUCKDB_C_API duckdb_state duckdb_result_get_chuck_as_arrow(duckdb_result *result, idx_t chunk_index, duckdb_arrow_array *out_array);
 DUCKDB_C_API duckdb_state duckdb_data_chunks_to_arrow_array(duckdb_connection  connection, duckdb_data_chunk *chunks, idx_t number_of_chunks, duckdb_arrow_array *out_array);
 DUCKDB_C_API duckdb_state duckdb_data_chunk_column_to_arrow_array(duckdb_connection  connection, duckdb_data_chunk *chunks, idx_t number_of_chunks, idx_t column_index, duckdb_arrow_array *out_array);
 DUCKDB_C_API uint64_t duckdb_get_hlc_timestamp();
