@@ -125,11 +125,19 @@ duckdb_state duckdb_result_to_arrow(duckdb_result *result, duckdb_arrow_array *o
 	result_data.result_set_type = duckdb::CAPIResultSetType::CAPI_RESULT_TYPE_MATERIALIZED;
 	auto &materialized = reinterpret_cast<duckdb::MaterializedQueryResult &>(*result_data.result);
 	auto options = materialized.client_properties;
-	options.uuid_as_binary_array = true;
+	// We have to clone this because ToArrowArray moves the options causing the original to be zeroed out
+	auto properties = duckdb::ClientProperties(options);
+	properties.uuid_as_binary_array = true;
 
 	auto extension_type_cast = duckdb::ArrowTypeExtensionData::GetExtensionTypes(
 		*result_data.result->client_properties.client_context, result_data.result->types);
-	ArrowAppender appender(materialized.types, materialized.RowCount(), options, extension_type_cast);
+
+	duckdb::vector<LogicalType> types;
+	for (idx_t i = 0; i < materialized.ColumnCount(); i++) {
+		types.push_back(materialized.types[i]);
+	}
+
+	ArrowAppender appender(types, materialized.RowCount(), properties, extension_type_cast);
 
 	auto chunk = materialized.Fetch();
 	while (chunk) {
@@ -151,23 +159,29 @@ duckdb_arrow_options duckdb_arrow_options_with_binary_uuid(duckdb_result *result
 	if (!result_data.result) {
 		return nullptr;
 	}
-	auto arrow_options_wrapper = new duckdb::CClientArrowOptionsWrapper(result_data.result->client_properties);
+	auto options = result_data.result->client_properties;
+	options.uuid_as_binary_array = true;
+	auto arrow_options_wrapper = new duckdb::CClientArrowOptionsWrapper(options);
 	return reinterpret_cast<duckdb_arrow_options>(arrow_options_wrapper);
 }
 
-void duckdb_result_chunk_arrow_array(duckdb_result result, duckdb_data_chunk chunk, duckdb_arrow_array *out_array) {
-	if (!out_array) {
-		return;
+duckdb_state duckdb_result_chunk_arrow_array(duckdb_result *result, duckdb_data_chunk chunk, duckdb_arrow_array *out_array) {
+	if (!result || !chunk || !out_array) {
+		return DuckDBError;
 	}
 	auto dchunk = reinterpret_cast<duckdb::DataChunk *>(chunk);
-	auto &result_data = *(reinterpret_cast<duckdb::DuckDBResultData *>(result.internal_data));
+	auto &result_data = *(reinterpret_cast<duckdb::DuckDBResultData *>(result->internal_data));
 	auto extension_type_cast = duckdb::ArrowTypeExtensionData::GetExtensionTypes(
 		*result_data.result->client_properties.client_context, result_data.result->types);
 	auto options = result_data.result->client_properties;
-	options.uuid_as_binary_array = true;
+	// We have to clone this because ToArrowArray moves the options causing the original to be zeroed out
+	auto properties = duckdb::ClientProperties(options);
+	properties.uuid_as_binary_array = true;
 
 	ArrowConverter::ToArrowArray(*dchunk, reinterpret_cast<ArrowArray *>(*out_array),
-								 options, extension_type_cast);
+								 properties, extension_type_cast);
+
+	return DuckDBSuccess;
 }
 
 duckdb_state duckdb_data_chunks_to_arrow_array(duckdb_result result, duckdb_data_chunk *chunks, idx_t number_of_chunks, duckdb_arrow_array *out_array) {
