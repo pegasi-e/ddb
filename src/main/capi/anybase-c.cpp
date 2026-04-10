@@ -124,26 +124,35 @@ duckdb_state duckdb_result_to_arrow(duckdb_result *result, duckdb_arrow_array *o
 	}
 	result_data.result_set_type = duckdb::CAPIResultSetType::CAPI_RESULT_TYPE_MATERIALIZED;
 	auto &materialized = reinterpret_cast<duckdb::MaterializedQueryResult &>(*result_data.result);
-	auto &collection = materialized.Collection();
 	auto options = materialized.client_properties;
 	options.uuid_as_binary_array = true;
 
-	auto chunk_count = collection.ChunkCount();
 	auto extension_type_cast = duckdb::ArrowTypeExtensionData::GetExtensionTypes(
 		*result_data.result->client_properties.client_context, result_data.result->types);
-	ArrowAppender appender(collection.Types(), chunk_count * STANDARD_VECTOR_SIZE, options, extension_type_cast);
+	ArrowAppender appender(materialized.types, materialized.RowCount(), options, extension_type_cast);
 
-	for (idx_t i = 0; i < chunk_count; i++) {
-		auto chunk = duckdb::unique_ptr<duckdb::DataChunk>();
-		chunk->Initialize(duckdb::Allocator::DefaultAllocator(), collection.Types());
-		collection.FetchChunk(i, *chunk);
+	auto chunk = materialized.Fetch();
+	while (chunk) {
 		appender.Append(*chunk, 0, chunk->size(), chunk->size());
+		chunk = materialized.Fetch();
 	}
 
 	auto *p_array = reinterpret_cast<ArrowArray *>(*out_array);
 	*p_array = appender.Finalize();
 
 	return DuckDBSuccess;
+}
+
+duckdb_arrow_options duckdb_arrow_options_with_binary_uuid(duckdb_result *result) {
+	if (!result) {
+		return nullptr;
+	}
+	auto &result_data = *(reinterpret_cast<duckdb::DuckDBResultData *>(result->internal_data));
+	if (!result_data.result) {
+		return nullptr;
+	}
+	auto arrow_options_wrapper = new duckdb::CClientArrowOptionsWrapper(result_data.result->client_properties);
+	return reinterpret_cast<duckdb_arrow_options>(arrow_options_wrapper);
 }
 
 void duckdb_result_chunk_arrow_array(duckdb_result result, duckdb_data_chunk chunk, duckdb_arrow_array *out_array) {
