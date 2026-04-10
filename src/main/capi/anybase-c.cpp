@@ -70,7 +70,7 @@ duckdb_state duckdb_result_to_arrow(duckdb_result *result, duckdb_arrow_array *o
 		auto chunk = duckdb::make_uniq<duckdb::DataChunk>();
 		chunk->Initialize(duckdb::Allocator::DefaultAllocator(), collection.Types());
 		collection.FetchChunk(i, *chunk);
-		appender.Append(*chunk.release(), 0, chunk->size(), chunk->size());
+		appender.Append(*chunk, 0, chunk->size(), chunk->size());
 	}
 
 	auto *p_array = reinterpret_cast<ArrowArray *>(*out_array);
@@ -111,12 +111,27 @@ duckdb_state duckdb_result_get_chuck_as_arrow(duckdb_result *result, idx_t chunk
 	auto types = chunk->GetTypes();
 	std::unordered_map<idx_t, const duckdb::shared_ptr<duckdb::ArrowTypeExtensionData>> extension_type_cast;
 	ArrowAppender appender(types, STANDARD_VECTOR_SIZE, options, extension_type_cast);
-	appender.Append(*chunk.release(), 0, chunk->size(), chunk->size());
+	appender.Append(*chunk, 0, chunk->size(), chunk->size());
 
 	auto *p_array = reinterpret_cast<ArrowArray *>(*out_array);
 	*p_array = appender.Finalize();
 
 	return DuckDBSuccess;
+}
+
+void duckdb_result_chunk_arrow_array(duckdb_result result, duckdb_data_chunk chunk, duckdb_arrow_array *out_array) {
+	if (!out_array) {
+		return;
+	}
+	auto dchunk = reinterpret_cast<duckdb::DataChunk *>(chunk);
+	auto &result_data = *(reinterpret_cast<duckdb::DuckDBResultData *>(result.internal_data));
+	auto extension_type_cast = duckdb::ArrowTypeExtensionData::GetExtensionTypes(
+		*result_data.result->client_properties.client_context, result_data.result->types);
+	auto options = result_data.result->client_properties;
+	options.uuid_as_binary_array = true;
+
+	ArrowConverter::ToArrowArray(*dchunk, reinterpret_cast<ArrowArray *>(*out_array),
+								 options, extension_type_cast);
 }
 
 duckdb_state duckdb_data_chunks_to_arrow_array(duckdb_connection  connection, duckdb_data_chunk *chunks, idx_t number_of_chunks, duckdb_arrow_array *out_array) {
