@@ -179,7 +179,7 @@ TEST_CASE("Append C-Arrow Table", "[cAnybaseApi]") {
 	duckdb_appender_add_column(appender, "i");
 	duckdb_appender_add_column(appender, "v");
 	duckdb_appender_add_column(appender, "x");
-	REQUIRE(duckdb_data_chunks_to_arrow_array(con, chunks, count, (duckdb_arrow_array *)&arrow_array) == DuckDBSuccess);
+	REQUIRE(duckdb_data_chunks_to_arrow_array(result, chunks, count, (duckdb_arrow_array *)&arrow_array) == DuckDBSuccess);
 	REQUIRE(duckdb_to_arrow_schema(arrow_options, types, column_names, column_count, &arrow_schema) == nullptr);
 	REQUIRE(duckdb_append_arrow(con, appender, arrow_array, &arrow_schema) == nullptr);
 	REQUIRE(duckdb_appender_close(appender) == DuckDBSuccess);
@@ -405,7 +405,7 @@ TEST_CASE("Convert DuckDB Chunks to Arrow Array in C API", "[cAnybaseApi]") {
 		chunks[i] = duckdb_result_get_chunk(result, i);
 	}
 
-	REQUIRE(duckdb_data_chunks_to_arrow_array(con, chunks, count, (duckdb_arrow_array *)&arrow_array) == DuckDBSuccess);
+	REQUIRE(duckdb_data_chunks_to_arrow_array(result, chunks, count, (duckdb_arrow_array *)&arrow_array) == DuckDBSuccess);
 	REQUIRE(arrow_array->length == 2);
 
 	arrow_array->release(arrow_array);

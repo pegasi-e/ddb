@@ -5182,8 +5182,7 @@ Creates a new DataChunk that copy a given DataChunk
 DUCKDB_C_API duckdb_data_chunk duckdb_create_data_chunk_copy(duckdb_data_chunk *chunk);
 DUCKDB_C_API duckdb_state duckdb_result_to_arrow(duckdb_result *result, duckdb_arrow_array *out_array);
 DUCKDB_C_API void duckdb_result_chunk_arrow_array(duckdb_result result, duckdb_data_chunk chunk, duckdb_arrow_array *out_array);
-DUCKDB_C_API duckdb_state duckdb_result_get_chuck_as_arrow(duckdb_result *result, idx_t chunk_index, duckdb_arrow_array *out_array);
-DUCKDB_C_API duckdb_state duckdb_data_chunks_to_arrow_array(duckdb_connection  connection, duckdb_data_chunk *chunks, idx_t number_of_chunks, duckdb_arrow_array *out_array);
+DUCKDB_C_API duckdb_state duckdb_data_chunks_to_arrow_array(duckdb_result result, duckdb_data_chunk *chunks, idx_t number_of_chunks, duckdb_arrow_array *out_array);
 DUCKDB_C_API duckdb_state duckdb_data_chunk_column_to_arrow_array(duckdb_connection  connection, duckdb_data_chunk *chunks, idx_t number_of_chunks, idx_t column_index, duckdb_arrow_array *out_array);
 DUCKDB_C_API uint64_t duckdb_get_hlc_timestamp();
 DUCKDB_C_API void duckdb_set_hlc_timestamp(uint64_t ts);
@@ -5217,6 +5216,15 @@ Note that the object must be destroyed with `duckdb_appender_destroy`.
 */
 DUCKDB_C_API duckdb_state duckdb_merger_create(duckdb_connection connection, const char *schema,
 											  const char *table, duckdb_appender *out_appender);
+
+typedef struct _duckdb_arrow_appender {
+	void *internal_ptr;
+} * duckdb_arrow_appender;
+
+DUCKDB_C_API duckdb_state duckdb_create_arrow_appender(duckdb_result *result, duckdb_arrow_appender *out_arrow_appender);
+DUCKDB_C_API duckdb_state duckdb_arrow_appender_destroy(duckdb_arrow_appender *arrow_appender);
+DUCKDB_C_API duckdb_state duckdb_arrow_appender_append_chunk(duckdb_arrow_appender arrow_appender, duckdb_data_chunk chunk);
+DUCKDB_C_API duckdb_state duckdb_arrow_appender_finalize(duckdb_arrow_appender arrow_appender, duckdb_arrow_array *out_array);
 
 //===--------------------------------------------------------------------===//
 // Change Data Capture types
