@@ -132,12 +132,7 @@ duckdb_state duckdb_result_to_arrow(duckdb_result *result, duckdb_arrow_array *o
 	auto extension_type_cast = duckdb::ArrowTypeExtensionData::GetExtensionTypes(
 		*result_data.result->client_properties.client_context, result_data.result->types);
 
-	duckdb::vector<LogicalType> types;
-	for (idx_t i = 0; i < materialized.ColumnCount(); i++) {
-		types.push_back(materialized.types[i]);
-	}
-
-	ArrowAppender appender(types, materialized.RowCount(), properties, extension_type_cast);
+	ArrowAppender appender(materialized.types, materialized.RowCount(), properties, extension_type_cast);
 
 	auto chunk = materialized.Fetch();
 	while (chunk) {
