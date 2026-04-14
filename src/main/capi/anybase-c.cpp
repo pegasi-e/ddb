@@ -61,12 +61,6 @@ duckdb_state duckdb_create_arrow_appender(duckdb_result *result, duckdb_arrow_ap
 	auto options = result_data.result->client_properties;
 	options.uuid_as_binary_array = true;
 	std::unordered_map<idx_t, const duckdb::shared_ptr<duckdb::ArrowTypeExtensionData>> extension_type_cast;
-	if (!result_data.result->types.empty() &&
-		result_data.result->client_properties.client_context != nullptr &&
-		result_data.result->client_properties.client_context->db != nullptr) {
-		extension_type_cast = duckdb::ArrowTypeExtensionData::GetExtensionTypes(
-			*result_data.result->client_properties.client_context, result_data.result->types);
-	}
 	auto &materialized = reinterpret_cast<duckdb::MaterializedQueryResult &>(*result_data.result);
 	auto &collection = materialized.Collection();
 	auto chunk_count = collection.ChunkCount();
@@ -139,13 +133,6 @@ duckdb_state duckdb_result_to_arrow(duckdb_result *result, duckdb_arrow_array *o
 	properties.uuid_as_binary_array = true;
 
 	std::unordered_map<idx_t, const duckdb::shared_ptr<duckdb::ArrowTypeExtensionData>> extension_type_cast;
-	if (!result_data.result->types.empty() &&
-		result_data.result->client_properties.client_context != nullptr &&
-		result_data.result->client_properties.client_context->db != nullptr) {
-		extension_type_cast = duckdb::ArrowTypeExtensionData::GetExtensionTypes(
-			*result_data.result->client_properties.client_context, result_data.result->types);
-	}
-
 	// The Arrow appender std::moves the type vector, so we need to make a copy
 	duckdb::vector<LogicalType> types;
 	for (idx_t i = 0; i < materialized.ColumnCount(); i++) {
@@ -197,13 +184,6 @@ duckdb_state duckdb_result_chunk_arrow_array(duckdb_result *result, duckdb_data_
 	}
 
 	std::unordered_map<idx_t, const duckdb::shared_ptr<duckdb::ArrowTypeExtensionData>> extension_type_cast;
-	if (!result_data.result->types.empty() &&
-		result_data.result->client_properties.client_context != nullptr &&
-		result_data.result->client_properties.client_context->db != nullptr) {
-		extension_type_cast = duckdb::ArrowTypeExtensionData::GetExtensionTypes(
-			*result_data.result->client_properties.client_context, result_data.result->types);
-	}
-
 	auto options = result_data.result->client_properties;
 	// We have to clone this because ToArrowArray moves the options causing the original to be zeroed out
 	auto properties = duckdb::ClientProperties(options);
@@ -211,7 +191,6 @@ duckdb_state duckdb_result_chunk_arrow_array(duckdb_result *result, duckdb_data_
 
 	auto types = dchunk->GetTypes();
 
-	// ArrowConverter::ToArrowArray(*dchunk, reinterpret_cast<ArrowArray *>(*out_array), properties, extension_type_cast);
 	ArrowAppender appender(types, STANDARD_VECTOR_SIZE, properties, extension_type_cast);
 	appender.Append(*dchunk, 0, dchunk->size(), dchunk->size());
 
@@ -255,13 +234,6 @@ duckdb_state duckdb_result_get_chuck_as_arrow(duckdb_result *result, idx_t chunk
 	}
 
 	std::unordered_map<idx_t, const duckdb::shared_ptr<duckdb::ArrowTypeExtensionData>> extension_type_cast;
-	if (!result_data.result->types.empty() &&
-		result_data.result->client_properties.client_context != nullptr &&
-		result_data.result->client_properties.client_context->db != nullptr) {
-		extension_type_cast = duckdb::ArrowTypeExtensionData::GetExtensionTypes(
-			*result_data.result->client_properties.client_context, result_data.result->types);
-	}
-
 	auto chunk = duckdb::make_uniq<duckdb::DataChunk>();
 	chunk->Initialize(duckdb::Allocator::DefaultAllocator(), collection.Types());
 	collection.FetchChunk(chunk_index, *chunk);
