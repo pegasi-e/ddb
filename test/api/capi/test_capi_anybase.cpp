@@ -1,5 +1,3 @@
-#include <unistd.h>
-
 #include "capi_tester.hpp"
 #include "duckdb/common/types/data_chunk.hpp"
 #include "duckdb.h"
