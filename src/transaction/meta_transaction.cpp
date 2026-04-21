@@ -252,12 +252,17 @@ MetaTransaction::MetaTransaction(ClientContext &context_p, timestamp_t start_tim
 
 }
 
-uint64_t MetaTransaction::GetSnapshotId(optional_ptr<AttachedDatabase> db) {
+string MetaTransaction::GetSnapshotId(optional_ptr<AttachedDatabase> db) {
 	auto &transaction_manager = db->GetTransactionManager();
 	return transaction_manager.GetSnapshotId(context);
 }
 
-uint64_t MetaTransaction::CheckpointAndGetSnapshotId(optional_ptr<AttachedDatabase> db) {
+void MetaTransaction::SetSnapshotId(optional_ptr<AttachedDatabase> db, timestamp_t timestamp, idx_t sequence) {
+	auto &transaction_manager = db->GetTransactionManager();
+	transaction_manager.SetSnapshotId(timestamp, sequence);
+}
+
+string MetaTransaction::CheckpointAndGetSnapshotId(optional_ptr<AttachedDatabase> db) {
 	auto &transaction_manager = db->GetTransactionManager();
 	return transaction_manager.CheckpointAndGetSnapshotId(context);
 }

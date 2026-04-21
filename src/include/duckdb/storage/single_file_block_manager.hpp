@@ -200,9 +200,10 @@ private:
 
 // start Anybase changes
 public:
-	uint64_t GetSnapshotId();
-	unique_ptr<FileHandle>& GetFileHandle();
-	unique_ptr<FileHandle> CloneEmptyDatabase();
+	string GetSnapshotId();
+	void SetSnapshotId(timestamp_t timestamp, idx_t sequence);
+	int64_t hlc_timestamp = 0;
+	idx_t hlc_sequence = 0;
 // end Anybase changes
 };
 } // namespace duckdb

@@ -184,11 +184,15 @@ void Connection::Merge(TableDescription &description, DataChunk &chunk, optional
 	context->Merge(description, chunk, column_ids);
 }
 
-uint64_t Connection::GetSnapshotId() {
+string Connection::GetSnapshotId() {
 	return context->GetSnapshotId();
 }
 
-uint64_t Connection::CheckpointAndGetSnapshotId() {
+void Connection::SetSnapshotId(const char *attached_database, timestamp_t timestamp, idx_t sequence) {
+	context->SetSnapshotId(attached_database, timestamp, sequence);
+}
+
+string Connection::CheckpointAndGetSnapshotId() {
 	return context->CheckpointAndGetSnapshotId();
 }
 // end Anybase changes

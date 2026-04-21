@@ -103,10 +103,11 @@ public:
 	transaction_t global_transaction_id,
 	timestamp_t meta_start,
 	transaction_t meta_transaction_id);
-	uint64_t GetSnapshotId(optional_ptr<AttachedDatabase> db);
-	uint64_t CheckpointAndGetSnapshotId(optional_ptr<AttachedDatabase> db);
-	timestamp_t meta_start_timestamp;
-	transaction_t meta_global_transaction_id;
+	string GetSnapshotId(optional_ptr<AttachedDatabase> db);
+	string CheckpointAndGetSnapshotId(optional_ptr<AttachedDatabase> db);
+	void SetSnapshotId(optional_ptr<AttachedDatabase> db, timestamp_t timestamp, idx_t sequence);
+	timestamp_t meta_start_timestamp = timestamp_t(0);
+	transaction_t meta_global_transaction_id = 0;
 // end Anybase changes
 };
 

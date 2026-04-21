@@ -116,7 +116,7 @@ void TransactionContext::SetActiveQuery(transaction_t query_number) {
 }
 
 // start Anybase changes
-uint64_t TransactionContext::GetSnapshotId() {
+string TransactionContext::GetSnapshotId() {
 	if (!current_transaction) {
 		throw TransactionException("failed to commit: no transaction active");
 	}
@@ -127,7 +127,22 @@ uint64_t TransactionContext::GetSnapshotId() {
 	return current_transaction->GetSnapshotId(db);
 }
 
-uint64_t TransactionContext::CheckpointAndGetSnapshotId() {
+void TransactionContext::SetSnapshotId(const char *attached_name, timestamp_t timestamp, idx_t sequence) {
+	if (!current_transaction) {
+		throw TransactionException("failed to commit: no transaction active");
+	}
+
+	auto &db_manager = DatabaseManager::Get(context);
+	auto db_name = DatabaseManager::GetDefaultDatabase(context);
+	if (attached_name != nullptr) {
+		db_name = string(attached_name);
+	}
+	auto db = db_manager.GetDatabase(context, db_name);
+
+	return current_transaction->SetSnapshotId(db, timestamp, sequence);
+}
+
+string TransactionContext::CheckpointAndGetSnapshotId() {
 	if (!current_transaction) {
 		throw TransactionException("failed to commit: no transaction active");
 	}

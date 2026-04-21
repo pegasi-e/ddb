@@ -526,12 +526,20 @@ BlockManager &SingleFileStorageManager::GetBlockManager() {
 }
 
 // start Anybase changes
-uint64_t SingleFileStorageManager::GetSnapshotId() {
+string SingleFileStorageManager::GetSnapshotId() {
 	if (InMemory() || read_only) {
-		return 0;
+		return "0:0";
 	}
 	return dynamic_cast<SingleFileBlockManager *>(block_manager.get())->GetSnapshotId();
 }
+
+void SingleFileStorageManager::SetSnapshotId(timestamp_t timestamp, idx_t sequence) {
+	if (InMemory() || read_only) {
+		return;
+	}
+	dynamic_cast<SingleFileBlockManager *>(block_manager.get())->SetSnapshotId(timestamp, sequence);
+}
+
 // end Anybase changes
 
 } // namespace duckdb

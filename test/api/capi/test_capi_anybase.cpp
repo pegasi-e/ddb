@@ -1,3 +1,5 @@
+#include <unistd.h>
+
 #include "capi_tester.hpp"
 #include "duckdb/common/types/data_chunk.hpp"
 #include "duckdb.h"
@@ -385,6 +387,55 @@ TEST_CASE("Convert DuckDBResult to Arrow Array in C API", "[cAnybaseApi]") {
 	duckdb_close(&db);
 }
 
+// This test requires physical storage which is hard to do cross-platform with C++ 11.  Keeping commented out for test reference
+// TEST_CASE("Snapshot header tests", "[cAnybaseApi]") {
+// 	duckdb_database db;
+// 	duckdb_connection con;
+//
+// 	std::remove("<path>/header-test.db");
+// 	auto exists = access("<path>/baseHeaderTest.db", 0) != -1;
+//
+// 	REQUIRE(duckdb_open("<path>/baseHeaderTest.db", &db) != DuckDBError);
+// 	REQUIRE(duckdb_connect(db, &con) != DuckDBError);
+//
+// 	auto id = "0:0";
+// 	if (!exists) {
+// 		duckdb_begin_transaction(con, 1234, 1, nullptr);
+// 		REQUIRE(duckdb_query(con, "CREATE TABLE test(i INTEGER);", nullptr) != DuckDBError);
+// 		REQUIRE(duckdb_query(con, "Insert INTO test VALUES (1);", nullptr) != DuckDBError);
+// 		REQUIRE(duckdb_query(con, "Insert INTO test VALUES (2);", nullptr) != DuckDBError);
+// 		REQUIRE(duckdb_query(con, "Insert INTO test VALUES (4);", nullptr) != DuckDBError);
+// 		REQUIRE(duckdb_query(con, "COMMIT;", nullptr) != DuckDBError);
+// 		id = duckdb_checkpoint_and_get_snapshot_id(con);
+// 		REQUIRE(strcmp(id, "1234:1") == 0);
+// 		delete[] id;
+// 	} else {
+// 		id = duckdb_get_snapshot_id(con);
+// 		REQUIRE(strcmp(id, "1234:1") == 0);
+// 		delete[] id;
+// 	}
+// 	REQUIRE((duckdb_query(con, "ATTACH '<path>/header-test.db' as aClone", nullptr) != DuckDBError));
+// 	REQUIRE((duckdb_query(con, "COPY FROM DATABASE baseHeaderTest TO aClone", nullptr) != DuckDBError));
+// 	duckdb_set_snapshot_id(con, "aClone", 1234, 1);
+// 	REQUIRE((duckdb_query(con, "DETACH aClone", nullptr) != DuckDBError));
+//
+// 	duckdb_disconnect(&con);
+// 	duckdb_close(&db);
+//
+// 	REQUIRE(duckdb_open("<path>/header-test.db", &db) != DuckDBError);
+// 	REQUIRE(duckdb_connect(db, &con) != DuckDBError);
+// 	id = duckdb_get_snapshot_id(con);
+// 	REQUIRE(strcmp(id, "1234:1") == 0);
+// 	delete[] id;
+//
+//
+// 	std::remove("<path>/header-test.db");
+// 	// std::remove("<path>/baseHeaderTest.db");
+//
+// 	duckdb_disconnect(&con);
+// 	duckdb_close(&db);
+// }
+
 TEST_CASE("Convert DuckDB Chunks to Arrow Array in C API", "[cAnybaseApi]") {
 	duckdb_database db;
 	duckdb_connection con;
@@ -553,6 +604,49 @@ TEST_CASE("Test DataChunk C API reference", "[cAnybaseApi]") {
 	duckdb_destroy_logical_type(&types[0]);
 	duckdb_destroy_logical_type(&types[1]);
     printf("Test DataChunk C API reference passed\n");
+}
+
+TEST_CASE("Test MergeDataChunk in C API", "[cAnybaseApi]") {
+	CAPITester tester;
+	REQUIRE(tester.OpenDatabase(nullptr));
+	REQUIRE(duckdb_vector_size() == STANDARD_VECTOR_SIZE);
+
+	tester.Query("CREATE TABLE test(i INT PRIMARY KEY, j TIMESTAMP_MS);");
+	tester.Query("CREATE TABLE test2(i INT PRIMARY KEY, j TIMESTAMPTZ);");
+	tester.Query("INSERT INTO test2 VALUES (1, '1992-09-20 12:30:00.123456789+01:00');");
+	auto result = tester.Query("SELECT * FROM test2");
+
+	auto *arrow_array = new ArrowArray();
+
+	REQUIRE(duckdb_result_to_arrow(&result->InternalResult(), (duckdb_arrow_array *)&arrow_array) == DuckDBSuccess);
+	REQUIRE(arrow_array->length == 1);
+
+	duckdb_logical_type types[2];
+	types[0] = duckdb_create_logical_type(DUCKDB_TYPE_INTEGER);
+	types[1] = duckdb_create_logical_type(DUCKDB_TYPE_TIMESTAMP_MS);
+	const char *names[2] = {strdup("i"), strdup("j")};
+
+	duckdb_appender appender;
+	auto status = duckdb_merger_create(tester.connection, nullptr, "test", &appender);
+	REQUIRE(status == DuckDBSuccess);
+	duckdb_appender_add_column(appender, "i");
+	duckdb_appender_add_column(appender, "j");
+
+	duckdb_arrow_options arrow_options;
+	duckdb_connection_get_arrow_options(tester.connection, &arrow_options);
+	ArrowSchema arrow_schema;
+	duckdb_to_arrow_schema(arrow_options, types, names, 2, &arrow_schema);
+	duckdb_destroy_arrow_options(&arrow_options);
+
+	duckdb_append_arrow(tester.connection, appender, arrow_array, &arrow_schema);
+	duckdb_appender_close(appender);
+
+	auto r2 = tester.Query("SELECT * FROM test");
+	REQUIRE(r2.get()->row_count() == 1);
+
+	duckdb_appender_destroy(&appender);
+	duckdb_destroy_logical_type(&types[0]);
+	duckdb_destroy_logical_type(&types[1]);
 }
 
 // TEST_CASE("Test MergeDataChunk in C API", "[cAnybaseApi]") {

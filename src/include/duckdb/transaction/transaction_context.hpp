@@ -66,8 +66,9 @@ private:
 
 // start Anybase changes
 public:
-	uint64_t GetSnapshotId();
-	uint64_t CheckpointAndGetSnapshotId();
+	string GetSnapshotId();
+	void SetSnapshotId(const char *attached_name, timestamp_t timestamp, idx_t sequence);
+	string CheckpointAndGetSnapshotId();
 	void BeginTransaction(timestamp_t timestamp, transaction_t sequenceNumber);
 // end Anybase changes
 };
