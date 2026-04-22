@@ -5167,7 +5167,7 @@ DUCKDB_C_API duckdb_error_data duckdb_expression_fold(duckdb_client_context cont
 DUCKDB_C_API uint64_t duckdb_get_hlc_timestamp();
 DUCKDB_C_API void duckdb_set_hlc_timestamp(uint64_t ts);
 DUCKDB_C_API const char * duckdb_get_snapshot_id(duckdb_connection con);
-DUCKDB_C_API void duckdb_set_snapshot_id(duckdb_connection connection, const char *attached_database, int64_t timestamp, uint64_t sequence);
+DUCKDB_C_API void duckdb_set_snapshot_id(duckdb_connection connection, const char *attached_database, int64_t timestamp, uint64_t sequence, uint64_t iteration);
 DUCKDB_C_API const char * duckdb_checkpoint_and_get_snapshot_id(duckdb_connection con);
 DUCKDB_C_API idx_t duckdb_get_table_version(duckdb_connection connection, const char *schema, const char *table, char **error);
 DUCKDB_C_API idx_t duckdb_get_column_version(duckdb_connection connection, const char *schema, const char *table, const char *column, char **error);

@@ -127,7 +127,7 @@ string TransactionContext::GetSnapshotId() {
 	return current_transaction->GetSnapshotId(db);
 }
 
-void TransactionContext::SetSnapshotId(const char *attached_name, timestamp_t timestamp, idx_t sequence) {
+void TransactionContext::SetSnapshotId(const char *attached_name, timestamp_t timestamp, idx_t sequence, idx_t iteration) {
 	if (!current_transaction) {
 		throw TransactionException("failed to commit: no transaction active");
 	}
@@ -139,7 +139,7 @@ void TransactionContext::SetSnapshotId(const char *attached_name, timestamp_t ti
 	}
 	auto db = db_manager.GetDatabase(context, db_name);
 
-	return current_transaction->SetSnapshotId(db, timestamp, sequence);
+	return current_transaction->SetSnapshotId(db, timestamp, sequence, iteration);
 }
 
 string TransactionContext::CheckpointAndGetSnapshotId() {

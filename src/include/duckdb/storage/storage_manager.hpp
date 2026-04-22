@@ -174,7 +174,7 @@ public:
 
 	// start Anybase changes
 	virtual string GetSnapshotId() = 0;
-	virtual void SetSnapshotId(timestamp_t timestamp, idx_t sequence) = 0;
+	virtual void SetSnapshotId(timestamp_t timestamp, idx_t sequence, idx_t iteration) = 0;
 	// end Anybase changes
 };
 
@@ -206,7 +206,7 @@ protected:
 public:
 // start Anybase changes
 	string GetSnapshotId() override;
-	void SetSnapshotId(timestamp_t timestamp, idx_t sequence) override;
+	void SetSnapshotId(timestamp_t timestamp, idx_t sequence, idx_t iteration) override;
 // end Anybase changes
 
 };

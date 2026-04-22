@@ -34,10 +34,10 @@ const char * duckdb_get_snapshot_id(duckdb_connection connection)
   return strdup(conn->GetSnapshotId().c_str());
 }
 
-void duckdb_set_snapshot_id(duckdb_connection connection, const char *attached_database, int64_t timestamp, uint64_t sequence)
+void duckdb_set_snapshot_id(duckdb_connection connection, const char *attached_database, int64_t timestamp, uint64_t sequence, uint64_t iteration)
 {
 	Connection *conn = reinterpret_cast<Connection *>(connection);
-	conn->SetSnapshotId(attached_database, duckdb::timestamp_t(timestamp), sequence);
+	conn->SetSnapshotId(attached_database, duckdb::timestamp_t(timestamp), sequence, iteration);
 }
 
 const char * duckdb_checkpoint_and_get_snapshot_id(duckdb_connection connection)

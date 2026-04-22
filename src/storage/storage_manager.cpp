@@ -533,11 +533,11 @@ string SingleFileStorageManager::GetSnapshotId() {
 	return dynamic_cast<SingleFileBlockManager *>(block_manager.get())->GetSnapshotId();
 }
 
-void SingleFileStorageManager::SetSnapshotId(timestamp_t timestamp, idx_t sequence) {
+void SingleFileStorageManager::SetSnapshotId(timestamp_t timestamp, idx_t sequence, idx_t iteration) {
 	if (InMemory() || read_only) {
 		return;
 	}
-	dynamic_cast<SingleFileBlockManager *>(block_manager.get())->SetSnapshotId(timestamp, sequence);
+	dynamic_cast<SingleFileBlockManager *>(block_manager.get())->SetSnapshotId(timestamp, sequence, iteration);
 }
 
 // end Anybase changes

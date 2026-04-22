@@ -188,8 +188,8 @@ string Connection::GetSnapshotId() {
 	return context->GetSnapshotId();
 }
 
-void Connection::SetSnapshotId(const char *attached_database, timestamp_t timestamp, idx_t sequence) {
-	context->SetSnapshotId(attached_database, timestamp, sequence);
+void Connection::SetSnapshotId(const char *attached_database, timestamp_t timestamp, idx_t sequence, idx_t iteration) {
+	context->SetSnapshotId(attached_database, timestamp, sequence, iteration);
 }
 
 string Connection::CheckpointAndGetSnapshotId() {

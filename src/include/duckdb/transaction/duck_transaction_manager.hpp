@@ -141,7 +141,7 @@ protected:
 public:
 	string GetSnapshotId(ClientContext &context) override;
 	string CheckpointAndGetSnapshotId(ClientContext &context) override;
-	void SetSnapshotId(timestamp_t timestamp, idx_t sequence) override;
+	void SetSnapshotId(timestamp_t timestamp, idx_t sequence, idx_t iteration) override;
 	timestamp_t GetLastHlcTimestamp() override;
 	idx_t GetLastHlcSequence() override;
 	atomic<timestamp_t> last_hlc_timestamp = {timestamp_t(0)};

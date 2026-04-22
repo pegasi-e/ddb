@@ -563,9 +563,9 @@ string DuckTransactionManager::CheckpointAndGetSnapshotId(ClientContext &context
 	return storage_manager.GetSnapshotId();
 }
 
-void DuckTransactionManager::SetSnapshotId(timestamp_t timestamp, idx_t sequence) {
+void DuckTransactionManager::SetSnapshotId(timestamp_t timestamp, idx_t sequence, idx_t iteration) {
 	auto &storage_manager = db.GetStorageManager();
-	storage_manager.SetSnapshotId(timestamp, sequence);
+	storage_manager.SetSnapshotId(timestamp, sequence, iteration);
 }
 
 timestamp_t DuckTransactionManager::GetLastHlcTimestamp() {

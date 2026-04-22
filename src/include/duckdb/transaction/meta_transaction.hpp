@@ -105,7 +105,7 @@ public:
 	transaction_t meta_transaction_id);
 	string GetSnapshotId(optional_ptr<AttachedDatabase> db);
 	string CheckpointAndGetSnapshotId(optional_ptr<AttachedDatabase> db);
-	void SetSnapshotId(optional_ptr<AttachedDatabase> db, timestamp_t timestamp, idx_t sequence);
+	void SetSnapshotId(optional_ptr<AttachedDatabase> db, timestamp_t timestamp, idx_t sequence, idx_t iteration);
 	timestamp_t meta_start_timestamp = timestamp_t(0);
 	transaction_t meta_global_transaction_id = 0;
 // end Anybase changes

@@ -58,7 +58,7 @@ protected:
 public:
 	virtual string GetSnapshotId(ClientContext &context) = 0;
 	virtual string CheckpointAndGetSnapshotId(ClientContext &context) = 0;
-	virtual void SetSnapshotId(timestamp_t timestamp, idx_t sequence) = 0;
+	virtual void SetSnapshotId(timestamp_t timestamp, idx_t sequence, idx_t iteration) = 0;
 	virtual timestamp_t GetLastHlcTimestamp() = 0;
 	virtual idx_t GetLastHlcSequence() = 0;
 // end Anybase changes

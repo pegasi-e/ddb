@@ -1607,9 +1607,9 @@ string ClientContext::GetSnapshotId() {
 	return result;
 }
 
-void ClientContext::SetSnapshotId(const char *attached_database, timestamp_t timestamp, idx_t sequence) {
+void ClientContext::SetSnapshotId(const char *attached_database, timestamp_t timestamp, idx_t sequence, idx_t iteration) {
 	RunFunctionInTransaction([&]() {
-		transaction.SetSnapshotId(attached_database, timestamp, sequence);
+		transaction.SetSnapshotId(attached_database, timestamp, sequence, iteration);
 	}, false);
 }
 

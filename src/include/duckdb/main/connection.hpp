@@ -126,7 +126,7 @@ public:
 	DUCKDB_API unique_ptr<TableDescription> TableInfo(const string &schema_name, const string &table_name, const optional_ptr<const vector<string>> column_names = nullptr);
 	DUCKDB_API void Merge(TableDescription &description, DataChunk &chunk, optional_ptr<const vector<LogicalIndex>> column_ids);
 	DUCKDB_API string GetSnapshotId();
-	DUCKDB_API void SetSnapshotId(const char *attached_database, timestamp_t timestamp, idx_t sequence);
+	DUCKDB_API void SetSnapshotId(const char *attached_database, timestamp_t timestamp, idx_t sequence, idx_t iteration);
 	DUCKDB_API string CheckpointAndGetSnapshotId();
 	// end Anybase changes
 

@@ -1194,13 +1194,14 @@ void SingleFileBlockManager::TrimFreeBlocks() {
 // start Anybase changes
 string SingleFileBlockManager::GetSnapshotId() {
 	std::ostringstream oss;
-	oss << hlc_timestamp << ":" << hlc_sequence;
+	oss << hlc_timestamp << ":" << hlc_sequence << ":" << iteration_count;
 	return oss.str();
 }
 
-void SingleFileBlockManager::SetSnapshotId(timestamp_t timestamp, idx_t sequence) {
+void SingleFileBlockManager::SetSnapshotId(timestamp_t timestamp, idx_t sequence, idx_t iteration) {
 	hlc_timestamp = timestamp.value;
 	hlc_sequence = sequence;
+	iteration_count = iteration;
 }
 // end Anybase changes
 
