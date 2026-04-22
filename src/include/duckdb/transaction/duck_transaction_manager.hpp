@@ -136,17 +136,6 @@ private:
 protected:
 	virtual void OnCommitCheckpointDecision(const CheckpointDecision &decision, DuckTransaction &transaction) {
 	}
-
-// start Anybase changes
-public:
-	string GetSnapshotId(ClientContext &context) override;
-	string CheckpointAndGetSnapshotId(ClientContext &context) override;
-	void SetSnapshotId(timestamp_t timestamp, idx_t sequence, idx_t iteration) override;
-	timestamp_t GetLastHlcTimestamp() override;
-	idx_t GetLastHlcSequence() override;
-	atomic<timestamp_t> last_hlc_timestamp = {timestamp_t(0)};
-	atomic<idx_t> last_hlc_sequence = {0};
-// end Anybase changes
 };
 
 } // namespace duckdb

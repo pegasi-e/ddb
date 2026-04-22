@@ -305,12 +305,6 @@ ErrorData DuckTransactionManager::CommitTransaction(ClientContext &context, Tran
 		if (transaction.catalog_version >= TRANSACTION_ID_START) {
 			transaction.catalog_version = ++last_committed_version;
 		}
-// start Anybase changes
-		if (transaction.meta_startTime.value > 0) {
-			last_hlc_timestamp = transaction.meta_startTime;
-			last_hlc_sequence = transaction.meta_sequenceNumber;
-		}
-// end Anybase changes
 	}
 	OnCommitCheckpointDecision(checkpoint_decision, transaction);
 
@@ -550,30 +544,4 @@ void DuckTransactionManager::PushAttach(Transaction &transaction_p, AttachedData
 	transaction.catalog_version = ++last_uncommitted_catalog_version;
 	transaction.PushAttach(attached_db);
 }
-
-// start Anybase changes
-string DuckTransactionManager::GetSnapshotId(ClientContext &context) {
-	auto &storage_manager = db.GetStorageManager();
-	return storage_manager.GetSnapshotId();
-}
-
-string DuckTransactionManager::CheckpointAndGetSnapshotId(ClientContext &context) {
-	Checkpoint(context, true);
-	auto &storage_manager = db.GetStorageManager();
-	return storage_manager.GetSnapshotId();
-}
-
-void DuckTransactionManager::SetSnapshotId(timestamp_t timestamp, idx_t sequence, idx_t iteration) {
-	auto &storage_manager = db.GetStorageManager();
-	storage_manager.SetSnapshotId(timestamp, sequence, iteration);
-}
-
-timestamp_t DuckTransactionManager::GetLastHlcTimestamp() {
-	return last_hlc_timestamp;
-}
-
-idx_t DuckTransactionManager::GetLastHlcSequence() {
-	return last_hlc_sequence;
-}
-// end Anybase changes
 } // namespace duckdb

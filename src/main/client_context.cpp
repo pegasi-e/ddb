@@ -1598,30 +1598,6 @@ void ClientContext::Merge(TableDescription &description, ColumnDataCollection &c
 	});
 }
 
-string ClientContext::GetSnapshotId() {
-	string result;
-	RunFunctionInTransaction([&]() {
-	result = transaction.GetSnapshotId();
-	}, false);
-
-	return result;
-}
-
-void ClientContext::SetSnapshotId(const char *attached_database, timestamp_t timestamp, idx_t sequence, idx_t iteration) {
-	RunFunctionInTransaction([&]() {
-		transaction.SetSnapshotId(attached_database, timestamp, sequence, iteration);
-	}, false);
-}
-
-string ClientContext::CheckpointAndGetSnapshotId() {
-	string result;
-	RunFunctionInTransaction([&]() {
-	result = transaction.CheckpointAndGetSnapshotId();
-	}, false);
-
-	return result;
-}
-
 void ClientContext::SetActiveResult(ClientContextLock &lock, BaseQueryResult &result) {
 	if (!active_query) {
 		return;

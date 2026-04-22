@@ -197,13 +197,6 @@ void DatabaseHeader::Write(WriteStream &ser) {
 	ser.Write<idx_t>(block_alloc_size);
 	ser.Write<idx_t>(vector_size);
 	ser.Write<idx_t>(serialization_compatibility);
-//start Anybase changes
-	if (meta_block == ANYBASE_HLC_BYTES) {
-		ser.Write<int64_t>(timestamp);
-		ser.Write<idx_t>(sequence);
-		ser.Write<idx_t>(original_meta_block);
-	}
-//end Anybase changes
 }
 
 DatabaseHeader DatabaseHeader::Read(const MainHeader &main_header, ReadStream &source) {
@@ -233,22 +226,6 @@ DatabaseHeader DatabaseHeader::Read(const MainHeader &main_header, ReadStream &s
 	// Default to 1 for version 64, else read from file.
 	header.serialization_compatibility = main_header.version_number == 64 ? 1 : source.Read<idx_t>();
 
-//start Anybase changes
-	// I hate it, and it's ugly, but since DDB doesn't encode the compatibility into the headers, it's the safest option
-	if (header.meta_block == ANYBASE_HLC_BYTES) {
-		if (main_header.version_number == 64) {
-			source.Read<idx_t>();
-		}
-		header.timestamp = source.Read<int64_t>();
-		header.sequence = source.Read<idx_t>();
-		header.meta_block = source.Read<idx_t>();
-		header.original_meta_block = header.meta_block;
-	} else {
-		header.timestamp = 0;
-		header.sequence = 0;
-		header.original_meta_block = header.meta_block;
-	}
-//end Anybase changes
 	return header;
 }
 
@@ -716,11 +693,6 @@ void SingleFileBlockManager::Initialize(const DatabaseHeader &header, const opti
 	}
 
 	SetBlockAllocSize(header.block_alloc_size);
-
-//start Anybase changes
-	hlc_timestamp = header.timestamp;
-	hlc_sequence = header.sequence;
-//end Anybase changes
 }
 
 void SingleFileBlockManager::LoadFreeList(QueryContext context) {
@@ -1139,19 +1111,6 @@ void SingleFileBlockManager::WriteHeader(QueryContext context, DatabaseHeader he
 		header_buffer.Clear();
 	}
 
-// start Anybase changes
-	const auto last_ts = db.GetTransactionManager().GetLastHlcTimestamp().value;
-	if (last_ts > 0) {
-		header.timestamp = hlc_timestamp = db.GetTransactionManager().GetLastHlcTimestamp().value;
-		header.sequence = hlc_sequence = db.GetTransactionManager().GetLastHlcSequence();
-	} else {
-		header.timestamp = hlc_timestamp;
-		header.sequence = hlc_sequence;
-	}
-	header.original_meta_block = header.meta_block;
-	header.meta_block = DatabaseHeader::ANYBASE_HLC_BYTES;
-// end Anybase changes
-
 	// set the header inside the buffer
 	MemoryStream serializer(Allocator::Get(db));
 	header.Write(serializer);
@@ -1190,19 +1149,5 @@ void SingleFileBlockManager::TrimFreeBlocks() {
 	}
 	newly_freed_list.clear();
 }
-
-// start Anybase changes
-string SingleFileBlockManager::GetSnapshotId() {
-	std::ostringstream oss;
-	oss << hlc_timestamp << ":" << hlc_sequence << ":" << iteration_count;
-	return oss.str();
-}
-
-void SingleFileBlockManager::SetSnapshotId(timestamp_t timestamp, idx_t sequence, idx_t iteration) {
-	hlc_timestamp = timestamp.value;
-	hlc_sequence = sequence;
-	iteration_count = iteration;
-}
-// end Anybase changes
 
 } // namespace duckdb

@@ -251,20 +251,5 @@ MetaTransaction::MetaTransaction(ClientContext &context_p, timestamp_t start_tim
 		 is_read_only(false), meta_start_timestamp(meta_start), meta_global_transaction_id(meta_transaction_id) {
 
 }
-
-string MetaTransaction::GetSnapshotId(optional_ptr<AttachedDatabase> db) {
-	auto &transaction_manager = db->GetTransactionManager();
-	return transaction_manager.GetSnapshotId(context);
-}
-
-void MetaTransaction::SetSnapshotId(optional_ptr<AttachedDatabase> db, timestamp_t timestamp, idx_t sequence, idx_t iteration) {
-	auto &transaction_manager = db->GetTransactionManager();
-	transaction_manager.SetSnapshotId(timestamp, sequence, iteration);
-}
-
-string MetaTransaction::CheckpointAndGetSnapshotId(optional_ptr<AttachedDatabase> db) {
-	auto &transaction_manager = db->GetTransactionManager();
-	return transaction_manager.CheckpointAndGetSnapshotId(context);
-}
 // end Anybase changes
 } // namespace duckdb

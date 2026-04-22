@@ -197,13 +197,5 @@ private:
 	StorageManagerOptions options;
 	//! Lock for performing various operations in the single file block manager
 	mutex block_lock;
-
-// start Anybase changes
-public:
-	string GetSnapshotId();
-	void SetSnapshotId(timestamp_t timestamp, idx_t sequence, idx_t iteration);
-	int64_t hlc_timestamp = 0;
-	idx_t hlc_sequence = 0;
-// end Anybase changes
 };
 } // namespace duckdb
