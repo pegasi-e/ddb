@@ -135,6 +135,95 @@ TEST_CASE("Ensure calling begin called twice by two different interfaces causes 
 	duckdb_close(&db);
 }
 
+TEST_CASE("Append C-Arrow Table", "[cAnybaseApi]") {
+	duckdb_database db;
+	duckdb_connection con;
+	duckdb_result result;
+	duckdb_result append_result;
+	auto *arrow_array = new ArrowArray();
+	ArrowSchema arrow_schema;
+
+	REQUIRE(duckdb_open(nullptr, &db) != DuckDBError);
+	REQUIRE(duckdb_connect(db, &con) != DuckDBError);
+
+	REQUIRE(duckdb_query(con, "CREATE TABLE FOO(i INTEGER PRIMARY KEY, v INTEGER, x INTEGER);", nullptr) != DuckDBError);
+	REQUIRE(duckdb_query(con, "CREATE TABLE BAR(i INTEGER PRIMARY KEY, v INTEGER, x INTEGER);", nullptr) != DuckDBError);
+	REQUIRE(duckdb_query(con, "Insert INTO FOO VALUES (1, 5, 22), (2, 5, 22);", nullptr) != DuckDBError);
+
+	REQUIRE((duckdb_query(con, "BEGIN TRANSACTION", nullptr) != DuckDBError));
+	REQUIRE((duckdb_query(con, "SELECT * FROM FOO;", &result) != DuckDBError));
+
+	auto count = duckdb_result_chunk_count(result);
+	auto chunks = new duckdb_data_chunk[count];
+
+	for (auto i = 0UL; i < count; i++) {
+		chunks[i] = duckdb_result_get_chunk(result, i);
+	}
+
+	auto column_count = duckdb_data_chunk_get_column_count(chunks[0]);
+	auto *types = new duckdb_logical_type[column_count];
+
+	for (auto i = 0UL; i < column_count; i++) {
+		types[i] = duckdb_vector_get_column_type(duckdb_data_chunk_get_vector(chunks[0], i));
+	}
+
+	duckdb_arrow_options arrow_options;
+	duckdb_connection_get_arrow_options(con, &arrow_options);
+	const char *column_names[3];
+	column_names[0] = "i";
+	column_names[1] = "v";
+	column_names[2] = "x";
+
+	duckdb_appender appender;
+	duckdb_merger_create(con, nullptr, "BAR", &appender);
+	duckdb_appender_add_column(appender, "i");
+	duckdb_appender_add_column(appender, "v");
+	duckdb_appender_add_column(appender, "x");
+	REQUIRE(duckdb_data_chunks_to_arrow_array(result, chunks, count, (duckdb_arrow_array *)&arrow_array) == DuckDBSuccess);
+	REQUIRE(duckdb_to_arrow_schema(arrow_options, types, column_names, column_count, &arrow_schema) == nullptr);
+	REQUIRE(duckdb_append_arrow(con, appender, arrow_array, &arrow_schema) == nullptr);
+	REQUIRE(duckdb_appender_close(appender) == DuckDBSuccess);
+
+	REQUIRE((duckdb_query(con, "COMMIT", nullptr) != DuckDBError));
+	REQUIRE((duckdb_query(con, "FORCE CHECKPOINT", nullptr) != DuckDBError));
+
+	REQUIRE((duckdb_query(con, "SELECT * FROM BAR;", &append_result) != DuckDBError));
+
+	auto chunk = duckdb_result_get_chunk(append_result, 0);
+	REQUIRE(chunk != nullptr);
+	auto data_chunk = reinterpret_cast<duckdb::DataChunk *>(chunk);
+	REQUIRE(data_chunk->GetValue(0, 0) == 1);
+	REQUIRE(data_chunk->GetValue(1, 0) == 5);
+	REQUIRE(data_chunk->GetValue(2, 0) == 22);
+
+	REQUIRE(data_chunk->GetValue(0, 1) == 2);
+	REQUIRE(data_chunk->GetValue(1, 1) == 5);
+	REQUIRE(data_chunk->GetValue(2, 1) == 22);
+
+	REQUIRE(duckdb_appender_destroy(&appender) == DuckDBSuccess);
+	duckdb_destroy_arrow_options(&arrow_options);
+	duckdb_destroy_data_chunk(&chunk);
+	if (arrow_schema.release) {
+		arrow_schema.release(&arrow_schema);
+	}
+	if (arrow_array->release) {
+		arrow_array->release(arrow_array);
+	}
+	for (auto i = 0UL; i < column_count; i++) {
+		duckdb_destroy_logical_type(&types[i]);
+	}
+	delete[] types;
+	delete arrow_array;
+	for (auto i = 0UL; i < count; i++) {
+		duckdb_destroy_data_chunk(&chunks[i]);
+	}
+	delete [] chunks;
+	duckdb_destroy_result(&result);
+	duckdb_destroy_result(&append_result);
+	duckdb_disconnect(&con);
+	duckdb_close(&db);
+}
+
 // TEST_CASE("Test Update version isolation", "[cAnybaseApi]") {
 //
 // 	duckdb_database db;
@@ -286,7 +375,7 @@ TEST_CASE("Convert DuckDBResult to Arrow Array in C API", "[cAnybaseApi]") {
 	REQUIRE(duckdb_query(con, "Insert INTO test VALUES (1), (2);", NULL) != DuckDBError);
 	REQUIRE((duckdb_query(con, "SELECT * FROM test;", &result) != DuckDBError));
 
-	REQUIRE(duckdb_result_to_arrow(result, (duckdb_arrow_array *)&arrow_array) == DuckDBSuccess);
+	REQUIRE(duckdb_result_to_arrow(&result, (duckdb_arrow_array *)&arrow_array) == DuckDBSuccess);
 	REQUIRE(arrow_array->length == 2);
 
 	arrow_array->release(arrow_array);
@@ -295,6 +384,55 @@ TEST_CASE("Convert DuckDBResult to Arrow Array in C API", "[cAnybaseApi]") {
 	duckdb_disconnect(&con);
 	duckdb_close(&db);
 }
+
+// This test requires physical storage which is hard to do cross-platform with C++ 11.  Keeping commented out for test reference
+// TEST_CASE("Snapshot header tests", "[cAnybaseApi]") {
+// 	duckdb_database db;
+// 	duckdb_connection con;
+//
+// 	std::remove("<path>/header-test.db");
+// 	auto exists = access("<path>/baseHeaderTest.db", 0) != -1;
+//
+// 	REQUIRE(duckdb_open("<path>/baseHeaderTest.db", &db) != DuckDBError);
+// 	REQUIRE(duckdb_connect(db, &con) != DuckDBError);
+//
+// 	auto id = "0:0";
+// 	if (!exists) {
+// 		duckdb_begin_transaction(con, 1234, 1, nullptr);
+// 		REQUIRE(duckdb_query(con, "CREATE TABLE test(i INTEGER);", nullptr) != DuckDBError);
+// 		REQUIRE(duckdb_query(con, "Insert INTO test VALUES (1);", nullptr) != DuckDBError);
+// 		REQUIRE(duckdb_query(con, "Insert INTO test VALUES (2);", nullptr) != DuckDBError);
+// 		REQUIRE(duckdb_query(con, "Insert INTO test VALUES (4);", nullptr) != DuckDBError);
+// 		REQUIRE(duckdb_query(con, "COMMIT;", nullptr) != DuckDBError);
+// 		id = duckdb_checkpoint_and_get_snapshot_id(con);
+// 		REQUIRE(strcmp(id, "1234:1") == 0);
+// 		delete[] id;
+// 	} else {
+// 		id = duckdb_get_snapshot_id(con);
+// 		REQUIRE(strcmp(id, "1234:1") == 0);
+// 		delete[] id;
+// 	}
+// 	REQUIRE((duckdb_query(con, "ATTACH '<path>/header-test.db' as aClone", nullptr) != DuckDBError));
+// 	REQUIRE((duckdb_query(con, "COPY FROM DATABASE baseHeaderTest TO aClone", nullptr) != DuckDBError));
+// 	duckdb_set_snapshot_id(con, "aClone", 1234, 1);
+// 	REQUIRE((duckdb_query(con, "DETACH aClone", nullptr) != DuckDBError));
+//
+// 	duckdb_disconnect(&con);
+// 	duckdb_close(&db);
+//
+// 	REQUIRE(duckdb_open("<path>/header-test.db", &db) != DuckDBError);
+// 	REQUIRE(duckdb_connect(db, &con) != DuckDBError);
+// 	id = duckdb_get_snapshot_id(con);
+// 	REQUIRE(strcmp(id, "1234:1") == 0);
+// 	delete[] id;
+//
+//
+// 	std::remove("<path>/header-test.db");
+// 	// std::remove("<path>/baseHeaderTest.db");
+//
+// 	duckdb_disconnect(&con);
+// 	duckdb_close(&db);
+// }
 
 TEST_CASE("Convert DuckDB Chunks to Arrow Array in C API", "[cAnybaseApi]") {
 	duckdb_database db;
@@ -316,7 +454,7 @@ TEST_CASE("Convert DuckDB Chunks to Arrow Array in C API", "[cAnybaseApi]") {
 		chunks[i] = duckdb_result_get_chunk(result, i);
 	}
 
-	REQUIRE(duckdb_data_chunks_to_arrow_array(con, chunks, count, (duckdb_arrow_array *)&arrow_array) == DuckDBSuccess);
+	REQUIRE(duckdb_data_chunks_to_arrow_array(result, chunks, count, (duckdb_arrow_array *)&arrow_array) == DuckDBSuccess);
 	REQUIRE(arrow_array->length == 2);
 
 	arrow_array->release(arrow_array);
@@ -342,6 +480,52 @@ TEST_CASE("Convert DuckDB Chunk column to Arrow Array in C API", "[cAnybaseApi]"
 
 	REQUIRE(duckdb_query(con, "CREATE TABLE test(i INTEGER, s VARCHAR);", NULL) != DuckDBError);
 	REQUIRE(duckdb_query(con, "Insert INTO test VALUES (1, 'a'), (2, 'b');", NULL) != DuckDBError);
+	REQUIRE((duckdb_query(con, "SELECT * FROM test;", &result) != DuckDBError));
+
+	auto count = duckdb_result_chunk_count(result);
+	auto chunks = new duckdb_data_chunk[count];
+
+	for (auto i = 0UL; i < count; i++) {
+		chunks[i] = duckdb_result_get_chunk(result, i);
+	}
+
+	// Check column 0
+	REQUIRE(duckdb_data_chunk_column_to_arrow_array(con, chunks, count, 0, (duckdb_arrow_array *)&i_arrow_array) == DuckDBSuccess);
+	REQUIRE(i_arrow_array->length == 2);
+	REQUIRE(i_arrow_array->n_buffers == 1);
+	REQUIRE(i_arrow_array->n_children == 1);
+
+	// Check column 1
+	REQUIRE(duckdb_data_chunk_column_to_arrow_array(con, chunks, count, 1, (duckdb_arrow_array *)&s_arrow_array) == DuckDBSuccess);
+	REQUIRE(s_arrow_array->length == 2);
+	REQUIRE(s_arrow_array->n_buffers == 1);
+	REQUIRE(s_arrow_array->n_children == 1);
+
+	i_arrow_array->release(i_arrow_array);
+	s_arrow_array->release(s_arrow_array);
+	delete i_arrow_array;
+	delete s_arrow_array;
+	duckdb_destroy_result(&result); // segmentation failure happens here
+	duckdb_disconnect(&con);
+	duckdb_close(&db);
+	for (auto i = 0UL; i < count; i++) {
+		duckdb_destroy_data_chunk(&chunks[i]);
+	}
+	delete[] chunks;
+}
+
+TEST_CASE("Convert DuckDB UUID Chunk column to Arrow Array is 16 Byte Binary in C API", "[cAnybaseApi]") {
+	duckdb_database db;
+	duckdb_connection con;
+	duckdb_result result;
+	auto *i_arrow_array = new ArrowArray();
+	auto *s_arrow_array = new ArrowArray();
+
+	REQUIRE(duckdb_open(nullptr, &db) != DuckDBError);
+	REQUIRE(duckdb_connect(db, &con) != DuckDBError);
+
+	REQUIRE(duckdb_query(con, "CREATE TABLE test(i INTEGER, s UUID);", nullptr) != DuckDBError);
+	REQUIRE(duckdb_query(con, "Insert INTO test VALUES (1, '00000000-0000-0000-0000-000000000000'), (2, '00010203-0405-0607-0809-0a0b0c0d0e0f');", nullptr) != DuckDBError);
 	REQUIRE((duckdb_query(con, "SELECT * FROM test;", &result) != DuckDBError));
 
 	auto count = duckdb_result_chunk_count(result);
@@ -418,6 +602,49 @@ TEST_CASE("Test DataChunk C API reference", "[cAnybaseApi]") {
 	duckdb_destroy_logical_type(&types[0]);
 	duckdb_destroy_logical_type(&types[1]);
     printf("Test DataChunk C API reference passed\n");
+}
+
+TEST_CASE("Test MergeDataChunk in C API", "[cAnybaseApi]") {
+	CAPITester tester;
+	REQUIRE(tester.OpenDatabase(nullptr));
+	REQUIRE(duckdb_vector_size() == STANDARD_VECTOR_SIZE);
+
+	tester.Query("CREATE TABLE test(i INT PRIMARY KEY, j TIMESTAMP_MS);");
+	tester.Query("CREATE TABLE test2(i INT PRIMARY KEY, j TIMESTAMPTZ);");
+	tester.Query("INSERT INTO test2 VALUES (1, '1992-09-20 12:30:00.123456789+01:00');");
+	auto result = tester.Query("SELECT * FROM test2");
+
+	auto *arrow_array = new ArrowArray();
+
+	REQUIRE(duckdb_result_to_arrow(&result->InternalResult(), (duckdb_arrow_array *)&arrow_array) == DuckDBSuccess);
+	REQUIRE(arrow_array->length == 1);
+
+	duckdb_logical_type types[2];
+	types[0] = duckdb_create_logical_type(DUCKDB_TYPE_INTEGER);
+	types[1] = duckdb_create_logical_type(DUCKDB_TYPE_TIMESTAMP_MS);
+	const char *names[2] = {strdup("i"), strdup("j")};
+
+	duckdb_appender appender;
+	auto status = duckdb_merger_create(tester.connection, nullptr, "test", &appender);
+	REQUIRE(status == DuckDBSuccess);
+	duckdb_appender_add_column(appender, "i");
+	duckdb_appender_add_column(appender, "j");
+
+	duckdb_arrow_options arrow_options;
+	duckdb_connection_get_arrow_options(tester.connection, &arrow_options);
+	ArrowSchema arrow_schema;
+	duckdb_to_arrow_schema(arrow_options, types, names, 2, &arrow_schema);
+	duckdb_destroy_arrow_options(&arrow_options);
+
+	duckdb_append_arrow(tester.connection, appender, arrow_array, &arrow_schema);
+	duckdb_appender_close(appender);
+
+	auto r2 = tester.Query("SELECT * FROM test");
+	REQUIRE(r2.get()->row_count() == 1);
+
+	duckdb_appender_destroy(&appender);
+	duckdb_destroy_logical_type(&types[0]);
+	duckdb_destroy_logical_type(&types[1]);
 }
 
 // TEST_CASE("Test MergeDataChunk in C API", "[cAnybaseApi]") {

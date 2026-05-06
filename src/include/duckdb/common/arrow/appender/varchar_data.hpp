@@ -42,6 +42,20 @@ struct ArrowUUIDConverter {
 	}
 };
 
+// start Anybase changes
+struct ArrowUUIDBinaryConverter {
+	template <class SRC>
+	static idx_t GetLength(SRC input) {
+		return 16;
+	}
+
+	template <class SRC>
+	static void WriteData(data_ptr_t target, SRC input) {
+		BaseUUID::ToBlob(input, target);
+	}
+};
+// end Anybase chagnes
+
 template <class SRC = string_t, class OP = ArrowVarcharConverter, class BUFTYPE = int64_t>
 struct ArrowVarcharData {
 	static void Initialize(ArrowAppendData &result, const LogicalType &type, idx_t capacity) {

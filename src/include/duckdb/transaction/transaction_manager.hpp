@@ -53,12 +53,6 @@ public:
 protected:
 	//! The attached database
 	AttachedDatabase &db;
-
-// start Anybase changes
-public:
-	virtual uint64_t GetSnapshotId(ClientContext &context) = 0;
-	virtual uint64_t CheckpointAndGetSnapshotId(ClientContext &context) = 0;
-// end Anybase changes
 };
 
 } // namespace duckdb

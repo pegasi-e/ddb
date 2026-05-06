@@ -31,6 +31,10 @@
 #include "duckdb/storage/table_storage_info.hpp"
 #include "duckdb/transaction/duck_transaction.hpp"
 
+// start anybase change
+#include "duckdb/main/database.hpp"
+// end anybase change
+
 namespace duckdb {
 
 DataTableInfo::DataTableInfo(AttachedDatabase &db, shared_ptr<TableIOManager> table_io_manager_p, string schema,
@@ -1692,27 +1696,9 @@ void DataTable::AddIndex(const ColumnList &columns, const vector<LogicalIndex> &
 }
 
 // start Anybase changes
-bool AllMergeConflictsMeetCondition(DataChunk &result) {
-	result.Flatten();
-	auto data = FlatVector::GetData<bool>(result.data[0]);
-	for (idx_t i = 0; i < result.size(); i++) {
-		if (!data[i]) {
-			return false;
-		}
-	}
-	return true;
-}
-
-void CheckOnConflictCondition(ClientContext &context, DataChunk &conflicts, const unique_ptr<Expression> &condition,
-                              DataChunk &result) {
-	ExpressionExecutor executor(context, *condition);
-	result.Initialize(context, {LogicalType::BOOLEAN});
-	executor.Execute(conflicts, result);
-	result.SetCardinality(conflicts.size());
-}
-	// TODO: should we use a hash table to keep track of this instead?
-	template <bool GLOBAL>
-	static bool CheckForDuplicateTargets(const Vector &row_ids, idx_t count) {
+// TODO: should we use a hash table to keep track of this instead?
+template <bool GLOBAL>
+static bool CheckForDuplicateTargets(const Vector &row_ids, idx_t count) {
 	// Insert all rows, if any of the rows has already been updated before, we throw an error
 	auto data = FlatVector::GetData<row_t>(row_ids);
 
@@ -1926,7 +1912,7 @@ static idx_t HandleInsertConflicts(TableCatalogEntry &table, ClientContext &cont
 	conflict_chunk.SetCardinality(conflict_count);
 
 	// Start CDC changes
-	if (GLOBAL) {
+	if (GLOBAL && context.db->config.change_data_capture.IsEnabled()) {
 		auto &current_transaction = DuckTransaction::Get(context, table.catalog);
 		auto involved_columns = unordered_set<idx_t>(conflict_target.begin(), conflict_target.end());
 		for (idx_t i = 0; i < set_columns.size(); ++i) {
@@ -1966,7 +1952,7 @@ static idx_t HandleInsertConflicts(TableCatalogEntry &table, ClientContext &cont
 
 	return updated_tuples;
 }
-	static idx_t OnConflictHandling(TableCatalogEntry &table, ClientContext &context,
+static idx_t OnConflictHandling(TableCatalogEntry &table, ClientContext &context,
                                 DataChunk& chunk, const vector<unique_ptr<BoundConstraint>> &bound_constraints,
                                 const unordered_set<column_t> &conflict_target, const vector<PhysicalIndex> &set_columns,
                                 const vector<LogicalType> &set_types,
@@ -1998,32 +1984,6 @@ static void AppendInsertChunks(TableCatalogEntry &table, ClientContext &context,
 		storage.LocalAppend(append_state, context, data_chunk, true);
 		insert_count += chunk_size;
 	}
-}
-
-void DataTable::Merge(TableCatalogEntry &table, ClientContext &context, DataChunk &chunk, const vector<unique_ptr<BoundConstraint>> &bound_constraints,
-                           const unordered_set<column_t> &conflict_target, const vector<PhysicalIndex> &set_columns,
-                           LocalAppendState &append_state, bool do_appends, idx_t &update_count, idx_t &insert_count) {
-
-	auto &storage = table.GetStorage();
-
-	DataChunk insert_chunk;
-	insert_chunk.Initialize(context, chunk.GetTypes());
-	insert_chunk.Reference(chunk);
-	auto set_types = GetTypesOfSetColumns(set_columns, table);
-	update_count = OnConflictHandling(table, context, insert_chunk, bound_constraints, conflict_target, set_columns, set_types,
-	                                  nullptr);
-
-	if (do_appends) {
-		storage.LocalAppend(append_state, context, insert_chunk, true);
-		insert_count = insert_chunk.size();
-	} else {
-		insert_count = 0;
-	}
-
-	storage.FinalizeLocalAppend(append_state);
-
-	chunk.Reset();
-	chunk.Reference(insert_chunk);
 }
 
 void DataTable::Merge(TableCatalogEntry &table, ClientContext &context, ColumnDataCollection &collection, const vector<unique_ptr<BoundConstraint>> &bound_constraints,

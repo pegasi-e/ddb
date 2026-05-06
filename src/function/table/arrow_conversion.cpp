@@ -6,6 +6,7 @@
 #include "duckdb/common/types/arrow_aux_data.hpp"
 #include "duckdb/common/types/arrow_string_view_type.hpp"
 #include "duckdb/common/types/hugeint.hpp"
+#include "duckdb/common/types/uuid.hpp"
 #include "duckdb/function/scalar/nested_functions.hpp"
 #include "duckdb/function/table/arrow.hpp"
 
@@ -399,22 +400,72 @@ static void TimeConversion(Vector &vector, ArrowArray &array, idx_t chunk_offset
 		}
 	}
 }
-
-static void UUIDConversion(Vector &vector, const ArrowArray &array, idx_t chunk_offset, int64_t nested_offset,
-                           int64_t parent_offset, idx_t size) {
+// start Anybase changes
+static void UUIDConversion(Vector &vector, ArrowArray &array, const ArrowType &arrow_type, idx_t chunk_offset,
+                           int64_t nested_offset, int64_t parent_offset, idx_t size) {
+// end Anybase changes
 	auto tgt_ptr = FlatVector::GetData<hugeint_t>(vector);
 	auto &validity_mask = FlatVector::Validity(vector);
-	auto src_ptr = static_cast<const hugeint_t *>(array.buffers[1]) +
-	               GetEffectiveOffset(array, parent_offset, chunk_offset, nested_offset);
-	for (idx_t row = 0; row < size; row++) {
-		if (!validity_mask.RowIsValid(row)) {
-			continue;
+// start Anybase changes
+	auto effective_offset = GetEffectiveOffset(array, parent_offset, chunk_offset, nested_offset);
+
+	if (array.n_buffers == 2) {
+		// Default DDB fixed array version
+		auto src_ptr = static_cast<const hugeint_t *>(array.buffers[1]) + effective_offset;
+		for (idx_t row = 0; row < size; row++) {
+			if (!validity_mask.RowIsValid(row)) {
+				continue;
+			}
+			tgt_ptr[row].lower = static_cast<uint64_t>(BSwap(src_ptr[row].upper));
+			// flip Upper MSD
+			tgt_ptr[row].upper =
+			    static_cast<int64_t>(static_cast<uint64_t>(BSwap(src_ptr[row].lower)) ^ (static_cast<uint64_t>(1) << 63));
 		}
-		tgt_ptr[row].lower = static_cast<uint64_t>(BSwap(src_ptr[row].upper));
-		// flip Upper MSD
-		tgt_ptr[row].upper =
-		    static_cast<int64_t>(static_cast<uint64_t>(BSwap(src_ptr[row].lower)) ^ (static_cast<uint64_t>(1) << 63));
+		return;
 	}
+
+	// Anybase BinaryArray version
+	auto &string_info = arrow_type.GetTypeInfo<ArrowStringInfo>();
+	auto size_type = string_info.GetSizeType();
+	switch (size_type) {
+	case ArrowVariableSizeType::NORMAL: {
+		auto data = ArrowBufferData<uint8_t>(array, 2);
+		auto offsets = ArrowBufferData<uint32_t>(array, 1) + effective_offset;
+		for (idx_t row = 0; row < size; row++) {
+			if (!validity_mask.RowIsValid(row)) {
+				continue;
+			}
+			auto len = offsets[row + 1] - offsets[row];
+			if (len != 16) {
+				throw ConversionException("Could not convert Arrow UUID binary: expected 16 bytes, got %llu",
+				                          NumericCast<unsigned long long>(len));
+			}
+			tgt_ptr[row] = BaseUUID::FromBlob(data + offsets[row]);
+		}
+		break;
+	}
+	case ArrowVariableSizeType::SUPER_SIZE: {
+		auto data = ArrowBufferData<uint8_t>(array, 2);
+		auto offsets = ArrowBufferData<uint64_t>(array, 1) + effective_offset;
+		for (idx_t row = 0; row < size; row++) {
+			if (!validity_mask.RowIsValid(row)) {
+				continue;
+			}
+			auto len = offsets[row + 1] - offsets[row];
+			if (len != 16) {
+				throw ConversionException("Could not convert Arrow UUID large binary: expected 16 bytes, got %llu",
+				                          NumericCast<unsigned long long>(len));
+			}
+			tgt_ptr[row] = BaseUUID::FromBlob(data + offsets[row]);
+		}
+		break;
+	}
+	case ArrowVariableSizeType::FIXED_SIZE:
+	case ArrowVariableSizeType::VIEW:
+	default:
+		throw ConversionException("Unsupported Arrow UUID representation for conversion");
+	}
+// end Anybase changes
 }
 
 static void TimestampTZConversion(Vector &vector, ArrowArray &array, idx_t chunk_offset, int64_t nested_offset,
@@ -837,7 +888,10 @@ void ArrowToDuckDBConversion::ColumnArrowToDuckDB(Vector &vector, ArrowArray &ar
 		break;
 	}
 	case LogicalTypeId::UUID:
-		UUIDConversion(vector, array, chunk_offset, nested_offset, NumericCast<int64_t>(parent_offset), size);
+// start Anybase changes
+		UUIDConversion(vector, array, arrow_type, chunk_offset, nested_offset, NumericCast<int64_t>(parent_offset),
+		               size);
+// end Anybase changes
 		break;
 	case LogicalTypeId::BLOB:
 	case LogicalTypeId::BIT:

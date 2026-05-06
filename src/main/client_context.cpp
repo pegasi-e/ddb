@@ -1598,24 +1598,6 @@ void ClientContext::Merge(TableDescription &description, ColumnDataCollection &c
 	});
 }
 
-uint64_t ClientContext::GetSnapshotId() {
-	uint64_t result;
-	RunFunctionInTransaction([&]() {
-	result = transaction.GetSnapshotId();
-	}, false);
-
-	return result;
-}
-
-uint64_t ClientContext::CheckpointAndGetSnapshotId() {
-	uint64_t result;
-	RunFunctionInTransaction([&]() {
-	result = transaction.CheckpointAndGetSnapshotId();
-	}, false);
-
-	return result;
-}
-
 void ClientContext::SetActiveResult(ClientContextLock &lock, BaseQueryResult &result) {
 	if (!active_query) {
 		return;

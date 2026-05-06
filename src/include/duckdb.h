@@ -5166,8 +5166,6 @@ DUCKDB_C_API duckdb_error_data duckdb_expression_fold(duckdb_client_context cont
 //===--------------------------------------------------------------------===//
 DUCKDB_C_API uint64_t duckdb_get_hlc_timestamp();
 DUCKDB_C_API void duckdb_set_hlc_timestamp(uint64_t ts);
-DUCKDB_C_API uint64_t duckdb_get_snapshot_id(duckdb_connection con);
-DUCKDB_C_API uint64_t duckdb_checkpoint_and_get_snapshot_id(duckdb_connection con);
 DUCKDB_C_API idx_t duckdb_get_table_version(duckdb_connection connection, const char *schema, const char *table, char **error);
 DUCKDB_C_API idx_t duckdb_get_column_version(duckdb_connection connection, const char *schema, const char *table, const char *column, char **error);
 DUCKDB_C_API idx_t duckdb_estimated_row_count(duckdb_connection connection, const char *catalog, const char *schema, const char *table, char **error);
@@ -5180,11 +5178,13 @@ Creates a new DataChunk that copy a given DataChunk
  * @return A new data chunk with a copied data from the given data chunk
  */
 DUCKDB_C_API duckdb_data_chunk duckdb_create_data_chunk_copy(duckdb_data_chunk *chunk);
-DUCKDB_C_API duckdb_state duckdb_result_to_arrow(duckdb_result result, duckdb_arrow_array *out_array);
-DUCKDB_C_API duckdb_state duckdb_data_chunks_to_arrow_array(duckdb_connection  connection, duckdb_data_chunk *chunks, idx_t number_of_chunks, duckdb_arrow_array *out_array);
-DUCKDB_C_API duckdb_state duckdb_data_chunk_column_to_arrow_array(duckdb_connection  connection, duckdb_data_chunk *chunks, idx_t number_of_chunks, idx_t column_index, duckdb_arrow_array *out_array);
-DUCKDB_C_API uint64_t duckdb_get_hlc_timestamp();
-DUCKDB_C_API void duckdb_set_hlc_timestamp(uint64_t ts);
+DUCKDB_C_API duckdb_state duckdb_result_to_arrow(duckdb_result *result, duckdb_arrow_array *out_array);
+DUCKDB_C_API duckdb_state duckdb_result_chunk_arrow_array(duckdb_result *result, duckdb_data_chunk chunk, duckdb_arrow_array *out_array);
+DUCKDB_C_API duckdb_state duckdb_result_get_chuck_as_arrow(duckdb_result *result, idx_t chunk_index, duckdb_arrow_array *out_array);
+DUCKDB_C_API duckdb_arrow_options duckdb_arrow_options_with_binary_uuid(duckdb_result *result);
+DUCKDB_C_API duckdb_state duckdb_data_chunks_to_arrow_array(duckdb_result result, duckdb_data_chunk *chunks, idx_t number_of_chunks, duckdb_arrow_array *out_array);
+DUCKDB_C_API duckdb_state duckdb_data_chunk_column_to_arrow_array(duckdb_connection connection, duckdb_data_chunk *chunks, idx_t number_of_chunks, idx_t column_index, duckdb_arrow_array *out_array);
+DUCKDB_C_API duckdb_error_data duckdb_append_arrow(duckdb_connection connection, duckdb_appender appender, struct ArrowArray *arrow_array, struct ArrowSchema *schema);
 
 /*!
 Creates an merger object that allows upsert style merges with existing data while appending new data.
@@ -5214,6 +5214,15 @@ Note that the object must be destroyed with `duckdb_appender_destroy`.
 */
 DUCKDB_C_API duckdb_state duckdb_merger_create(duckdb_connection connection, const char *schema,
 											  const char *table, duckdb_appender *out_appender);
+
+typedef struct _duckdb_arrow_appender {
+	void *internal_ptr;
+} * duckdb_arrow_appender;
+
+DUCKDB_C_API duckdb_state duckdb_create_arrow_appender(duckdb_result *result, duckdb_arrow_appender *out_arrow_appender);
+DUCKDB_C_API duckdb_state duckdb_arrow_appender_destroy(duckdb_arrow_appender *arrow_appender);
+DUCKDB_C_API duckdb_state duckdb_arrow_appender_append_chunk(duckdb_arrow_appender arrow_appender, duckdb_data_chunk chunk);
+DUCKDB_C_API duckdb_state duckdb_arrow_appender_finalize(duckdb_arrow_appender arrow_appender, duckdb_arrow_array *rrow_array);
 
 //===--------------------------------------------------------------------===//
 // Change Data Capture types

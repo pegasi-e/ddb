@@ -183,14 +183,6 @@ unique_ptr<TableDescription> Connection::TableInfo(const string &schema_name, co
 void Connection::Merge(TableDescription &description, DataChunk &chunk, optional_ptr<const vector<LogicalIndex>> column_ids) {
 	context->Merge(description, chunk, column_ids);
 }
-
-uint64_t Connection::GetSnapshotId() {
-	return context->GetSnapshotId();
-}
-
-uint64_t Connection::CheckpointAndGetSnapshotId() {
-	return context->CheckpointAndGetSnapshotId();
-}
 // end Anybase changes
 
 unique_ptr<TableDescription> Connection::TableInfo(const string &table_name) {
