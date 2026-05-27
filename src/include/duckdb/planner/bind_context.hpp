@@ -121,6 +121,8 @@ public:
 	                   CTEType cte_type = CTEType::CAN_BE_REFERENCED);
 	void AddCTEBinding(unique_ptr<CTEBinding> binding);
 
+	void RemoveCTEBinding(const string &alias);
+
 	//! Add an implicit join condition (e.g. USING (x))
 	void AddUsingBinding(const string &column_name, UsingColumnSet &set);
 

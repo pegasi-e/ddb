@@ -273,13 +273,17 @@ void ColumnData::FetchUpdates(TransactionData transaction, idx_t vector_index, V
 	result.Flatten(scan_count);
 	updates->FetchUpdates(transaction, vector_index, result);
 }
-
-void ColumnData::FetchUpdateRow(TransactionData transaction, row_t row_id, Vector &result, idx_t result_idx) {
+// start Anybase changes
+void ColumnData::FetchUpdateRow(TransactionData transaction, row_t row_id, Vector &result, idx_t result_idx,
+								bool fetch_current_update) {
+//end Anybase changes
 	lock_guard<mutex> update_guard(update_lock);
 	if (!updates) {
 		return;
 	}
-	updates->FetchRow(transaction, NumericCast<idx_t>(row_id), result, result_idx);
+// start Anybase changes
+	updates->FetchRow(transaction, NumericCast<idx_t>(row_id), result, result_idx, fetch_current_update);
+//end Anybase change
 }
 
 void ColumnData::UpdateInternal(TransactionData transaction, DataTable &data_table, idx_t column_index,
@@ -560,9 +564,10 @@ idx_t ColumnData::Fetch(ColumnScanState &state, row_t row_id, Vector &result) {
 	state.internal_index = state.current->GetRowStart();
 	return ScanVector(state, result, STANDARD_VECTOR_SIZE, ScanVectorType::SCAN_FLAT_VECTOR);
 }
-
+// start Anybase changes
 void ColumnData::FetchRow(TransactionData transaction, ColumnFetchState &state, const StorageIndex &storage_index,
-                          row_t row_id, Vector &result, idx_t result_idx) {
+                          row_t row_id, Vector &result, idx_t result_idx,  bool fetch_current_update) {
+// end Anybase changes
 	if (UnsafeNumericCast<idx_t>(row_id) > count) {
 		throw InternalException("ColumnData::FetchRow - row_id out of range");
 	}
@@ -572,8 +577,9 @@ void ColumnData::FetchRow(TransactionData transaction, ColumnFetchState &state, 
 	auto index_in_segment = row_id - UnsafeNumericCast<row_t>(segment->GetRowStart());
 	segment->GetNode().FetchRow(state, index_in_segment, result, result_idx);
 	// merge any updates made to this row
-
-	FetchUpdateRow(transaction, row_id, result, result_idx);
+// start Anybase changes
+	FetchUpdateRow(transaction, row_id, result, result_idx, fetch_current_update);
+// end Anybase changes
 }
 
 idx_t ColumnData::FetchUpdateData(ColumnScanState &state, row_t *row_ids, Vector &base_vector, idx_t row_group_start) {
@@ -714,6 +720,9 @@ void ColumnData::InitializeColumn(PersistentColumnData &column_data, BaseStatist
 	D_ASSERT(type.InternalType() == column_data.logical_type.InternalType());
 	// construct the segments based on the data pointers
 	this->count = 0;
+// start Anybase changes
+	this->commit_version_manager.SetVersion(column_data.commit_version);
+// end Anybase changes
 	for (auto &data_pointer : column_data.pointers) {
 		// Update the count and statistics
 		data_pointer.row_start = count;
@@ -806,6 +815,10 @@ void PersistentColumnData::Serialize(Serializer &serializer) const {
 		serializer.WriteProperty(101, "validity", child_columns[0]);
 	} break;
 	}
+
+// start Anybase changes
+	serializer.WriteProperty(103, "commit_version", commit_version);
+// end Anybase changes
 }
 
 void PersistentColumnData::DeserializeField(Deserializer &deserializer, field_id_t field_idx, const char *field_name,
@@ -933,6 +946,10 @@ PersistentColumnData PersistentColumnData::Deserialize(Deserializer &deserialize
 		result.DeserializeField(deserializer, 101, "validity", LogicalTypeId::VALIDITY);
 	} break;
 	}
+
+// start Anybase changes
+	deserializer.ReadPropertyWithDefault(103, "commit_version", result.commit_version);
+// end Anybase changes
 	return result;
 }
 
@@ -1062,6 +1079,9 @@ unique_ptr<ExtraPersistentColumnData> ExtraPersistentColumnData::Deserialize(Des
 PersistentColumnData ColumnData::Serialize() {
 	auto result = count ? PersistentColumnData(type, GetDataPointers()) : PersistentColumnData(type);
 	result.has_updates = HasUpdates();
+// start Anybase changes
+	result.commit_version = commit_version_manager.GetVersion();
+// end Anybase changes
 	return result;
 }
 

@@ -7,6 +7,9 @@
 #include "duckdb/transaction/update_info.hpp"
 
 #include <algorithm>
+// start Anybase changes
+#include "duckdb/main/database.hpp"
+// end Anybase changes
 
 namespace duckdb {
 
@@ -136,8 +139,10 @@ static void MergeValidityInfo(UpdateInfo &current, ValidityMask &result_mask) {
 static void UpdateMergeValidity(transaction_t start_time, transaction_t transaction_id, UpdateInfo &info,
                                 Vector &result) {
 	auto &result_mask = FlatVector::Validity(result);
-	UpdateInfo::UpdatesForTransaction(info, start_time, transaction_id,
+// start Anybase changes
+	UpdateInfo::UpdatesForTransaction(info, start_time, transaction_id, true,
 	                                  [&](UpdateInfo &current) { MergeValidityInfo(current, result_mask); });
+// end Anybase changes
 }
 
 template <class T>
@@ -159,8 +164,10 @@ static void MergeUpdateInfo(UpdateInfo &current, T *result_data) {
 template <class T>
 static void UpdateMergeFetch(transaction_t start_time, transaction_t transaction_id, UpdateInfo &info, Vector &result) {
 	auto result_data = FlatVector::GetData<T>(result);
-	UpdateInfo::UpdatesForTransaction(info, start_time, transaction_id,
+// start Anybase changes
+	UpdateInfo::UpdatesForTransaction(info, start_time, transaction_id, true,
 	                                  [&](UpdateInfo &current) { MergeUpdateInfo<T>(current, result_data); });
+// end Anybase changes
 }
 
 static UpdateSegment::fetch_update_function_t GetFetchUpdateFunction(PhysicalType type) {
@@ -412,10 +419,14 @@ void UpdateSegment::FetchCommittedRange(idx_t start_row, idx_t count, Vector &re
 //===--------------------------------------------------------------------===//
 // Fetch Row
 //===--------------------------------------------------------------------===//
+// start Anybase changes
 static void FetchRowValidity(transaction_t start_time, transaction_t transaction_id, UpdateInfo &info, idx_t row_idx,
-                             Vector &result, idx_t result_idx) {
+                             Vector &result, idx_t result_idx, bool fetch_current_update) {
+// end Anybase changes
 	auto &result_mask = FlatVector::Validity(result);
-	UpdateInfo::UpdatesForTransaction(info, start_time, transaction_id, [&](UpdateInfo &current) {
+// start Anybase changes
+	UpdateInfo::UpdatesForTransaction(info, start_time, transaction_id, fetch_current_update, [&](UpdateInfo &current) {
+// end Anybase changes
 		auto info_data = current.GetData<bool>();
 		auto tuples = current.GetTuples();
 		// FIXME: we could do a binary search in here
@@ -431,10 +442,14 @@ static void FetchRowValidity(transaction_t start_time, transaction_t transaction
 }
 
 template <class T>
+// start Anybase changes
 static void TemplatedFetchRow(transaction_t start_time, transaction_t transaction_id, UpdateInfo &info, idx_t row_idx,
-                              Vector &result, idx_t result_idx) {
+                              Vector &result, idx_t result_idx, bool fetch_current_update) {
+// end Anybase changes
 	auto result_data = FlatVector::GetData<T>(result);
-	UpdateInfo::UpdatesForTransaction(info, start_time, transaction_id, [&](UpdateInfo &current) {
+// start Anybase changes
+	UpdateInfo::UpdatesForTransaction(info, start_time, transaction_id, fetch_current_update, [&](UpdateInfo &current) {
+// end Anybase changes
 		auto info_data = current.GetData<T>();
 		auto tuples = current.GetTuples();
 		// FIXME: we could do a binary search in here
@@ -486,8 +501,9 @@ static UpdateSegment::fetch_row_function_t GetFetchRowFunction(PhysicalType type
 		throw NotImplementedException("Unimplemented type for update segment fetch row");
 	}
 }
-
-void UpdateSegment::FetchRow(TransactionData transaction, idx_t row_id, Vector &result, idx_t result_idx) {
+//start Anybase changes
+void UpdateSegment::FetchRow(TransactionData transaction, idx_t row_id, Vector &result, idx_t result_idx, bool fetch_current_update) {
+// end Anybase changes
 	if (row_id > column_data.count) {
 		throw InternalException("UpdateSegment::FetchRow out of range");
 	}
@@ -499,8 +515,10 @@ void UpdateSegment::FetchRow(TransactionData transaction, idx_t row_id, Vector &
 	}
 	idx_t row_in_vector = row_id - vector_index * STANDARD_VECTOR_SIZE;
 	auto pin = entry.Pin();
+//start Anybase changes
 	fetch_row_function(transaction.start_time, transaction.transaction_id, UpdateInfo::Get(pin), row_in_vector, result,
-	                   result_idx);
+	                   result_idx, fetch_current_update);
+// end Anybase changes
 }
 
 //===--------------------------------------------------------------------===//
@@ -1041,17 +1059,17 @@ idx_t TemplatedUpdateNumericStatistics(UpdateSegment *segment, SegmentStatistics
 
 idx_t UpdateStringStatistics(UpdateSegment *segment, SegmentStatistics &stats, UnifiedVectorFormat &update, idx_t count,
                              SelectionVector &sel) {
-	auto update_data = update.GetDataNoConst<string_t>(update);
+//	start anybase change - fixes a memory leak with binary/varchar - PR 21039 pending
+	auto update_data = update.GetData<string_t>(update);
+//	end anybase change
 	auto &mask = update.validity;
 	if (mask.AllValid()) {
 		stats.statistics.SetHasNoNullFast();
 		for (idx_t i = 0; i < count; i++) {
 			auto idx = update.sel->get_index(i);
-			auto &str = update_data[idx];
-			StringStats::Update(stats.statistics, str);
-			if (!str.IsInlined()) {
-				update_data[idx] = segment->GetStringHeap().AddBlob(str);
-			}
+// start anybase change - fixes a memory leak with binary/varchar - PR 21039 pending
+			StringStats::Update(stats.statistics, update_data[idx]);
+// end anybase change
 		}
 		sel.Initialize(nullptr);
 		return count;
@@ -1063,11 +1081,9 @@ idx_t UpdateStringStatistics(UpdateSegment *segment, SegmentStatistics &stats, U
 			if (mask.RowIsValid(idx)) {
 				stats.statistics.SetHasNoNullFast();
 				sel.set_index(not_null_count++, i);
-				auto &str = update_data[idx];
-				StringStats::Update(stats.statistics, str);
-				if (!str.IsInlined()) {
-					update_data[idx] = segment->GetStringHeap().AddBlob(str);
-				}
+// start anybase change	- fixes a memory leak with binary/varchar - PR 21039 pending
+				StringStats::Update(stats.statistics, update_data[idx]);
+// end anybase change
 			} else {
 				stats.statistics.SetHasNullFast();
 			}
@@ -1319,6 +1335,20 @@ void UpdateSegment::Update(TransactionData transaction, DataTable &data_table, i
 		}
 	}
 
+// start anybase change - fixes a memory leak with binary/varchar - PR 21039 pending
+	// for VARCHAR columns, copy non-inlined strings to the heap for long-term storage
+	if (column_data.type.InternalType() == PhysicalType::VARCHAR) {
+		auto update_data = update_format.GetDataNoConst<string_t>(update_format);
+		for (idx_t i = 0; i < count; i++) {
+			auto uidx = update_format.sel->get_index(sel.get_index(i));
+			auto &str = update_data[uidx];
+			if (!str.IsInlined()) {
+				str = heap.AddBlob(str);
+			}
+		}
+	}
+// end anybase change
+
 	InitializeUpdateInfo(vector_index);
 
 	D_ASSERT(idx_t(first_id) >= row_group_start);
@@ -1351,6 +1381,10 @@ void UpdateSegment::Update(TransactionData transaction, DataTable &data_table, i
 			node->vector_index = vector_index;
 			node->N = 0;
 			node->column_index = column_index;
+// start Anybase changes
+			node->column = &column_data;
+			node->table = &data_table;
+// end Anybase changes
 
 			// insert the new node into the chain
 			node->next = base_info.next;
@@ -1364,6 +1398,10 @@ void UpdateSegment::Update(TransactionData transaction, DataTable &data_table, i
 		} else {
 			// we already had updates made to this transaction
 			node = &UpdateInfo::Get(node_ref);
+// start Anybase changes
+			node->column = &column_data;
+			node->table = &data_table;
+// end Anybase changes
 		}
 		base_info.Verify();
 		node->Verify();
@@ -1406,6 +1444,10 @@ void UpdateSegment::Update(TransactionData transaction, DataTable &data_table, i
 		transaction_node->next = UndoBufferPointer();
 		transaction_node->prev = handle.GetBufferPointer();
 		transaction_node->column_index = column_index;
+// start Anybase changes
+		transaction_node->column = &column_data;
+		transaction_node->table = &data_table;
+// end Anybase changes
 
 		transaction_node->Verify();
 		update_info.Verify();
@@ -1452,5 +1494,15 @@ bool UpdateSegment::HasUpdates(idx_t start_row_index, idx_t end_row_index) {
 	}
 	return false;
 }
+// start Anybase changes
+void UpdateSegment::FetchAndApplyUpdate(UpdateInfo &info, Vector &result) {
+	auto lock_handle = lock.GetSharedLock();
+
+	// FIXME: normalify if this is not the case... need to pass in count?
+	D_ASSERT(result.GetVectorType() == VectorType::FLAT_VECTOR);
+
+	fetch_committed_function(info, result);
+}
+// end Anybase changes
 
 } // namespace duckdb

@@ -76,6 +76,10 @@ private:
 	void IterateEntries(UndoBuffer::IteratorState &state, UndoBuffer::IteratorState &end_state, T &&callback);
 	template <class T>
 	void ReverseIterateEntries(T &&callback);
+// start Anybase changes
+public:
+	void PublishCdCEvent();
+// end Anybase changes
 };
 
 } // namespace duckdb

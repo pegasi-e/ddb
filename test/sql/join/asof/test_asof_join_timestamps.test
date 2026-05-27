@@ -229,4 +229,12 @@ ASOF LEFT JOIN asof_nulls ON asof_nulls.time <= time_series.time;
 ----
 2025-07-15 02:00:00	NULL
 
+# Return NULLs
+query II
+SELECT time_series.time, asof_nulls.value
+FROM (VALUES ('2025-07-15 02:00:00'::TIMESTAMP)) as time_series(time)
+ASOF LEFT JOIN asof_nulls ON asof_nulls.time <= time_series.time;
+----
+2025-07-15 02:00:00	NULL
+
 endloop

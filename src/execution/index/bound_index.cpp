@@ -49,15 +49,15 @@ ErrorData BoundIndex::Append(DataChunk &chunk, Vector &row_ids, IndexAppendInfo 
 	InitializeLock(l);
 	return Append(l, chunk, row_ids, info);
 }
-
-void BoundIndex::VerifyAppend(DataChunk &chunk, IndexAppendInfo &info, optional_ptr<ConflictManager> manager) {
+// Start Anybase Change
+void BoundIndex::VerifyAppend(DataChunk &chunk, IndexAppendInfo &info, optional_ptr<ConflictManager> manager, bool allow_non_standard_vector_size) {
 	throw NotImplementedException("this implementation of VerifyAppend does not exist.");
 }
 
-void BoundIndex::VerifyConstraint(DataChunk &chunk, IndexAppendInfo &info, ConflictManager &manager) {
+void BoundIndex::VerifyConstraint(DataChunk &chunk, IndexAppendInfo &info, ConflictManager &manager, bool allow_non_standard_vector_size) {
 	throw NotImplementedException("this implementation of VerifyConstraint does not exist.");
 }
-
+// End Anybase Change
 void BoundIndex::CommitDrop() {
 	IndexLock index_lock;
 	InitializeLock(index_lock);

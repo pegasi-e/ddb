@@ -83,8 +83,13 @@ public:
 	RowGroupIterationHelper Chunks(DuckTransaction &transaction);
 	RowGroupIterationHelper Chunks(DuckTransaction &transaction, const vector<StorageIndex> &column_ids);
 
+// start Anybase changes
 	void Fetch(TransactionData transaction, DataChunk &result, const vector<StorageIndex> &column_ids,
-	           const Vector &row_identifiers, idx_t fetch_count, ColumnFetchState &state);
+			   const Vector &row_identifiers, idx_t fetch_count, ColumnFetchState &state, bool fetch_current_update = true);
+// end Anybase changes
+
+	//! Returns true, if the row group can fetch the row id for the transaction.
+	bool CanFetch(TransactionData, const row_t row_id);
 
 	//! Returns true, if the row group can fetch the row id for the transaction.
 	bool CanFetch(TransactionData, const row_t row_id);
@@ -232,6 +237,13 @@ private:
 public:
 	RowGroupIterator begin(); // NOLINT: match stl API
 	RowGroupIterator end();   // NOLINT: match stl API
+// start Anybase changes
+public:
+	idx_t GetVersion(column_t column_idx) const;
+	void UpdateColumnVersions(transaction_t commit_id) const;
+	//! Get the row-group by the row id
+	RowGroup *GetRowGroupByRowNumber(idx_t row_id);
+// end Anybase changes
 };
 
 } // namespace duckdb

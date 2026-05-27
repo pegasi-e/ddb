@@ -127,4 +127,20 @@ void TransactionContext::SetActiveQuery(transaction_t query_number) {
 	current_transaction->SetActiveQuery(query_number);
 }
 
+// start Anybase changes
+void TransactionContext::BeginTransaction(const duckdb::timestamp_t timestamp, const transaction_t sequenceNumber) {
+	if (current_transaction) {
+		throw TransactionException("cannot start a transaction within a transaction");
+	}
+	auto start_timestamp = Timestamp::GetCurrentTimestamp();
+	auto global_transaction_id = context.db->GetDatabaseManager().GetNewTransactionNumber();
+	current_transaction = make_uniq<MetaTransaction>(context, start_timestamp, global_transaction_id, timestamp, sequenceNumber);
+
+	// Notify any registered state of transaction begin
+	for (auto &state : context.registered_state->States()) {
+		state->TransactionBegin(*current_transaction, context);
+	}
+}
+// end Anybase changes
+
 } // namespace duckdb

@@ -95,9 +95,11 @@ public:
 	//! Returns true if all pushed down filters were executed during data fetching
 	void Scan(DuckTransaction &transaction, DataChunk &result, TableScanState &state);
 
+// start Anybase changes
 	//! Fetch data from the specific row identifiers from the base table
 	void Fetch(DuckTransaction &transaction, DataChunk &result, const vector<StorageIndex> &column_ids,
-	           const Vector &row_ids, idx_t fetch_count, ColumnFetchState &state);
+			   const Vector &row_ids, idx_t fetch_count, ColumnFetchState &state, bool fetch_current_update = true);
+// end Anybase changes
 	void FetchCommitted(DataChunk &result, const vector<StorageIndex> &column_ids, const Vector &row_identifiers,
 	                    idx_t fetch_count, ColumnFetchState &state);
 	//! Returns true, if the transaction can fetch the row ID.
@@ -249,9 +251,12 @@ public:
 	//! Initialize constraint verification state
 	unique_ptr<ConstraintState> InitializeConstraintState(TableCatalogEntry &table,
 	                                                      const vector<unique_ptr<BoundConstraint>> &bound_constraints);
+// start Anybase changes
 	//! Verify constraints with a chunk from the Append containing all columns of the table
 	void VerifyAppendConstraints(ConstraintState &constraint_state, ClientContext &context, DataChunk &chunk,
-	                             optional_ptr<LocalTableStorage> local_storage, optional_ptr<ConflictManager> manager);
+								 optional_ptr<LocalTableStorage> local_storage, optional_ptr<ConflictManager> manager,
+								  bool allow_non_standard_vector_sizes = false);
+// end Anybase changes
 
 	shared_ptr<DataTableInfo> &GetDataTableInfo();
 
@@ -279,8 +284,10 @@ public:
 	idx_t GetRowGroupSize() const;
 
 	//! Verify any unique indexes using optional delete indexes in the local storage.
-	void VerifyUniqueIndexes(TableIndexList &indexes, optional_ptr<LocalTableStorage> storage, DataChunk &chunk,
-	                         optional_ptr<ConflictManager> manager);
+// start Anybase changes
+	static void VerifyUniqueIndexes(TableIndexList &indexes, optional_ptr<LocalTableStorage> storage, DataChunk &chunk,
+									optional_ptr<ConflictManager> manager, bool allow_non_standard_vector_sizes = false);
+// end Anybase changes
 	//! AddIndex initializes an index and adds it to the table's index list.
 	//! It is either empty, or initialized via its index storage information.
 	void AddIndex(const ColumnList &columns, const vector<LogicalIndex> &column_indexes, const IndexConstraintType type,
@@ -329,5 +336,15 @@ private:
 	shared_ptr<RowGroupCollection> row_groups;
 	//! The version of the data table
 	atomic<DataTableVersion> version;
+
+// start Anybase additions
+public:
+	void ScanTableSegment(DuckTransaction &transaction, idx_t row_start, idx_t count, vector<StorageIndex> &column_ids, vector<LogicalType> types, const std::function<void(DataChunk &chunk)> &function);
+	idx_t GetVersion() const;
+	void DidCommitTransaction(transaction_t commit_id, bool update_all_columns = true) const;
+	idx_t GetColumnVersion(column_t idx) const;
+	void Merge(TableCatalogEntry &table, ClientContext &context, ColumnDataCollection &collection, const vector<unique_ptr<BoundConstraint>> &bound_constraints,
+					const unordered_set<column_t> &conflict_target, const vector<PhysicalIndex> &set_columns);
+// end Anybase additions
 };
 } // namespace duckdb

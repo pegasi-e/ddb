@@ -275,8 +275,10 @@ unique_ptr<BaseStatistics> ListColumnData::GetUpdateStatistics() {
 	return nullptr;
 }
 
+// start Anybase changes
 void ListColumnData::FetchRow(TransactionData transaction, ColumnFetchState &state, const StorageIndex &storage_index,
-                              row_t row_id, Vector &result, idx_t result_idx) {
+                              row_t row_id, Vector &result, idx_t result_idx, bool fetch_current_update) {
+// end Anybase changes
 	// insert any child states that are required
 	// we need two (validity & list child)
 	// note that we need a scan state for the child vector

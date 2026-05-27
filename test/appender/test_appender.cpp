@@ -888,3 +888,39 @@ TEST_CASE("Test appender_allocator_flush_threshold", "[appender]") {
 	}
 	appender_2.Close();
 }
+
+// start Anybase changes
+// void setDataChunkDouble(DataChunk &chunk, idx_t col_idx, idx_t row_idx, double_t value) {
+// 	auto &col = chunk.data[col_idx];
+// 	auto data = FlatVector::GetData<double_t>(col);
+// 	data[row_idx] = value;
+// }
+//
+// TEST_CASE("Test appending with column defaults C API", "[capi]") {
+//
+// 	duckdb::unique_ptr<QueryResult> result;
+// 	DuckDB db(nullptr);
+// 	Connection con(db);
+//
+// 	REQUIRE_NO_FAIL(con.Query("CREATE TABLE test (i INTEGER PRIMARY KEY, d double, s string default 'Hello')"));
+// 	Appender appender(con, "test");
+// 	appender.AddColumn("d");
+// 	appender.AddColumn("i");
+//
+// 	DataChunk chunk;
+// 	const duckdb::vector<LogicalType> types = {LogicalType::DOUBLE, LogicalType::INTEGER};
+// 	chunk.Initialize(*con.context, types);
+//
+// 	setDataChunkDouble(chunk, 0, 0, 4.3);
+// 	setDataChunkInt32(chunk, 1, 0, 42);
+//
+// 	chunk.SetCardinality(1);
+// 	appender.AppendDataChunk(chunk);
+// 	appender.Close();
+//
+// 	result = con.Query("SELECT i, d, s FROM test");
+// 	REQUIRE(CHECK_COLUMN(result, 0, {42}));
+// 	REQUIRE(CHECK_COLUMN(result, 1, {4.3}));
+// 	REQUIRE(CHECK_COLUMN(result, 2, {"Hello"}));
+// }
+// end Anybase changes

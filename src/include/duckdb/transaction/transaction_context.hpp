@@ -21,6 +21,7 @@ class ClientContext;
 class MetaTransaction;
 class Transaction;
 class TransactionManager;
+struct timestamp_t;
 
 //! The transaction context keeps track of all the information relating to the
 //! current transaction
@@ -78,6 +79,11 @@ private:
 	unique_ptr<MetaTransaction> current_transaction;
 
 	TransactionContext(const TransactionContext &) = delete;
+
+// start Anybase changes
+public:
+	void BeginTransaction(timestamp_t timestamp, transaction_t sequenceNumber);
+// end Anybase changes
 };
 
 } // namespace duckdb

@@ -6,6 +6,9 @@
 #include "duckdb/common/types/arrow_aux_data.hpp"
 #include "duckdb/common/types/arrow_string_view_type.hpp"
 #include "duckdb/common/types/hugeint.hpp"
+// start Anybase changes
+#include "duckdb/common/types/uuid.hpp"
+// end Anybase changes
 #include "duckdb/function/scalar/nested_functions.hpp"
 #include "duckdb/function/table/arrow.hpp"
 
@@ -434,8 +437,10 @@ static void TimeNSConversion(Vector &vector, ArrowArray &array, idx_t chunk_offs
 	}
 }
 
-static void UUIDConversion(Vector &vector, const ArrowArray &array, idx_t chunk_offset, int64_t nested_offset,
-                           int64_t parent_offset, idx_t size) {
+// start Anybase changes
+static void UUIDConversion(Vector &vector, ArrowArray &array, const ArrowType &arrow_type, idx_t chunk_offset,
+						   int64_t nested_offset, int64_t parent_offset, idx_t size) {
+// end Anybase changes
 	auto tgt_ptr = FlatVector::GetData<hugeint_t>(vector);
 	auto &validity_mask = FlatVector::Validity(vector);
 	auto src_ptr = static_cast<const hugeint_t *>(array.buffers[1]) +
@@ -887,7 +892,10 @@ void ArrowToDuckDBConversion::ColumnArrowToDuckDB(Vector &vector, ArrowArray &ar
 		break;
 	}
 	case LogicalTypeId::UUID:
-		UUIDConversion(vector, array, chunk_offset, nested_offset, NumericCast<int64_t>(parent_offset), size);
+// start Anybase changes
+		UUIDConversion(vector, array, arrow_type, chunk_offset, nested_offset, NumericCast<int64_t>(parent_offset),
+		               size);
+// end Anybase changes
 		break;
 	case LogicalTypeId::BLOB:
 	case LogicalTypeId::BIT:

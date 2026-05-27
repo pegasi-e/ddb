@@ -855,8 +855,10 @@ bool RowGroup::Fetch(TransactionData transaction, idx_t row) {
 	return vinfo->Fetch(transaction, row);
 }
 
+// start Anybase changes
 void RowGroup::FetchRow(TransactionData transaction, ColumnFetchState &state, const vector<StorageIndex> &column_ids,
-                        row_t row_id, DataChunk &result, idx_t result_idx) {
+                        row_t row_id, DataChunk &result, idx_t result_idx, bool fetch_current_update) {
+// end Anybase changes
 	if (UnsafeNumericCast<idx_t>(row_id) > count) {
 		throw InternalException("RowGroup::FetchRow - row_id out of range for row group");
 	}
@@ -867,7 +869,9 @@ void RowGroup::FetchRow(TransactionData transaction, ColumnFetchState &state, co
 		D_ASSERT(!FlatVector::IsNull(result_vector, result_idx));
 		// regular column: fetch data from the base column
 		auto &col_data = GetColumn(column);
-		col_data.FetchRow(transaction, state, column, row_id, result_vector, result_idx);
+// start Anybase changes
+		col_data.FetchRow(transaction, state, column, row_id, result_vector, result_idx, fetch_current_update);
+// end Anybase changes
 	}
 }
 
@@ -1554,5 +1558,18 @@ void VersionDeleteState::Flush() {
 	}
 	count = 0;
 }
+
+// start Anybase changes
+idx_t RowGroup::GetColumnVersion(const idx_t vector_idx) {
+	return GetColumn(vector_idx).commit_version_manager.GetVersion();
+}
+
+void RowGroup::UpdateColumnVersions(const transaction_t commit_id) {
+	const auto count = GetColumnCount();
+	for (idx_t col_idx = 0; col_idx < count; col_idx++) {
+		GetColumn(col_idx).commit_version_manager.DidCommitTransaction(commit_id);
+	}
+}
+// end Anybase changes
 
 } // namespace duckdb
