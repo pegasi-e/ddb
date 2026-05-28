@@ -144,11 +144,9 @@ public:
 
 	//! For a specific row, returns true if it should be used for the transaction and false otherwise.
 	bool Fetch(TransactionData transaction, idx_t row);
-// start Anybase changes
 	//! Fetch a specific row from the row_group and insert it into the result at the specified index
 	void FetchRow(TransactionData transaction, ColumnFetchState &state, const vector<StorageIndex> &column_ids,
-				  row_t row_id, DataChunk &result, idx_t result_idx, bool fetch_current_update = true);
-// end Anybase changes
+				  row_t row_id, DataChunk &result, idx_t result_idx);
 
 	//! Append count rows to the version info
 	void AppendVersionInfo(TransactionData transaction, idx_t count);

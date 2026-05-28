@@ -32,7 +32,10 @@ enum class UpdateScanType {
 	//! allow updates
 	STANDARD,
 	// disallow updates - throw on updates
-	DISALLOW_UPDATES
+	DISALLOW_UPDATES,
+// start Anybase changes
+	ALLOW_UPDATES
+// end Anybase changes
 };
 
 struct ScanOptions {
@@ -51,7 +54,11 @@ enum class TableScanType {
 	//! Permanently deleted rows are rows which no transaction will ever need again.
 	TABLE_SCAN_OMIT_PERMANENTLY_DELETED = 2,
 	//! Scan the latest committed rows
-	TABLE_SCAN_COMMITTED_ROWS = 3
+	TABLE_SCAN_COMMITTED_ROWS = 3,
+// start Anybase change
+	//! Scan the latest committed rows within a transaction
+	TABLE_SCAN_TRANSACTION_ROWS = 127
+// end Anybase change
 };
 
 } // namespace duckdb

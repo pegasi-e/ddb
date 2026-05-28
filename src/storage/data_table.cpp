@@ -33,10 +33,6 @@
 #include "duckdb/transaction/duck_transaction_manager.hpp"
 #include "duckdb/transaction/local_storage.hpp"
 
-// start anybase change
-#include "duckdb/main/database.hpp"
-// end anybase change
-
 namespace duckdb {
 
 DataTableInfo::DataTableInfo(AttachedDatabase &db, shared_ptr<TableIOManager> table_io_manager_p, string schema,
@@ -484,11 +480,8 @@ TableStorageInfo DataTable::GetStorageInfo() {
 //===--------------------------------------------------------------------===//
 // Fetch
 //===--------------------------------------------------------------------===//
-// start Anybase changes
 void DataTable::Fetch(DuckTransaction &transaction, DataChunk &result, const vector<StorageIndex> &column_ids,
-                      const Vector &row_identifiers, idx_t fetch_count, ColumnFetchState &state,
-                      bool fetch_current_update) {
-// end Anybase changes
+                      const Vector &row_identifiers, idx_t fetch_count, ColumnFetchState &state) {
 	D_ASSERT(row_identifiers.GetVectorType() == VectorType::FLAT_VECTOR);
 	auto row_ids = FlatVector::GetData<row_t>(row_identifiers);
 
@@ -503,9 +496,7 @@ void DataTable::Fetch(DuckTransaction &transaction, DataChunk &result, const vec
 
 	if (!has_local) {
 		// All committed rows — fast path (common case).
-// start Anybase changes
-		row_groups->Fetch(transaction, result, column_ids, row_identifiers, fetch_count, state, fetch_current_update);
-// end Anybase changes
+		row_groups->Fetch(transaction, result, column_ids, row_identifiers, fetch_count, state);
 		return;
 	}
 
@@ -531,9 +522,7 @@ void DataTable::Fetch(DuckTransaction &transaction, DataChunk &result, const vec
 
 	// Mixed: some rows are committed, some are local.
 	// row_groups->Fetch silently skips local row IDs, packing committed rows at 0..committed_count-1.
-// start Anybase changes
-	row_groups->Fetch(transaction, result, column_ids, row_identifiers, fetch_count, state, fetch_current_update);
-// end Anybase changes
+	row_groups->Fetch(transaction, result, column_ids, row_identifiers, fetch_count, state);
 	D_ASSERT(result.size() == committed_count);
 
 	// Fetch local rows into a separate chunk.
@@ -2058,13 +2047,13 @@ static map<std::tuple<idx_t, idx_t>, GroupedUpdate> GroupUpdatesByRowGroup(DataC
 	map<std::tuple<idx_t, idx_t>, GroupedUpdate> grouped_updates;
 	for (idx_t i = 0; i < conflict_chunk.size(); i++) {
 		auto row_group = row_groups->GetRowGroupByRowNumber(UnsafeNumericCast<idx_t>(flat_row_ids[i]));
-		auto rg_index = row_group->index;
-		auto c_index = ((idx_t)flat_row_ids[i] - row_group->start) / STANDARD_VECTOR_SIZE;
+		auto rg_index = row_group->GetIndex();
+		auto c_index = ((idx_t)flat_row_ids[i] - row_group->GetRowStart()) / STANDARD_VECTOR_SIZE;
 		auto key = std::make_tuple(rg_index, c_index);
 
 		if (grouped_updates.find(key) == grouped_updates.end()) {
 			GroupedUpdate grouped_update;
-			grouped_update.Initialize(row_group->count);
+			grouped_update.Initialize(row_group->GetCount());
 			grouped_updates[key] = std::move(grouped_update);
 		}
 
@@ -2278,12 +2267,12 @@ void DataTable::ScanTableSegment(DuckTransaction &transaction, idx_t row_start, 
 	CreateIndexScanState state;
 
 	InitializeScanWithOffset(transaction, state, column_ids, row_start, row_start + count);
-	auto row_start_aligned = state.table_state.row_group->start + state.table_state.vector_index * STANDARD_VECTOR_SIZE;
+	auto row_start_aligned = state.table_state.row_group->GetRowStart() + state.table_state.vector_index * STANDARD_VECTOR_SIZE;
 
 	// idx_t current_row = row_start;//row_start_aligned;
 	idx_t current_row = row_start_aligned;
 	while (current_row < end) {
-		state.table_state.ScanCommitted(chunk, TableScanType::TABLE_SCAN_COMMITTED_ROWS);
+		state.table_state.Scan(chunk, TableScanType::TABLE_SCAN_TRANSACTION_ROWS);
 		if (chunk.size() == 0) {
 			break;
 		}

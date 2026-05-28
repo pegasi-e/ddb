@@ -54,7 +54,7 @@ struct ArrowUUIDBinaryConverter {
 		BaseUUID::ToBlob(input, target);
 	}
 };
-// end Anybase chagnes
+// end Anybase changes
 
 template <class SRC = string_t, class OP = ArrowVarcharConverter, class BUFTYPE = int64_t>
 struct ArrowVarcharData {

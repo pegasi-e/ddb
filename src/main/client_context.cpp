@@ -1319,10 +1319,6 @@ unique_ptr<TableDescription> ClientContext::TableInfo(const string &schema_name,
 }
 // end Anybase changes
 
-unique_ptr<TableDescription> ClientContext::TableInfo(const string &schema_name, const string &table_name) {
-	return TableInfo(INVALID_CATALOG, schema_name, table_name);
-}
-
 void ClientContext::Append(unique_ptr<SQLStatement> stmt) {
 	auto result = Query(std::move(stmt), false);
 	if (result->HasError()) {
@@ -1536,13 +1532,12 @@ LogicalType ClientContext::ParseLogicalType(const string &type) {
 static unordered_set<column_t> ExtractConflictTarget(DataTable &data_table) {
 	// The column ids to apply the ON CONFLICT on
 	unordered_set<column_t> conflict_target;
-	data_table.GetDataTableInfo()->GetIndexes().Scan([&](Index &index) {
+	for (auto &index : data_table.GetDataTableInfo()->GetIndexes().Indexes()) {
 		if (index.IsPrimary()) {
 			conflict_target = index.GetColumnIdSet();
-			return true;
+			break;
 		}
-		return false;
-	});
+	}
 
 	return conflict_target;
 }
@@ -1598,7 +1593,7 @@ void ClientContext::Merge(TableDescription &description, ColumnDataCollection &c
 		auto binder = Binder::CreateBinder(*this);
 		binder->BindDefaultValues(table_entry.GetColumns(), defaults);
 		auto bound_constraints = binder->BindConstraints(table_entry);
-		MetaTransaction::Get(*this).ModifyDatabase(table_entry.ParentCatalog().GetAttached());
+		MetaTransaction::Get(*this).ModifyDatabase(table_entry.ParentCatalog().GetAttached(), DatabaseModificationType());
 
 		vector<PhysicalIndex> set_columns;
 		physical_index_vector_t<idx_t> column_index_map;

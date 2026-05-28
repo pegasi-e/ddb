@@ -226,7 +226,7 @@ PersistentColumnData ColumnCheckpointState::ToPersistentData() {
 	PersistentColumnData data(type);
 	data.pointers = std::move(data_pointers);
 // start Anybase changes
-	data.commit_version = column_data.commit_version_manager.GetVersion();
+	data.commit_version = result_column ? result_column->commit_version_manager.GetVersion() : original_column.commit_version_manager.GetVersion();
 // end Anybase changes
 	return data;
 }

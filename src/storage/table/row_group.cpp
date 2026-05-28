@@ -766,6 +766,12 @@ void RowGroup::Scan(CollectionScanState &state, DataChunk &result, TableScanType
 		options.delete_type = DeletedScanType::OMIT_COMMITTED_DELETES;
 		options.update_type = UpdateScanType::DISALLOW_UPDATES;
 		break;
+// start Anybase changes
+	case TableScanType::TABLE_SCAN_TRANSACTION_ROWS:
+		options.update_type = UpdateScanType::ALLOW_UPDATES;
+		options.delete_type = DeletedScanType::OMIT_COMMITTED_DELETES;
+		break;
+// end Anybase changes
 	default:
 		throw InternalException("Unrecognized table scan type");
 	}
@@ -855,10 +861,8 @@ bool RowGroup::Fetch(TransactionData transaction, idx_t row) {
 	return vinfo->Fetch(transaction, row);
 }
 
-// start Anybase changes
 void RowGroup::FetchRow(TransactionData transaction, ColumnFetchState &state, const vector<StorageIndex> &column_ids,
-                        row_t row_id, DataChunk &result, idx_t result_idx, bool fetch_current_update) {
-// end Anybase changes
+                        row_t row_id, DataChunk &result, idx_t result_idx) {
 	if (UnsafeNumericCast<idx_t>(row_id) > count) {
 		throw InternalException("RowGroup::FetchRow - row_id out of range for row group");
 	}
@@ -869,9 +873,7 @@ void RowGroup::FetchRow(TransactionData transaction, ColumnFetchState &state, co
 		D_ASSERT(!FlatVector::IsNull(result_vector, result_idx));
 		// regular column: fetch data from the base column
 		auto &col_data = GetColumn(column);
-// start Anybase changes
-		col_data.FetchRow(transaction, state, column, row_id, result_vector, result_idx, fetch_current_update);
-// end Anybase changes
+		col_data.FetchRow(transaction, state, column, row_id, result_vector, result_idx);
 	}
 }
 

@@ -33,12 +33,6 @@ unique_ptr<LogicalOperator> JoinOrderOptimizer::Optimize(unique_ptr<LogicalOpera
 		return plan;
 	}
 
-	if (depth > query_graph_manager.context.config.max_expression_depth) {
-		// Very deep plans will eventually consume quite some stack space
-		// Returning the current plan is always a valid choice
-		return plan;
-	}
-
 	// make sure query graph manager has not extracted a relation graph already
 	LogicalOperator *op = plan.get();
 

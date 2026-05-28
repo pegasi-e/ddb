@@ -313,10 +313,8 @@ unique_ptr<BaseStatistics> StructColumnData::GetUpdateStatistics() {
 	return stats.ToUnique();
 }
 
-// start Anybase changes
 void StructColumnData::FetchRow(TransactionData transaction, ColumnFetchState &state, const StorageIndex &storage_index,
-								row_t row_id, Vector &result, idx_t result_idx, bool fetch_current_update) {
-// end Anybase changes
+								row_t row_id, Vector &result, idx_t result_idx) {
 	// fetch the validity state
 	validity->FetchRow(transaction, state, storage_index, row_id, result, result_idx);
 	if (storage_index.IsPushdownExtract()) {

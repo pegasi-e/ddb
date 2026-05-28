@@ -21,8 +21,9 @@ class ClientContext;
 class MetaTransaction;
 class Transaction;
 class TransactionManager;
+// start Anybase changes
 struct timestamp_t;
-
+// end Anybase changes
 //! The transaction context keeps track of all the information relating to the
 //! current transaction
 class TransactionContext {

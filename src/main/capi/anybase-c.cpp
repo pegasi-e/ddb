@@ -395,7 +395,7 @@ duckdb_error_data duckdb_append_arrow(duckdb_connection connection, duckdb_appen
 	const auto ddbConnection = reinterpret_cast<Connection *>(connection);
 	auto arrow_schema = duckdb::make_uniq<duckdb::ArrowTableSchema>();
 	try {
-		duckdb::ArrowTableFunction::PopulateArrowTableSchema(duckdb::DBConfig::GetConfig(*ddbConnection->context), *arrow_schema, *schema);
+		duckdb::ArrowTableFunction::PopulateArrowTableSchema(*ddbConnection->context, *arrow_schema, *schema);
 	} catch (const duckdb::Exception &ex) {
 		return duckdb_create_error_data(DUCKDB_ERROR_INVALID_INPUT, ex.what());
 	} catch (const std::exception &ex) {

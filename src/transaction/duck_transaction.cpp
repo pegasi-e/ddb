@@ -364,9 +364,9 @@ shared_ptr<CheckpointLock> DuckTransaction::SharedLockTable(DataTableInfo &info)
 DuckTransaction::DuckTransaction(DuckTransactionManager &manager, ClientContext &context_p, transaction_t start_time,
 								 transaction_t transaction_id, idx_t catalog_version_p, timestamp_t meta_start_time, transaction_t meta_transaction_id)
 	: Transaction(manager, context_p), start_time(start_time), transaction_id(transaction_id), commit_id(0),
-	  highest_active_query(0), catalog_version(catalog_version_p), awaiting_cleanup(false),
-	  transaction_manager(manager), undo_buffer(*this, context_p),
-	storage(make_uniq<LocalStorage>(context_p, *this)), meta_sequenceNumber(meta_transaction_id), meta_startTime(meta_start_time) {
+	  catalog_version(catalog_version_p), awaiting_cleanup(false),
+	  undo_buffer(*this, context_p),
+	  storage(make_uniq<LocalStorage>(context_p, *this)), meta_sequenceNumber(meta_transaction_id), meta_startTime(meta_start_time) {
 }
 bool DuckTransaction::ShouldPublishCDCEvent() {
 	if (context.expired()) {

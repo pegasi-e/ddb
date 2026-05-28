@@ -139,10 +139,8 @@ static void MergeValidityInfo(UpdateInfo &current, ValidityMask &result_mask) {
 static void UpdateMergeValidity(transaction_t start_time, transaction_t transaction_id, UpdateInfo &info,
                                 Vector &result) {
 	auto &result_mask = FlatVector::Validity(result);
-// start Anybase changes
-	UpdateInfo::UpdatesForTransaction(info, start_time, transaction_id, true,
+	UpdateInfo::UpdatesForTransaction(info, start_time, transaction_id,
 	                                  [&](UpdateInfo &current) { MergeValidityInfo(current, result_mask); });
-// end Anybase changes
 }
 
 template <class T>
@@ -164,10 +162,8 @@ static void MergeUpdateInfo(UpdateInfo &current, T *result_data) {
 template <class T>
 static void UpdateMergeFetch(transaction_t start_time, transaction_t transaction_id, UpdateInfo &info, Vector &result) {
 	auto result_data = FlatVector::GetData<T>(result);
-// start Anybase changes
-	UpdateInfo::UpdatesForTransaction(info, start_time, transaction_id, true,
+	UpdateInfo::UpdatesForTransaction(info, start_time, transaction_id,
 	                                  [&](UpdateInfo &current) { MergeUpdateInfo<T>(current, result_data); });
-// end Anybase changes
 }
 
 static UpdateSegment::fetch_update_function_t GetFetchUpdateFunction(PhysicalType type) {
@@ -419,14 +415,10 @@ void UpdateSegment::FetchCommittedRange(idx_t start_row, idx_t count, Vector &re
 //===--------------------------------------------------------------------===//
 // Fetch Row
 //===--------------------------------------------------------------------===//
-// start Anybase changes
 static void FetchRowValidity(transaction_t start_time, transaction_t transaction_id, UpdateInfo &info, idx_t row_idx,
-                             Vector &result, idx_t result_idx, bool fetch_current_update) {
-// end Anybase changes
+                             Vector &result, idx_t result_idx) {
 	auto &result_mask = FlatVector::Validity(result);
-// start Anybase changes
-	UpdateInfo::UpdatesForTransaction(info, start_time, transaction_id, fetch_current_update, [&](UpdateInfo &current) {
-// end Anybase changes
+	UpdateInfo::UpdatesForTransaction(info, start_time, transaction_id, [&](UpdateInfo &current) {
 		auto info_data = current.GetData<bool>();
 		auto tuples = current.GetTuples();
 		// FIXME: we could do a binary search in here
@@ -442,14 +434,10 @@ static void FetchRowValidity(transaction_t start_time, transaction_t transaction
 }
 
 template <class T>
-// start Anybase changes
 static void TemplatedFetchRow(transaction_t start_time, transaction_t transaction_id, UpdateInfo &info, idx_t row_idx,
-                              Vector &result, idx_t result_idx, bool fetch_current_update) {
-// end Anybase changes
+                              Vector &result, idx_t result_idx) {
 	auto result_data = FlatVector::GetData<T>(result);
-// start Anybase changes
-	UpdateInfo::UpdatesForTransaction(info, start_time, transaction_id, fetch_current_update, [&](UpdateInfo &current) {
-// end Anybase changes
+	UpdateInfo::UpdatesForTransaction(info, start_time, transaction_id, [&](UpdateInfo &current) {
 		auto info_data = current.GetData<T>();
 		auto tuples = current.GetTuples();
 		// FIXME: we could do a binary search in here
@@ -501,9 +489,8 @@ static UpdateSegment::fetch_row_function_t GetFetchRowFunction(PhysicalType type
 		throw NotImplementedException("Unimplemented type for update segment fetch row");
 	}
 }
-//start Anybase changes
-void UpdateSegment::FetchRow(TransactionData transaction, idx_t row_id, Vector &result, idx_t result_idx, bool fetch_current_update) {
-// end Anybase changes
+
+void UpdateSegment::FetchRow(TransactionData transaction, idx_t row_id, Vector &result, idx_t result_idx) {
 	if (row_id > column_data.count) {
 		throw InternalException("UpdateSegment::FetchRow out of range");
 	}
@@ -515,10 +502,8 @@ void UpdateSegment::FetchRow(TransactionData transaction, idx_t row_id, Vector &
 	}
 	idx_t row_in_vector = row_id - vector_index * STANDARD_VECTOR_SIZE;
 	auto pin = entry.Pin();
-//start Anybase changes
 	fetch_row_function(transaction.start_time, transaction.transaction_id, UpdateInfo::Get(pin), row_in_vector, result,
-	                   result_idx, fetch_current_update);
-// end Anybase changes
+	                   result_idx);
 }
 
 //===--------------------------------------------------------------------===//

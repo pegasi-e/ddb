@@ -174,27 +174,25 @@ public:
 // 	//! If not empty, then this holds all logical column IDs of columns provided by the appender.
 // 	//! Any other columns default to NULL, or their default values.
 // 	vector<LogicalIndex> column_ids;
-//
-// protected:
-// 	void FlushInternal(ColumnDataCollection &collection) override;
-// 	Value GetDefaultValue(idx_t column);
+// end Anybase changes
+protected:
+	void FlushInternal(ColumnDataCollection &collection) override;
+	Value GetDefaultValue(idx_t column);
 
+// start Anybase changes
 public:
 	//! A reference to a database connection that created this appender
 	weak_ptr<ClientContext> context;
 	//! The table description (including column names)
 	unique_ptr<TableDescription> description;
-protected:
-	void FlushInternal(ColumnDataCollection &collection) override;
-	Value GetDefaultValue(idx_t column);
-	//! If not empty, then this holds all logical column IDs of columns provided by the appender.
-	//! Any other columns default to NULL, or their default values.
-	vector<LogicalIndex> column_ids;
-private:
 	//! All table default values.
 	unordered_map<column_t, Value> default_values;
 
-//Anybase changes
+protected:
+	//! If not empty, then this holds all logical column IDs of columns provided by the appender.
+	//! Any other columns default to NULL, or their default values.
+	vector<LogicalIndex> column_ids;
+// end Anybase changes
 };
 
 class QueryAppender : public BaseAppender {

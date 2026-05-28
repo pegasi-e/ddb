@@ -271,19 +271,20 @@ void ColumnData::FetchUpdates(TransactionData transaction, idx_t vector_index, V
 		throw TransactionException("Cannot create index with outstanding updates");
 	}
 	result.Flatten(scan_count);
-	updates->FetchUpdates(transaction, vector_index, result);
-}
 // start Anybase changes
-void ColumnData::FetchUpdateRow(TransactionData transaction, row_t row_id, Vector &result, idx_t result_idx,
-								bool fetch_current_update) {
-//end Anybase changes
+	if (update_type == UpdateScanType::ALLOW_UPDATES) {
+		updates->FetchCommitted(vector_index, result);
+	} else {
+		updates->FetchUpdates(transaction, vector_index, result);
+	}
+// end Anybase changes
+}
+void ColumnData::FetchUpdateRow(TransactionData transaction, row_t row_id, Vector &result, idx_t result_idx) {
 	lock_guard<mutex> update_guard(update_lock);
 	if (!updates) {
 		return;
 	}
-// start Anybase changes
-	updates->FetchRow(transaction, NumericCast<idx_t>(row_id), result, result_idx, fetch_current_update);
-//end Anybase change
+	updates->FetchRow(transaction, NumericCast<idx_t>(row_id), result, result_idx);
 }
 
 void ColumnData::UpdateInternal(TransactionData transaction, DataTable &data_table, idx_t column_index,
@@ -300,7 +301,9 @@ void ColumnData::UpdateInternal(TransactionData transaction, DataTable &data_tab
 idx_t ColumnData::ScanVector(TransactionData transaction, idx_t vector_index, ColumnScanState &state, Vector &result,
                              idx_t target_scan, ScanVectorType scan_type, UpdateScanType update_type) {
 	auto scan_count = ScanVector(state, result, target_scan, scan_type);
-	if (scan_type != ScanVectorType::SCAN_ENTIRE_VECTOR) {
+// start Anybase change
+	if (scan_type != ScanVectorType::SCAN_ENTIRE_VECTOR || update_type == UpdateScanType::ALLOW_UPDATES) {
+// end Anybase change
 		// if we are scanning an entire vector we cannot have updates
 		FetchUpdates(transaction, vector_index, result, scan_count, update_type);
 	}
@@ -564,10 +567,9 @@ idx_t ColumnData::Fetch(ColumnScanState &state, row_t row_id, Vector &result) {
 	state.internal_index = state.current->GetRowStart();
 	return ScanVector(state, result, STANDARD_VECTOR_SIZE, ScanVectorType::SCAN_FLAT_VECTOR);
 }
-// start Anybase changes
+
 void ColumnData::FetchRow(TransactionData transaction, ColumnFetchState &state, const StorageIndex &storage_index,
-                          row_t row_id, Vector &result, idx_t result_idx,  bool fetch_current_update) {
-// end Anybase changes
+                          row_t row_id, Vector &result, idx_t result_idx) {
 	if (UnsafeNumericCast<idx_t>(row_id) > count) {
 		throw InternalException("ColumnData::FetchRow - row_id out of range");
 	}
@@ -577,9 +579,7 @@ void ColumnData::FetchRow(TransactionData transaction, ColumnFetchState &state, 
 	auto index_in_segment = row_id - UnsafeNumericCast<row_t>(segment->GetRowStart());
 	segment->GetNode().FetchRow(state, index_in_segment, result, result_idx);
 	// merge any updates made to this row
-// start Anybase changes
-	FetchUpdateRow(transaction, row_id, result, result_idx, fetch_current_update);
-// end Anybase changes
+	FetchUpdateRow(transaction, row_id, result, result_idx);
 }
 
 idx_t ColumnData::FetchUpdateData(ColumnScanState &state, row_t *row_ids, Vector &base_vector, idx_t row_group_start) {
@@ -790,6 +790,9 @@ void PersistentColumnData::Serialize(Serializer &serializer) const {
 		if (child_columns.size() > 2) {
 			serializer.WriteProperty(103, "shredded", child_columns[2]);
 		}
+// start Anybase changes
+		serializer.WriteProperty(971, "commit_version", commit_version);
+// end Anybase changes
 		return;
 	}
 
@@ -817,7 +820,7 @@ void PersistentColumnData::Serialize(Serializer &serializer) const {
 	}
 
 // start Anybase changes
-	serializer.WriteProperty(103, "commit_version", commit_version);
+	serializer.WriteProperty(971, "commit_version", commit_version);
 // end Anybase changes
 }
 
@@ -870,6 +873,9 @@ PersistentColumnData PersistentColumnData::Deserialize(Deserializer &deserialize
 			auto &variant_data = result.extra_data->Cast<VariantPersistentColumnData>();
 			result.DeserializeField(deserializer, 103, "shredded", variant_data.logical_type);
 		}
+// start Anybase changes
+		deserializer.ReadPropertyWithDefault(971, "commit_version", result.commit_version);
+// end Anybase changes
 		return result;
 	}
 
@@ -914,6 +920,10 @@ PersistentColumnData PersistentColumnData::Deserialize(Deserializer &deserialize
 
 		deserializer.Unset<LogicalType>();
 
+// start Anybase changes
+		deserializer.ReadPropertyWithDefault(971, "commit_version", result.commit_version);
+// end Anybase changes
+
 		return result;
 	}
 
@@ -948,7 +958,12 @@ PersistentColumnData PersistentColumnData::Deserialize(Deserializer &deserialize
 	}
 
 // start Anybase changes
-	deserializer.ReadPropertyWithDefault(103, "commit_version", result.commit_version);
+	//Legacy - remove when upgrading to DDB > 1.5.0
+	if (deserializer.CanDeserializeProperty(103, nullptr)) {
+		deserializer.ReadPropertyWithDefault(103, "commit_version", result.commit_version);
+	} else {
+		deserializer.ReadPropertyWithDefault(971, "commit_version", result.commit_version);
+	}
 // end Anybase changes
 	return result;
 }

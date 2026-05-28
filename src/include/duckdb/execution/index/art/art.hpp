@@ -108,10 +108,10 @@ public:
 	                     idx_t count, const DeleteIndexInfo &delete_info, IndexAppendMode append_mode,
 	                     optional_ptr<DataChunk> chunk = nullptr);
 
-	// start Anybase changes
+// start Anybase changes
 	//! Verify that data can be appended to the index without a constraint violation.
 	void VerifyAppend(DataChunk &chunk, IndexAppendInfo &info, optional_ptr<ConflictManager> manager, bool allow_non_standard_vector_size = false) override;
-	// end Anybase changes
+// end Anybase changes
 
 	//! Delete a chunk from the ART.
 	idx_t TryDelete(IndexLock &state, DataChunk &entries, Vector &row_identifiers,

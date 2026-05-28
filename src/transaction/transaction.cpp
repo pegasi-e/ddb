@@ -10,9 +10,9 @@ Transaction::Transaction(TransactionManager &manager_p, ClientContext &context_p
 }
 
 Transaction::~Transaction() {
-	// start Anybase changes
+// start Anybase changes
 	involved_columns.clear();
-	// end Anybase changes
+// end Anybase changes
 }
 
 bool Transaction::IsReadOnly() {

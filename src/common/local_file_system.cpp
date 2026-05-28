@@ -16,12 +16,6 @@
 #include <cstdint>
 #include <cstdio>
 #include <sys/stat.h>
-// start Anybase changes
-#if defined(__DARWIN__) || defined(__APPLE__) || defined(__OpenBSD__)
-#include <sys/attr.h>
-#include <sys/clonefile.h>
-#endif
-// end Anybase changes
 
 #ifndef _WIN32
 #include <dirent.h>
@@ -56,9 +50,6 @@ extern "C" WINBASEAPI BOOL QueryFullProcessImageNameW(HANDLE, DWORD, LPWSTR, PDW
 #endif
 #include <fcntl.h>
 #include <libgen.h>
-// start Anybase changes
-#include <sys/sendfile.h>
-// end Anybase changes
 // See e.g.:
 // https://opensource.apple.com/source/CarbonHeaders/CarbonHeaders-18.1/TargetConditionals.h.auto.html
 #elif defined(__APPLE__)

@@ -60,12 +60,11 @@ private:
 // start Anybase changes
 public:
 	idx_t GetVersion(const vector<column_t> &columnIds) {
-		for (idx_t i = 0; i < columnIds.size(); i++) {
-			auto verInfo = GetVectorInfo(i).insert_id;
-			return verInfo;
+		if (columnIds.empty()) {
+			return 0;
 		}
-
-		return 0;
+		
+		return GetVectorInfo(0).ConstantInsertId();
 	}
 // end Anybase changes
 };

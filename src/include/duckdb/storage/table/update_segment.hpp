@@ -40,9 +40,7 @@ public:
 	void FetchCommittedRange(idx_t start_row, idx_t count, Vector &result);
 	void Update(TransactionData transaction, DataTable &data_table, idx_t column_index, Vector &update, row_t *ids,
 	            idx_t count, Vector &base_data, idx_t row_group_start);
-// start Anybase changes
-	void FetchRow(TransactionData transaction, idx_t row_id, Vector &result, idx_t result_idx, bool fetch_current_update = true);
-// end Anybase changes
+	void FetchRow(TransactionData transaction, idx_t row_id, Vector &result, idx_t result_idx);
 
 	void RollbackUpdate(UpdateInfo &info);
 	void CleanupUpdateInternal(const StorageLockKey &lock, UpdateInfo &info);
@@ -78,10 +76,8 @@ public:
 	typedef void (*fetch_committed_function_t)(UpdateInfo &info, Vector &result);
 	typedef void (*fetch_committed_range_function_t)(UpdateInfo &info, idx_t start, idx_t end, idx_t result_offset,
 	                                                 Vector &result);
-// start Anybase changes
 	typedef void (*fetch_row_function_t)(transaction_t start_time, transaction_t transaction_id, UpdateInfo &info,
-	                                     idx_t row_idx, Vector &result, idx_t result_idx, bool fetch_current_update);
-// end Anybase changes
+											 idx_t row_idx, Vector &result, idx_t result_idx);
 	typedef void (*rollback_update_function_t)(UpdateInfo &base_info, UpdateInfo &rollback_info);
 	typedef idx_t (*statistics_update_function_t)(UpdateSegment *segment, SegmentStatistics &stats,
 	                                              UnifiedVectorFormat &update, idx_t count, SelectionVector &sel);

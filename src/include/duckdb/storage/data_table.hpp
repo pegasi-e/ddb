@@ -95,11 +95,9 @@ public:
 	//! Returns true if all pushed down filters were executed during data fetching
 	void Scan(DuckTransaction &transaction, DataChunk &result, TableScanState &state);
 
-// start Anybase changes
 	//! Fetch data from the specific row identifiers from the base table
 	void Fetch(DuckTransaction &transaction, DataChunk &result, const vector<StorageIndex> &column_ids,
-			   const Vector &row_ids, idx_t fetch_count, ColumnFetchState &state, bool fetch_current_update = true);
-// end Anybase changes
+			   const Vector &row_ids, idx_t fetch_count, ColumnFetchState &state);
 	void FetchCommitted(DataChunk &result, const vector<StorageIndex> &column_ids, const Vector &row_identifiers,
 	                    idx_t fetch_count, ColumnFetchState &state);
 	//! Returns true, if the transaction can fetch the row ID.

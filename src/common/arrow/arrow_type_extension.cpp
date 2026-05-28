@@ -14,7 +14,9 @@ namespace duckdb {
 
 // start Anybase changes
 struct ArrowUUID {
-	static unique_ptr<ArrowType> GetType(const ArrowSchema &schema, const ArrowSchemaMetadata &schema_metadata) {
+	static unique_ptr<ArrowType> GetType(ClientContext &context,
+										 const ArrowSchema &schema,
+										 const ArrowSchemaMetadata &schema_metadata) {
 		const auto format = string(schema.format);
 		if (format == "z") {
 			return make_uniq<ArrowType>(LogicalType::UUID, make_uniq<ArrowStringInfo>(ArrowVariableSizeType::NORMAL));
@@ -47,7 +49,7 @@ struct ArrowUUID {
 		}
 	}
 };
-// end Anybase chagnes
+// end Anybase changes
 
 ArrowTypeExtension::ArrowTypeExtension(string extension_name, string arrow_format,
                                        shared_ptr<ArrowTypeExtensionData> type)

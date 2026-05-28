@@ -227,13 +227,7 @@ struct DatabaseHeader {
 	idx_t vector_size = 0;
 	//! The serialization compatibility version
 	idx_t serialization_compatibility = 0;
-
-// start Anybase changes
-	int64_t timestamp = 0;
-	idx_t sequence = 0;
-	idx_t original_meta_block;
-	static constexpr idx_t ANYBASE_HLC_BYTES = MAXIMUM_BLOCK + 1;
-// end Anybase changes
+	
 	void Write(WriteStream &ser);
 	static DatabaseHeader Read(const MainHeader &header, ReadStream &source);
 };

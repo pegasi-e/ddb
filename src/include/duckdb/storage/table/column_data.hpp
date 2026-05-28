@@ -166,17 +166,15 @@ public:
 
 	//! Fetch the vector from the column data that belongs to this specific row
 	virtual idx_t Fetch(ColumnScanState &state, row_t row_id, Vector &result);
-	// start Anybase changes
 	//! Fetch a specific row id and append it to the vector
 	virtual void FetchRow(TransactionData transaction, ColumnFetchState &state, const StorageIndex &storage_index,
-	                      row_t row_id, Vector &result, idx_t result_idx, bool fetch_current_update = true);
+	                      row_t row_id, Vector &result, idx_t result_idx);
 
 	virtual void Update(TransactionData transaction, DataTable &data_table, idx_t column_index, Vector &update_vector,
 	                    row_t *row_ids, idx_t update_count, idx_t row_group_start);
 	virtual void UpdateColumn(TransactionData transaction, DataTable &data_table, const vector<column_t> &column_path,
 	                          Vector &update_vector, row_t *row_ids, idx_t update_count, idx_t depth,
 	                          idx_t row_group_start);
-	// end Anybase changes
 	virtual unique_ptr<BaseStatistics> GetUpdateStatistics();
 
 	virtual void VisitBlockIds(BlockIdVisitor &visitor) const;
@@ -237,10 +235,7 @@ protected:
 
 	void FetchUpdates(TransactionData transaction, idx_t vector_index, Vector &result, idx_t scan_count,
 	                  UpdateScanType update_type);
-// start Anybase changes
-	void FetchUpdateRow(TransactionData transaction, row_t row_id, Vector &result, idx_t result_idx,
-						bool fetch_current_update = true);
-// end Anybase changes
+	void FetchUpdateRow(TransactionData transaction, row_t row_id, Vector &result, idx_t result_idx);
 	void UpdateInternal(TransactionData transaction, DataTable &data_table, idx_t column_index, Vector &update_vector,
 	                    row_t *row_ids, idx_t update_count, Vector &base_vector, idx_t row_group_start);
 	idx_t FetchUpdateData(ColumnScanState &state, row_t *row_ids, Vector &base_vector, idx_t row_group_start);
@@ -284,6 +279,10 @@ public:
 		DynamicCastCheck<TARGET>(this);
 		return reinterpret_cast<const TARGET &>(*this);
 	}
+// start Anybase changes
+public:
+	CommitVersionManager commit_version_manager;
+// end Anybase changes
 };
 
 enum class ExtraPersistentColumnDataType : uint8_t {
@@ -346,10 +345,6 @@ public:
 	}
 
 	GeometryStorageType storage_type;
-// start Anybase changes
-public:
-	CommitVersionManager commit_version_manager;
-// end Anybase changes
 };
 
 struct PersistentColumnData {
