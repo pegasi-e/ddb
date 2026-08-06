@@ -130,11 +130,16 @@ void StandardColumnData::InitializeAppend(ColumnAppendState &state) {
 
 void StandardColumnData::AppendData(BaseStatistics &stats, ColumnAppendState &state, UnifiedVectorFormat &vdata,
                                     idx_t count) {
+	const lock_guard<mutex> standard_guard(update_lock);
+	const lock_guard<mutex> validity_guard(validity.update_lock);
 	ColumnData::AppendData(stats, state, vdata, count);
 	validity.AppendData(stats, state.child_appends[0], vdata, count);
 }
 
 void StandardColumnData::RevertAppend(row_t start_row) {
+	const lock_guard<mutex> standard_guard(update_lock);
+	const lock_guard<mutex> validity_guard(validity.update_lock);
+
 	ColumnData::RevertAppend(start_row);
 
 	validity.RevertAppend(start_row);
@@ -156,14 +161,25 @@ void StandardColumnData::Update(TransactionData transaction, DataTable &data_tab
                                 Vector &update_vector, row_t *row_ids, idx_t update_count) {
 	ColumnScanState standard_state, validity_state;
 	Vector base_vector(type);
+
+	const unique_lock<mutex> standard_lock(update_lock);
+	const unique_lock<mutex> validity_lock(validity.update_lock);
+
 	auto standard_fetch = FetchUpdateData(standard_state, row_ids, base_vector);
 	auto validity_fetch = validity.FetchUpdateData(validity_state, row_ids, base_vector);
 	if (standard_fetch != validity_fetch) {
 		throw InternalException("Unaligned fetch in validity and main column data for update");
 	}
 
-	UpdateInternal(transaction, data_table, column_index, update_vector, row_ids, update_count, base_vector);
-	validity.UpdateInternal(transaction, data_table, column_index, update_vector, row_ids, update_count, base_vector);
+	if (!updates) {
+		updates = make_uniq<UpdateSegment>(*this);
+	}
+	if (!validity.updates) {
+		validity.updates = make_uniq<UpdateSegment>(validity);
+	}
+
+	updates->Update(transaction, data_table, column_index, update_vector, row_ids, update_count, base_vector);
+	validity.updates->Update(transaction, data_table, column_index, update_vector, row_ids, update_count, base_vector);
 }
 
 void StandardColumnData::UpdateColumn(TransactionData transaction, DataTable &data_table,
