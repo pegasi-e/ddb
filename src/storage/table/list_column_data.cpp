@@ -276,7 +276,7 @@ unique_ptr<BaseStatistics> ListColumnData::GetUpdateStatistics() {
 }
 
 void ListColumnData::FetchRow(TransactionData transaction, ColumnFetchState &state, const StorageIndex &storage_index,
-                              row_t row_id, Vector &result, idx_t result_idx) {
+                              row_t row_id, Vector &result, idx_t result_idx, bool fetch_current_update) {
 	// insert any child states that are required
 	// we need two (validity & list child)
 	// note that we need a scan state for the child vector
@@ -289,7 +289,7 @@ void ListColumnData::FetchRow(TransactionData transaction, ColumnFetchState &sta
 	// now perform the fetch within the segment
 	auto start_offset = row_id == 0 ? 0 : FetchListOffset(UnsafeNumericCast<idx_t>(row_id - 1));
 	auto end_offset = FetchListOffset(UnsafeNumericCast<idx_t>(row_id));
-	validity->FetchRow(transaction, *state.child_states[0], storage_index, row_id, result, result_idx);
+	validity->FetchRow(transaction, *state.child_states[0], storage_index, row_id, result, result_idx, fetch_current_update);
 
 	auto &validity_mask = FlatVector::Validity(result);
 	auto list_data = FlatVector::GetData<list_entry_t>(result);

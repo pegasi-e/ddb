@@ -314,9 +314,9 @@ unique_ptr<BaseStatistics> StructColumnData::GetUpdateStatistics() {
 }
 
 void StructColumnData::FetchRow(TransactionData transaction, ColumnFetchState &state, const StorageIndex &storage_index,
-                                row_t row_id, Vector &result, idx_t result_idx) {
+                                row_t row_id, Vector &result, idx_t result_idx, bool fetch_current_update) {
 	// fetch the validity state
-	validity->FetchRow(transaction, state, storage_index, row_id, result, result_idx);
+	validity->FetchRow(transaction, state, storage_index, row_id, result, result_idx, fetch_current_update);
 	if (storage_index.IsPushdownExtract()) {
 		auto &index_children = storage_index.GetChildIndexes();
 		D_ASSERT(index_children.size() == 1);
@@ -327,13 +327,13 @@ void StructColumnData::FetchRow(TransactionData transaction, ColumnFetchState &s
 		if (!child_storage_index.HasChildren() && child_storage_index.HasType() &&
 		    child_storage_index.GetType() != child_type) {
 			Vector intermediate(child_type, 1);
-			sub_column.FetchRow(transaction, state, child_storage_index, row_id, intermediate, 0);
+			sub_column.FetchRow(transaction, state, child_storage_index, row_id, intermediate, 0, fetch_current_update);
 			auto context = transaction.transaction->context.lock();
 			auto fetched_row = intermediate.GetValue(0).CastAs(*context, result.GetType());
 			result.SetValue(result_idx, fetched_row);
 			return;
 		} else {
-			sub_column.FetchRow(transaction, state, child_storage_index, row_id, result, result_idx);
+			sub_column.FetchRow(transaction, state, child_storage_index, row_id, result, result_idx, fetch_current_update);
 			return;
 		}
 	}
@@ -341,7 +341,7 @@ void StructColumnData::FetchRow(TransactionData transaction, ColumnFetchState &s
 	auto &child_entries = StructVector::GetEntries(result);
 	// fetch the sub-column states
 	for (idx_t i = 0; i < child_entries.size(); i++) {
-		sub_columns[i]->FetchRow(transaction, state, storage_index, row_id, *child_entries[i], result_idx);
+		sub_columns[i]->FetchRow(transaction, state, storage_index, row_id, *child_entries[i], result_idx, fetch_current_update);
 	}
 }
 
@@ -431,6 +431,7 @@ public:
 
 	PersistentColumnData ToPersistentData() override {
 		PersistentColumnData data(original_column.type);
+		data.commit_version = original_column.commit_version_manager.GetVersion();
 		data.child_columns.push_back(validity_state->ToPersistentData());
 		for (auto &child_state : child_states) {
 			data.child_columns.push_back(child_state->ToPersistentData());
@@ -485,6 +486,7 @@ bool StructColumnData::HasAnyChanges() const {
 
 PersistentColumnData StructColumnData::Serialize() {
 	PersistentColumnData persistent_data(type);
+	persistent_data.commit_version = commit_version_manager.GetVersion();
 	persistent_data.child_columns.push_back(validity->Serialize());
 	for (auto &sub_column : sub_columns) {
 		persistent_data.child_columns.push_back(sub_column->Serialize());
@@ -493,6 +495,7 @@ PersistentColumnData StructColumnData::Serialize() {
 }
 
 void StructColumnData::InitializeColumn(PersistentColumnData &column_data, BaseStatistics &target_stats) {
+	commit_version_manager.SetVersion(column_data.commit_version);
 	validity->InitializeColumn(column_data.child_columns[0], target_stats);
 	for (idx_t c_idx = 0; c_idx < sub_columns.size(); c_idx++) {
 		auto &child_stats = StructStats::GetChildStats(target_stats, c_idx);

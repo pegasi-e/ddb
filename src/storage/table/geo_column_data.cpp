@@ -133,17 +133,17 @@ idx_t GeoColumnData::Fetch(ColumnScanState &state, row_t row_id, Vector &result)
 }
 
 void GeoColumnData::FetchRow(TransactionData transaction, ColumnFetchState &state, const StorageIndex &storage_index,
-                             row_t row_id, Vector &result, idx_t result_idx) {
+                             row_t row_id, Vector &result, idx_t result_idx, bool fetch_current_update) {
 	// Not a shredded column, so just emit the binary format immediately
 	if (storage_type == GeometryStorageType::WKB) {
-		return base_column->FetchRow(transaction, state, storage_index, row_id, result, result_idx);
+		return base_column->FetchRow(transaction, state, storage_index, row_id, result, result_idx, fetch_current_update);
 	}
 
 	// Otherwise, we need to fetch and reassemble
 	DataChunk chunk;
 	chunk.Initialize(Allocator::DefaultAllocator(), {base_column->GetType()}, 1);
 
-	base_column->FetchRow(transaction, state, storage_index, row_id, chunk.data[0], 0);
+	base_column->FetchRow(transaction, state, storage_index, row_id, chunk.data[0], 0, fetch_current_update);
 
 	Reassemble(chunk.data[0], result, 1, storage_type, result_idx);
 }
@@ -225,6 +225,7 @@ public:
 
 	PersistentColumnData ToPersistentData() override {
 		auto inner_data = inner_column_state->ToPersistentData();
+		inner_data.commit_version = original_column.commit_version_manager.GetVersion();
 
 		// If this is a shredded column, record it in the persistent data!
 		if (storage_type != GeometryStorageType::SPATIAL) {
@@ -540,6 +541,7 @@ bool GeoColumnData::HasAnyChanges() const {
 PersistentColumnData GeoColumnData::Serialize() {
 	// Serialize the inner column
 	auto inner_data = base_column->Serialize();
+	inner_data.commit_version = commit_version_manager.GetVersion();
 
 	// Always store the format, except for the old spatial format, to avoid breaking compatibility with older versions
 	if (storage_type != GeometryStorageType::SPATIAL) {
@@ -552,6 +554,7 @@ PersistentColumnData GeoColumnData::Serialize() {
 }
 
 void GeoColumnData::InitializeColumn(PersistentColumnData &column_data, BaseStatistics &target_stats) {
+	commit_version_manager.SetVersion(column_data.commit_version);
 	if (!column_data.extra_data) {
 		// Old geometry segment
 		storage_type = GeometryStorageType::SPATIAL;

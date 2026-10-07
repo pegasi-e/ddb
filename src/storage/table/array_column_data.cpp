@@ -237,14 +237,14 @@ unique_ptr<BaseStatistics> ArrayColumnData::GetUpdateStatistics() {
 }
 
 void ArrayColumnData::FetchRow(TransactionData transaction, ColumnFetchState &state, const StorageIndex &storage_index,
-                               row_t row_id, Vector &result, idx_t result_idx) {
+                               row_t row_id, Vector &result, idx_t result_idx, bool fetch_current_update) {
 	// Create state for validity & child column
 	if (state.child_states.empty()) {
 		state.child_states.push_back(make_uniq<ColumnFetchState>());
 	}
 
 	// Fetch validity
-	validity->FetchRow(transaction, *state.child_states[0], storage_index, row_id, result, result_idx);
+	validity->FetchRow(transaction, *state.child_states[0], storage_index, row_id, result, result_idx, fetch_current_update);
 
 	// Fetch child column
 	auto &child_vec = ArrayVector::GetEntry(result);
@@ -329,6 +329,7 @@ public:
 
 	PersistentColumnData ToPersistentData() override {
 		PersistentColumnData data(original_column.type);
+		data.commit_version = original_column.commit_version_manager.GetVersion();
 		data.child_columns.push_back(validity_state->ToPersistentData());
 		data.child_columns.push_back(child_state->ToPersistentData());
 		return data;
@@ -361,12 +362,14 @@ bool ArrayColumnData::HasAnyChanges() const {
 
 PersistentColumnData ArrayColumnData::Serialize() {
 	PersistentColumnData persistent_data(type);
+	persistent_data.commit_version = commit_version_manager.GetVersion();
 	persistent_data.child_columns.push_back(validity->Serialize());
 	persistent_data.child_columns.push_back(child_column->Serialize());
 	return persistent_data;
 }
 
 void ArrayColumnData::InitializeColumn(PersistentColumnData &column_data, BaseStatistics &target_stats) {
+	commit_version_manager.SetVersion(column_data.commit_version);
 	D_ASSERT(column_data.pointers.empty());
 	validity->InitializeColumn(column_data.child_columns[0], target_stats);
 	auto &child_stats = ArrayStats::GetChildStats(target_stats);

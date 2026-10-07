@@ -20,6 +20,9 @@
 #include "duckdb/storage/storage_lock.hpp"
 #include "duckdb/storage/table/data_table_info.hpp"
 #include "duckdb/storage/table/scan_state.hpp"
+// start Anybase changes
+#include "duckdb/main/database.hpp"
+// end Anybase changes
 
 namespace duckdb {
 
@@ -275,6 +278,9 @@ ErrorData DuckTransaction::Commit(AttachedDatabase &db, CommitInfo &commit_info,
 		// if (DebugForceAbortCommit()) {
 		// 	throw InvalidInputException("Force revert");
 		// }
+		if (ShouldPublishCDCEvent()) {
+			PublishCdcMessages();
+		}
 		if (commit_state) {
 			// if we have written to the WAL - flush after the commit has been successful
 			commit_state->FlushCommit();
@@ -360,5 +366,32 @@ shared_ptr<CheckpointLock> DuckTransaction::SharedLockTable(DataTableInfo &info)
 	active_table_lock.checkpoint_lock = checkpoint_lock;
 	return checkpoint_lock;
 }
+// start Anybase changes
+DuckTransaction::DuckTransaction(DuckTransactionManager &manager, ClientContext &context_p, transaction_t start_time,
+								 transaction_t transaction_id, idx_t catalog_version_p, timestamp_t meta_start_time, transaction_t meta_transaction_id)
+	: Transaction(manager, context_p), start_time(start_time), transaction_id(transaction_id), commit_id(0),
+	  catalog_version(catalog_version_p), awaiting_cleanup(false),
+	  undo_buffer(*this, context_p),
+	storage(make_uniq<LocalStorage>(context_p, *this)), meta_sequenceNumber(meta_transaction_id), meta_startTime(meta_start_time) {
+}
+bool DuckTransaction::ShouldPublishCDCEvent() {
+	if (context.expired()) {
+		return false;
+	}
+
+	const auto contextHandle = context.lock();
+	if (!contextHandle ||
+		!contextHandle->db ||
+		!contextHandle->db->config.change_data_capture.IsEnabled()) {
+		return false;
+		}
+
+	return true;
+}
+
+void DuckTransaction::PublishCdcMessages() {
+	undo_buffer.PublishCdCEvent();
+}
+// end Anybase changes
 
 } // namespace duckdb

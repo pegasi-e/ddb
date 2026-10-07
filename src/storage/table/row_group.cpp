@@ -945,8 +945,9 @@ bool RowGroup::Fetch(TransactionData transaction, idx_t row) {
 	return vinfo->Fetch(transaction, row);
 }
 
+// start Anybase changes
 void RowGroup::FetchRow(TransactionData transaction, ColumnFetchState &state, const vector<StorageIndex> &column_ids,
-                        row_t row_id, DataChunk &result, idx_t result_idx) {
+                        row_t row_id, DataChunk &result, idx_t result_idx, bool fetch_current_update) {
 	if (UnsafeNumericCast<idx_t>(row_id) > count) {
 		throw InternalException("RowGroup::FetchRow - row_id out of range for row group");
 	}
@@ -957,9 +958,10 @@ void RowGroup::FetchRow(TransactionData transaction, ColumnFetchState &state, co
 		D_ASSERT(!FlatVector::IsNull(result_vector, result_idx));
 		// regular column: fetch data from the base column
 		auto &col_data = GetColumn(column);
-		col_data.FetchRow(transaction, state, column, row_id, result_vector, result_idx);
+		col_data.FetchRow(transaction, state, column, row_id, result_vector, result_idx, fetch_current_update);
 	}
 }
+// end Anybase changes
 
 void RowGroup::SetCount(idx_t count) {
 	this->count = count;
@@ -1031,6 +1033,7 @@ void RowGroup::CleanupAppend(transaction_t lowest_transaction, idx_t start, idx_
 	vinfo.CleanupAppend(lowest_transaction, start, count);
 }
 
+// start Anybase changes
 void RowGroup::Update(TransactionData transaction, DataTable &data_table, DataChunk &update_chunk, row_t *ids,
                       idx_t offset, idx_t count, const vector<PhysicalIndex> &column_ids, idx_t row_group_start) {
 #ifdef DEBUG
@@ -1073,6 +1076,7 @@ void RowGroup::UpdateColumn(TransactionData transaction, DataTable &data_table, 
 	}
 	MergeStatistics(primary_column_idx, *col_data.GetUpdateStatistics());
 }
+// end Anybase changes
 
 unique_ptr<BaseStatistics> RowGroup::GetStatistics(idx_t column_idx) const {
 	StorageIndex storage_index(column_idx);
@@ -1879,5 +1883,18 @@ void VersionDeleteState::Flush() {
 	}
 	count = 0;
 }
+
+// start Anybase changes
+idx_t RowGroup::GetColumnVersion(const idx_t vector_idx) {
+	return GetColumn(vector_idx).commit_version_manager.GetVersion();
+}
+
+void RowGroup::UpdateColumnVersions(const transaction_t commit_id) {
+	const auto count = GetColumnCount();
+	for (idx_t col_idx = 0; col_idx < count; col_idx++) {
+		GetColumn(col_idx).commit_version_manager.DidCommitTransaction(commit_id);
+	}
+}
+// end Anybase changes
 
 } // namespace duckdb

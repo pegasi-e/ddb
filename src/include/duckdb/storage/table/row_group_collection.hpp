@@ -84,8 +84,9 @@ public:
 	RowGroupIterationHelper Chunks(DuckTransaction &transaction);
 	RowGroupIterationHelper Chunks(DuckTransaction &transaction, const vector<StorageIndex> &column_ids);
 
+// start Anybase changes
 	void Fetch(TransactionData transaction, DataChunk &result, const vector<StorageIndex> &column_ids,
-	           const Vector &row_identifiers, idx_t fetch_count, ColumnFetchState &state);
+	           const Vector &row_identifiers, idx_t fetch_count, ColumnFetchState &state, bool fetch_current_update = true);
 
 	//! Returns true, if the row group can fetch the row id for the transaction.
 	bool CanFetch(TransactionData, const row_t row_id);
@@ -201,6 +202,13 @@ private:
 	atomic<idx_t> allocation_size;
 	//! Root metadata pointer, if the collection is loaded from disk
 	MetaBlockPointer metadata_pointer;
+// start Anybase changes
+public:
+	idx_t GetVersion(column_t column_idx) const;
+	void UpdateColumnVersions(transaction_t commit_id) const;
+	//! Get the row-group by the row id
+	optional_ptr<SegmentNode<RowGroup>> GetRowGroupByRowNumber(idx_t row_id);
+// end Anybase changes
 	//! Other metadata pointers
 	vector<MetaBlockPointer> metadata_pointers;
 	//! Controls whether the next append creates a new row group or reuses the existing one

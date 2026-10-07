@@ -8,6 +8,11 @@
 
 #pragma once
 
+// start Anybase changes
+#include "duckdb/storage/table/commit_version_manager.hpp"
+// end Anybase changes
+#include "duckdb/common/atomic.hpp"
+#include "duckdb/common/common.hpp"
 #include "duckdb/storage/table/table_index_list.hpp"
 #include "duckdb/storage/storage_lock.hpp"
 
@@ -73,6 +78,11 @@ private:
 	optional_idx last_seen_checkpoint;
 	//! The amount of row groups the checkpoint is processing
 	optional_idx checkpoint_row_group_count;
+
+// start Anybase changes
+public:
+	CommitVersionManager commit_version_manager;
+// end Anybase changes
 };
 
 } // namespace duckdb

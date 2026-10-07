@@ -428,8 +428,10 @@ RowGroupIterationHelper RowGroupCollection::Chunks(DuckTransaction &transaction,
 //===--------------------------------------------------------------------===//
 // Fetch
 //===--------------------------------------------------------------------===//
+// start Anybase changes
 void RowGroupCollection::Fetch(TransactionData transaction, DataChunk &result, const vector<StorageIndex> &column_ids,
-                               const Vector &row_identifiers, idx_t fetch_count, ColumnFetchState &state) {
+							   const Vector &row_identifiers, idx_t fetch_count, ColumnFetchState &state,
+							   bool fetch_current_update) {
 	// figure out which row_group to fetch from
 	auto row_ids = FlatVector::GetData<row_t>(row_identifiers);
 	idx_t count = 0;
@@ -448,17 +450,18 @@ void RowGroupCollection::Fetch(TransactionData transaction, DataChunk &result, c
 		}
 		auto &current_row_group = row_group->GetNode();
 		auto offset_in_row_group = UnsafeNumericCast<idx_t>(row_id) - row_group->GetRowStart();
-		if (state.fetch_type == FetchType::TRANSACTIONAL_FETCH &&
+		if (state.fetch_type == FetchType::TRANSACTIONAL_FETCH && fetch_current_update &&
 		    !current_row_group.Fetch(transaction, offset_in_row_group)) {
 			continue;
 		}
 		state.row_group = row_group;
 		current_row_group.FetchRow(transaction, state, column_ids, UnsafeNumericCast<row_t>(offset_in_row_group),
-		                           result, count);
+		                           result, count, fetch_current_update);
 		count++;
 	}
 	result.SetCardinality(count);
 }
+// end Anybase changes
 
 bool RowGroupCollection::CanFetch(TransactionData transaction, const row_t row_id) {
 	auto row_groups = GetRowGroups();
@@ -830,8 +833,9 @@ optional_ptr<SegmentNode<RowGroup>> RowGroupCollection::NextUpdateRowGroup(RowGr
 	return row_group;
 }
 
+// start Anybase changes
 void RowGroupCollection::Update(TransactionData transaction, DataTable &data_table, row_t *ids,
-                                const vector<PhysicalIndex> &column_ids, DataChunk &updates) {
+								const vector<PhysicalIndex> &column_ids, DataChunk &updates) {
 	D_ASSERT(updates.size() >= 1);
 	idx_t pos = 0;
 	auto row_groups = GetRowGroups();
@@ -850,6 +854,7 @@ void RowGroupCollection::Update(TransactionData transaction, DataTable &data_tab
 		}
 	} while (pos < updates.size());
 }
+// end Anybase changes
 
 struct IndexRemovalTargets {
 	optional_ptr<BoundIndex> append_target;
@@ -1081,8 +1086,9 @@ void RowGroupCollection::RemoveFromIndexes(const QueryContext &context, TableInd
 	}
 }
 
+// start Anybase changes
 void RowGroupCollection::UpdateColumn(TransactionData transaction, DataTable &data_table, Vector &row_ids,
-                                      const vector<column_t> &column_path, DataChunk &updates) {
+									  const vector<column_t> &column_path, DataChunk &updates) {
 	D_ASSERT(updates.size() >= 1);
 	auto ids = FlatVector::GetData<row_t>(row_ids);
 	idx_t pos = 0;
@@ -1100,6 +1106,7 @@ void RowGroupCollection::UpdateColumn(TransactionData transaction, DataTable &da
 		                                      stats.GetStats(*lock, primary_column_idx).Statistics());
 	} while (pos < updates.size());
 }
+// end Anybase changes
 
 //===--------------------------------------------------------------------===//
 // Checkpoint State
@@ -2143,5 +2150,37 @@ void RowGroupCollection::SetDistinct(column_t column_id, unique_ptr<DistinctStat
 	auto stats_lock = stats.GetLock();
 	stats.GetStats(*stats_lock, column_id).SetDistinct(std::move(distinct_stats));
 }
+
+// start Anybase changes
+idx_t RowGroupCollection::GetVersion(const column_t column_idx) const {
+	const auto segmentCount = GetRowGroups()->GetSegmentCount();
+	if (segmentCount == 0) {
+		return 0;
+	}
+
+	auto row_group = GetRowGroups()->GetSegment(0);
+	D_ASSERT(row_group);
+
+	idx_t version = 0;
+	if (row_group) {
+		version = std::max(row_group->GetNode().GetColumnVersion(column_idx), version);
+	}
+
+	return version;
+}
+
+void RowGroupCollection::UpdateColumnVersions(const transaction_t commit_id) const {
+	auto row_group = GetRowGroups()->GetSegment(0);
+	D_ASSERT(row_group);
+
+	if (row_group) {
+		row_group->GetNode().UpdateColumnVersions(commit_id);
+	}
+}
+
+optional_ptr<SegmentNode<RowGroup>> RowGroupCollection::GetRowGroupByRowNumber(idx_t row_id) {
+	return GetRowGroups()->GetSegment(row_id);
+}
+// end Anybase changesQ
 
 } // namespace duckdb

@@ -22,7 +22,9 @@ struct ClientProperties {
 	    : time_zone(std::move(time_zone_p)), arrow_offset_size(arrow_offset_size_p),
 	      arrow_use_list_view(arrow_use_list_view_p), produce_arrow_string_view(produce_arrow_string_view_p),
 	      arrow_lossless_conversion(lossless_conversion), arrow_output_version(arrow_output_version),
-	      client_context(client_context) {
+	// start Anybase changes
+	      client_context(client_context), uuid_as_binary_array(false) {
+	// end Anybase changes
 	}
 	ClientProperties() {};
 
@@ -33,5 +35,8 @@ struct ClientProperties {
 	bool arrow_lossless_conversion = false;
 	ArrowFormatVersion arrow_output_version = ArrowFormatVersion::V1_0;
 	optional_ptr<ClientContext> client_context;
+// start Anybase changes
+	bool uuid_as_binary_array = false;
+// end Anybase changes
 };
 } // namespace duckdb

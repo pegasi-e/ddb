@@ -4,6 +4,9 @@
 #include "duckdb/common/types/column/column_data_collection.hpp"
 #include "duckdb/common/vector_operations/vector_operations.hpp"
 #include "duckdb/execution/expression_executor.hpp"
+// start Anybase changes
+#include "duckdb/execution/operator/scan/physical_table_scan.hpp"
+// end Anybase changes
 #include "duckdb/main/client_context.hpp"
 #include "duckdb/parallel/thread_context.hpp"
 #include "duckdb/planner/expression/bound_reference_expression.hpp"
@@ -109,6 +112,26 @@ SinkResultType PhysicalUpdate::Sink(ExecutionContext &context, DataChunk &chunk,
 
 	chunk.Flatten();
 	l_state.default_executor.SetChunk(chunk);
+
+	// start Anybase changes
+	//Extract the involved columns for CDC
+	if (context.pipeline->GetSource()->type == PhysicalOperatorType::TABLE_SCAN) {
+		std::unordered_set<idx_t> involved_columns;
+
+		const auto table_scan = &context.pipeline->GetSource()->Cast<PhysicalTableScan>();
+		for (idx_t i = 0; i + 1 < table_scan->column_ids.size(); i++) {
+			involved_columns.insert(table_scan->column_ids[i].GetPrimaryIndex());
+		}
+
+		for (idx_t i = 0; i < columns.size(); i++) {
+			involved_columns.insert(columns[i].index);
+		}
+
+		auto &transaction = DuckTransaction::Get(context.client, table.db);
+		transaction.AddInvolvedColumn(table.GetTableName(), involved_columns);
+	}
+	//End extract the involved columns for CDC
+	// end Anybase changes
 
 	DataChunk &update_chunk = l_state.update_chunk;
 	update_chunk.Reset();

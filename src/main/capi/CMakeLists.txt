@@ -32,7 +32,8 @@ add_library_unity(
   value-c.cpp
   file_system-c.cpp
   config_options-c.cpp
-  copy_function-c.cpp)
+  copy_function-c.cpp
+  anybase-c.cpp)
 
 set(ALL_OBJECT_FILES
     ${ALL_OBJECT_FILES} $<TARGET_OBJECTS:duckdb_main_capi>

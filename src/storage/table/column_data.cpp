@@ -273,15 +273,16 @@ void ColumnData::FetchUpdates(TransactionData transaction, idx_t vector_index, V
 	result.Flatten(scan_count);
 	updates->FetchUpdates(transaction, vector_index, result);
 }
-
-void ColumnData::FetchUpdateRow(TransactionData transaction, row_t row_id, Vector &result, idx_t result_idx) {
+// start Anybase changes
+void ColumnData::FetchUpdateRow(TransactionData transaction, row_t row_id, Vector &result, idx_t result_idx,
+								bool fetch_current_update) {
 	lock_guard<mutex> update_guard(update_lock);
 	if (!updates) {
 		return;
 	}
-	updates->FetchRow(transaction, NumericCast<idx_t>(row_id), result, result_idx);
+	updates->FetchRow(transaction, NumericCast<idx_t>(row_id), result, result_idx, fetch_current_update);
 }
-
+//end Anybase changes
 void ColumnData::UpdateInternal(TransactionData transaction, DataTable &data_table, idx_t column_index,
                                 Vector &update_vector, row_t *row_ids, idx_t update_count, Vector &base_vector,
                                 idx_t row_group_start) {
@@ -562,7 +563,7 @@ idx_t ColumnData::Fetch(ColumnScanState &state, row_t row_id, Vector &result) {
 }
 
 void ColumnData::FetchRow(TransactionData transaction, ColumnFetchState &state, const StorageIndex &storage_index,
-                          row_t row_id, Vector &result, idx_t result_idx) {
+                          row_t row_id, Vector &result, idx_t result_idx, bool fetch_current_update) {
 	if (UnsafeNumericCast<idx_t>(row_id) > count) {
 		throw InternalException("ColumnData::FetchRow - row_id out of range");
 	}
@@ -573,7 +574,7 @@ void ColumnData::FetchRow(TransactionData transaction, ColumnFetchState &state, 
 	segment->GetNode().FetchRow(state, index_in_segment, result, result_idx);
 	// merge any updates made to this row
 
-	FetchUpdateRow(transaction, row_id, result, result_idx);
+	FetchUpdateRow(transaction, row_id, result, result_idx, fetch_current_update);
 }
 
 idx_t ColumnData::FetchUpdateData(ColumnScanState &state, row_t *row_ids, Vector &base_vector, idx_t row_group_start) {
@@ -714,6 +715,9 @@ void ColumnData::InitializeColumn(PersistentColumnData &column_data, BaseStatist
 	D_ASSERT(type.InternalType() == column_data.logical_type.InternalType());
 	// construct the segments based on the data pointers
 	this->count = 0;
+	// start Anybase changes
+	this->commit_version_manager.SetVersion(column_data.commit_version);
+	// end Anybase changes
 	for (auto &data_pointer : column_data.pointers) {
 		// Update the count and statistics
 		data_pointer.row_start = count;
@@ -781,6 +785,7 @@ void PersistentColumnData::Serialize(Serializer &serializer) const {
 		if (child_columns.size() > 2) {
 			serializer.WriteProperty(103, "shredded", child_columns[2]);
 		}
+		serializer.WritePropertyWithDefault(60001, "commit_version", commit_version);
 		return;
 	}
 
@@ -806,6 +811,10 @@ void PersistentColumnData::Serialize(Serializer &serializer) const {
 		serializer.WriteProperty(101, "validity", child_columns[0]);
 	} break;
 	}
+
+	// start Anybase changes
+	serializer.WritePropertyWithDefault(60001, "commit_version", commit_version);
+	// end Anybase changes
 }
 
 void PersistentColumnData::DeserializeField(Deserializer &deserializer, field_id_t field_idx, const char *field_name,
@@ -857,6 +866,7 @@ PersistentColumnData PersistentColumnData::Deserialize(Deserializer &deserialize
 			auto &variant_data = result.extra_data->Cast<VariantPersistentColumnData>();
 			result.DeserializeField(deserializer, 103, "shredded", variant_data.logical_type);
 		}
+		deserializer.ReadPropertyWithDefault(60001, "commit_version", result.commit_version);
 		return result;
 	}
 
@@ -901,6 +911,7 @@ PersistentColumnData PersistentColumnData::Deserialize(Deserializer &deserialize
 
 		deserializer.Unset<LogicalType>();
 
+		deserializer.ReadPropertyWithDefault(60001, "commit_version", result.commit_version);
 		return result;
 	}
 
@@ -933,6 +944,11 @@ PersistentColumnData PersistentColumnData::Deserialize(Deserializer &deserialize
 		result.DeserializeField(deserializer, 101, "validity", LogicalTypeId::VALIDITY);
 	} break;
 	}
+
+	// start Anybase changes
+	const auto legacy_commit_version = deserializer.ReadPropertyWithDefault<idx_t>(103, "commit_version");
+	result.commit_version = deserializer.ReadPropertyWithExplicitDefault<idx_t>(60001, "commit_version", legacy_commit_version);
+	// end Anybase changes
 	return result;
 }
 
@@ -1062,6 +1078,7 @@ unique_ptr<ExtraPersistentColumnData> ExtraPersistentColumnData::Deserialize(Des
 PersistentColumnData ColumnData::Serialize() {
 	auto result = count ? PersistentColumnData(type, GetDataPointers()) : PersistentColumnData(type);
 	result.has_updates = HasUpdates();
+	result.commit_version = commit_version_manager.GetVersion();
 	return result;
 }
 

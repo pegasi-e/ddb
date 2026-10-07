@@ -29,6 +29,8 @@ void CreateInfo::Serialize(Serializer &serializer) const {
 	if (serializer.ShouldSerialize(2)) {
 		serializer.WritePropertyWithDefault<LogicalDependencyList>(109, "dependencies", dependencies, LogicalDependencyList());
 	}
+	/* [Deleted] (idx_t) "legacy_commit_version" */
+	serializer.WritePropertyWithDefault<idx_t>(60000, "commit_version", commit_version, 0);
 }
 
 unique_ptr<CreateInfo> CreateInfo::Deserialize(Deserializer &deserializer) {
@@ -42,6 +44,8 @@ unique_ptr<CreateInfo> CreateInfo::Deserialize(Deserializer &deserializer) {
 	auto comment = deserializer.ReadPropertyWithExplicitDefault<Value>(107, "comment", Value());
 	auto tags = deserializer.ReadPropertyWithExplicitDefault<InsertionOrderPreservingMap<string>>(108, "tags", InsertionOrderPreservingMap<string>());
 	auto dependencies = deserializer.ReadPropertyWithExplicitDefault<LogicalDependencyList>(109, "dependencies", LogicalDependencyList());
+	auto legacy_commit_version = deserializer.ReadPropertyWithExplicitDefault<idx_t>(110, "legacy_commit_version", 0);
+	auto commit_version = deserializer.ReadPropertyWithExplicitDefault<idx_t>(60000, "commit_version", 0);
 	deserializer.Set<CatalogType>(type);
 	unique_ptr<CreateInfo> result;
 	switch (type) {
@@ -82,6 +86,8 @@ unique_ptr<CreateInfo> CreateInfo::Deserialize(Deserializer &deserializer) {
 	result->comment = comment;
 	result->tags = std::move(tags);
 	result->dependencies = dependencies;
+	result->commit_version = commit_version;
+	if (result->commit_version == 0) { result->commit_version = legacy_commit_version; }
 	return result;
 }
 

@@ -210,7 +210,7 @@ public:
 
 protected:
 	void LoadDatabase(QueryContext context) override;
-
 	unique_ptr<CheckpointWriter> CreateCheckpointWriter(QueryContext context, CheckpointOptions options);
+
 };
 } // namespace duckdb

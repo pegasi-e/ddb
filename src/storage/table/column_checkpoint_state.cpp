@@ -39,6 +39,7 @@ shared_ptr<ColumnData> ColumnCheckpointState::GetFinalResult() {
 		return original_column_mutable.shared_from_this();
 	}
 	result_column->SetCount(original_column.count.load());
+	result_column->commit_version_manager.SetVersion(original_column.commit_version_manager.GetVersion());
 	return result_column;
 }
 
@@ -225,6 +226,9 @@ PersistentColumnData ColumnCheckpointState::ToPersistentData() {
 	auto &type = result_column ? result_column->type : original_column.type;
 	PersistentColumnData data(type);
 	data.pointers = std::move(data_pointers);
+	// start Anybase changes
+	data.commit_version = original_column.commit_version_manager.GetVersion();
+	// end Anybase changes
 	return data;
 }
 

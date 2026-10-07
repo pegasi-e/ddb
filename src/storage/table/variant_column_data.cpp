@@ -435,18 +435,18 @@ unique_ptr<BaseStatistics> VariantColumnData::GetUpdateStatistics() {
 }
 
 void VariantColumnData::FetchRow(TransactionData transaction, ColumnFetchState &state,
-                                 const StorageIndex &storage_index, row_t row_id, Vector &result, idx_t result_idx) {
+                                 const StorageIndex &storage_index, row_t row_id, Vector &result, idx_t result_idx, bool fetch_current_update) {
 	if (storage_index.IsPushdownExtract() && IsShredded()) {
 		StorageIndex struct_extract;
 		if (PushdownShreddedFieldExtract(storage_index.GetChildIndex(0), struct_extract)) {
 			//! Shredded field exists and is fully shredded,
 			//! add the storage index to create a pushed-down 'struct_extract' to get the leaf
-			sub_columns[1]->FetchRow(transaction, state, struct_extract, row_id, result, result_idx);
+			sub_columns[1]->FetchRow(transaction, state, struct_extract, row_id, result, result_idx, fetch_current_update);
 			return;
 		}
 	}
 	Vector variant_vec(LogicalType::VARIANT(), result_idx + 1);
-	validity->FetchRow(transaction, state, storage_index, row_id, variant_vec, result_idx);
+	validity->FetchRow(transaction, state, storage_index, row_id, variant_vec, result_idx, fetch_current_update);
 	if (IsShredded()) {
 		auto intermediate = CreateUnshreddingIntermediate(result_idx + 1);
 		auto &child_vectors = StructVector::GetEntries(intermediate);
@@ -454,7 +454,7 @@ void VariantColumnData::FetchRow(TransactionData transaction, ColumnFetchState &
 		// fetch the sub-column states
 		StorageIndex empty(0);
 		for (idx_t i = 0; i < sub_columns.size(); i++) {
-			sub_columns[i]->FetchRow(transaction, state, empty, row_id, *child_vectors[i], result_idx);
+			sub_columns[i]->FetchRow(transaction, state, empty, row_id, *child_vectors[i], result_idx, fetch_current_update);
 		}
 		if (result_idx) {
 			intermediate.SetValue(0, intermediate.GetValue(result_idx));
@@ -465,7 +465,7 @@ void VariantColumnData::FetchRow(TransactionData transaction, ColumnFetchState &
 		VariantColumnData::UnshredVariantData(intermediate, unshredded, 1);
 		variant_vec.SetValue(0, unshredded.GetValue(0));
 	} else {
-		sub_columns[0]->FetchRow(transaction, state, storage_index, row_id, variant_vec, result_idx);
+		sub_columns[0]->FetchRow(transaction, state, storage_index, row_id, variant_vec, result_idx, fetch_current_update);
 		if (result_idx) {
 			variant_vec.SetValue(0, variant_vec.GetValue(result_idx));
 		}
@@ -577,6 +577,7 @@ public:
 
 	PersistentColumnData ToPersistentData() override {
 		PersistentColumnData data(original_column.type);
+		data.commit_version = original_column.commit_version_manager.GetVersion();
 		if (child_states.size() == 2) {
 			//! Use the type of the column data we used to create the Checkpoint
 			//! This will either be a pointer to shredded_data[1] if we decided to shred
@@ -772,6 +773,7 @@ bool VariantColumnData::HasAnyChanges() const {
 
 PersistentColumnData VariantColumnData::Serialize() {
 	PersistentColumnData persistent_data(type);
+	persistent_data.commit_version = commit_version_manager.GetVersion();
 	if (IsShredded()) {
 		// Set the extra data to indicate that this is shredded data
 		persistent_data.extra_data = make_uniq<VariantPersistentColumnData>(sub_columns[1]->type);
@@ -785,6 +787,7 @@ PersistentColumnData VariantColumnData::Serialize() {
 }
 
 void VariantColumnData::InitializeColumn(PersistentColumnData &column_data, BaseStatistics &target_stats) {
+	commit_version_manager.SetVersion(column_data.commit_version);
 	validity->InitializeColumn(column_data.child_columns[0], target_stats);
 
 	if (column_data.child_columns.size() == 3) {

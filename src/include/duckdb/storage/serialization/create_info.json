@@ -50,7 +50,7 @@
         "type": "Value",
         "default": "Value()"
       },
-	  {
+      {
         "id": 108,
         "name": "tags",
         "type": "InsertionOrderPreservingMap<string>",
@@ -62,7 +62,23 @@
         "type": "LogicalDependencyList",
         "default": "LogicalDependencyList()",
         "version": "v0.10.3"
-	  }
+      },
+      {
+        "id": 110,
+        "name": "legacy_commit_version",
+        "type": "idx_t",
+        "default": "0",
+        "status": "read_only"
+      },
+      {
+        "id": 60000,
+        "name": "commit_version",
+        "type": "idx_t",
+        "default": "0"
+      }
+    ],
+    "finalize_deserialization": [
+      "if (result->commit_version == 0) { result->commit_version = legacy_commit_version; }"
     ]
   },
   {
@@ -180,8 +196,7 @@
     "includes": [
       "duckdb/parser/parsed_data/create_schema_info.hpp"
     ],
-    "members": [
-    ]
+    "members": []
   },
   {
     "class": "CreateViewInfo",
@@ -232,7 +247,11 @@
         "version": "v1.5.0"
       }
     ],
-    "constructor": ["names", "column_comments", "column_comments_map"]
+    "constructor": [
+      "names",
+      "column_comments",
+      "column_comments_map"
+    ]
   },
   {
     "class": "CreateTypeInfo",
@@ -258,7 +277,10 @@
   {
     "class": "CreateMacroInfo",
     "base": "CreateInfo",
-    "enum": ["MACRO_ENTRY", "TABLE_MACRO_ENTRY"],
+    "enum": [
+      "MACRO_ENTRY",
+      "TABLE_MACRO_ENTRY"
+    ],
     "includes": [
       "duckdb/parser/parsed_data/create_macro_info.hpp"
     ],
@@ -281,7 +303,11 @@
         "serialize_property": "GetAllButFirstFunction()"
       }
     ],
-    "constructor": ["$CatalogType", "function", "extra_functions"]
+    "constructor": [
+      "$CatalogType",
+      "function",
+      "extra_functions"
+    ]
   },
   {
     "class": "CreateSequenceInfo",
