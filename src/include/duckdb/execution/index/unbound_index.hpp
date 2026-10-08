@@ -18,11 +18,43 @@ class ColumnDataCollection;
 
 enum class BufferedIndexReplay : uint8_t { INSERT_ENTRY = 0, DEL_ENTRY = 1 };
 
-struct BufferedIndexData {
+struct ReplayRange {
 	BufferedIndexReplay type;
-	unique_ptr<ColumnDataCollection> data;
+	// [start, end) - start is inclusive, end is exclusive for the range within the ColumnDataCollection
+	// buffer for operations to replay for this range.
+	idx_t start;
+	idx_t end;
+	explicit ReplayRange(const BufferedIndexReplay replay_type, const idx_t start_p, const idx_t end_p)
+	    : type(replay_type), start(start_p), end(end_p) {
+	}
+};
 
-	BufferedIndexData(BufferedIndexReplay replay_type, unique_ptr<ColumnDataCollection> data_p);
+// All inserts and deletes to be replayed are stored in their respective buffers.
+// Since the inserts and deletes may be interleaved, however, ranges stores the ordering of operations
+// and their offsets in the respective buffer.
+// Simple example:
+// ranges[0] - INSERT_ENTRY, [0,6)
+// ranges[1] - DEL_ENTRY,    [0,3)
+// ranges[2] - INSERT_ENTRY  [6,12)
+// So even though the buffered_inserts has all the insert data from [0,12), ranges gives us the intervals for
+// replaying the index operations in the right order.
+struct BufferedIndexReplays {
+	vector<ReplayRange> ranges;
+	unique_ptr<ColumnDataCollection> buffered_inserts;
+	unique_ptr<ColumnDataCollection> buffered_deletes;
+
+	BufferedIndexReplays() = default;
+
+	unique_ptr<ColumnDataCollection> &GetBuffer(const BufferedIndexReplay replay_type) {
+		if (replay_type == BufferedIndexReplay::INSERT_ENTRY) {
+			return buffered_inserts;
+		}
+		return buffered_deletes;
+	}
+
+	bool HasBufferedReplays() const {
+		return !ranges.empty();
+	}
 };
 
 class UnboundIndex final : public Index {
@@ -31,13 +63,12 @@ private:
 	unique_ptr<CreateInfo> create_info;
 	//! The serialized storage information of the index.
 	IndexStorageInfo storage_info;
-	//! Buffer for WAL replays.
-	vector<BufferedIndexData> buffered_replays;
 
-	//! Maps the column IDs in the buffered replays to a physical table offset.
-	//! For example, column [i] in a buffered ColumnDataCollection is the data for an Indexed column with
-	//! physical table index mapped_column_ids[i].
-	//! This is in sorted order of physical column IDs.
+	//! Buffered for index operations during WAL replay. They are replayed upon index binding.
+	BufferedIndexReplays buffered_replays;
+
+	//! Physical table columns stored in each buffered replay chunk, in buffer order.
+	//! Derived from this index's column IDs at construction, deduplicated and sorted.
 	vector<StorageIndex> mapped_column_ids;
 
 public:
@@ -45,6 +76,8 @@ public:
 	             AttachedDatabase &db);
 
 public:
+	void ResetStorage() override;
+
 	bool IsBound() const override {
 		return false;
 	}
@@ -70,20 +103,18 @@ public:
 		return GetCreateInfo().table;
 	}
 
-	void CommitDrop() override;
-
-	//! Buffer Index delete or insert (replay_type) data chunk.
-	//! See note above on mapped_column_ids, this function assumes that index_column_chunk maps into
-	//! mapped_column_ids_p to get the physical column index for each Indexed column in the chunk.
-	void BufferChunk(DataChunk &index_column_chunk, Vector &row_ids, const vector<StorageIndex> &mapped_column_ids_p,
-	                 BufferedIndexReplay replay_type);
+	//! Buffers an insert or delete (replay_type) chunk, to be replayed once the index is bound.
+	//! table_chunk uses physical table layout: data[j] holds physical column j. It may be sparse,
+	//! but all columns required by this index must be populated.
+	void BufferChunk(DataChunk &table_chunk, Vector &row_ids, BufferedIndexReplay replay_type);
 	bool HasBufferedReplays() const {
-		return !buffered_replays.empty();
+		return buffered_replays.HasBufferedReplays();
 	}
 
-	vector<BufferedIndexData> &GetBufferedReplays() {
+	BufferedIndexReplays &GetBufferedReplays() {
 		return buffered_replays;
 	}
+
 	const vector<StorageIndex> &GetMappedColumnIds() const {
 		return mapped_column_ids;
 	}

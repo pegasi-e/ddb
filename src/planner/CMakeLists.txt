@@ -13,6 +13,7 @@ add_library_unity(
   bound_parameter_map.cpp
   collation_binding.cpp
   expression_iterator.cpp
+  expression_nullability.cpp
   expression.cpp
   table_binding.cpp
   expression_binder.cpp
@@ -21,7 +22,7 @@ add_library_unity(
   binder.cpp
   bind_context.cpp
   planner.cpp
-  pragma_handler.cpp
+  statement_preprocessor.cpp
   logical_operator_deep_copy.cpp
   logical_operator_visitor.cpp
   table_filter.cpp

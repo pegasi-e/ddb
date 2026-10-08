@@ -1,0 +1,108 @@
+Anybase / Ampere DuckDB 1.5.6 storage migration
+
+Decision: migrate a separate copy. Keep the original database and the legacy
+application/library available for rollback. Do not upgrade production files on
+first open and do not replace an active application's database file.
+
+Serialization changes
+
+The legacy fork writes table commit_version at CreateInfo field 110 and column
+commit_version at PersistentColumnData field 103. Upstream DuckDB 1.5.6 uses
+PersistentColumnData field 103 for VARIANT shredded-column metadata.
+
+New fork writes use field 60000 for table commit_version and field 60001 for
+column commit_version. These are 16-bit serialization property IDs, not the
+values of the counters themselves. Counter values are preserved unchanged.
+Keep the 60000–60999 range dedicated to fork metadata in our own schema policy;
+this is not an upstream reservation and must be audited at future upgrades.
+65535 is the binary object's terminator and must never be used for metadata.
+
+The new reader retains legacy table field 110 and non-VARIANT column field 103.
+The VARIANT reader uses upstream field 103 exclusively for shredded-column data
+and reads the fork counter from 60001. New VARIANT and composite-column versions
+are also transferred through checkpoints, including replacement ColumnData.
+The CreateInfo serialization schema is updated along with its generated code so
+regeneration does not remove the fork fields.
+
+Migration procedure
+
+1. Inventory the databases, their schema types, encryption requirements and WAL
+   files. Stop all writers. Use the old fork to recover and checkpoint databases
+   with pending WAL files before migration. Retain the old application version.
+
+2. Choose a different, unused destination path on the staging filesystem.
+   From the 1.5.6 branch checkout, run:
+
+   python3 scripts/anybase_storage_migration.py migrate \
+     --source /path/to/legacy.db \
+     --destination /path/to/staging/migrated.db \
+     --legacy-library /path/to/old/libduckdb.dylib \
+     --new-library /path/to/new/libduckdb.dylib \
+     --source-is-quiescent
+
+   Supply the actual .dylib/.so/.dll files for the old and new forks. The tested
+   new library is build/port-debug/src/libduckdb.dylib in this checkout.
+
+3. The tool copies the source into a temporary candidate on the destination
+   filesystem. It inspects the candidate with the legacy library and the new
+   reader in separate processes, preserving library isolation. It compares:
+     - table schemas, ordered column names/types, and row counts;
+     - an order-independent fingerprint of every table's logical values;
+     - every table/column commit counter;
+     - schema, table, index, view and sequence catalog definitions/state.
+
+4. The candidate is attached with STORAGE_VERSION 'v1.5.0', the upstream 1.5
+   storage compatibility level used by v1.5.6. PRAGMA force_checkpoint is enabled
+   before FORCE CHECKPOINT so an unchanged database is actually rewritten.
+   A plain FORCE CHECKPOINT can otherwise leave an unchanged file untouched.
+   Only this candidate is opened with the new writer.
+
+5. Reopen and verify the candidate again. Check that the original's checksum is
+   unchanged and that no pending WAL appeared. Publish the destination without
+   overwriting any existing file. Preserve destination.migration.json, which
+   contains source/destination checksums and the verified catalog/counters.
+
+6. Validate the migrated database in an isolated instance of the new application:
+   reads, inserts, updates, deletes, CDC events, merger/upsert behavior and a
+   restart/checkpoint. Also validate the application's HLC table/sequence state.
+   This tool verifies stored state but does not perform the application's cutover.
+
+7. Switch the application to the migrated path during a maintenance window.
+   For rollback, stop writers and switch back to the untouched original and old
+   application. Writes made only to the migrated copy require a separate replay
+   or reconciliation procedure before rollback; the original is a frozen snapshot.
+
+Current scope and unresolved migration cases
+
+- Native 1.5.6 VARIANT persistence works alongside the new fork metadata fields.
+- Legacy VARIANT (including nested VARIANT) is explicitly rejected by the copy
+  tool. Its old physical layout needs a separately validated converter; do not
+  reinterpret old field 103 as upstream shredded metadata or reset its counter.
+- This tool requires an unencrypted, quiescent, checkpointed source. It rejects
+  pending WAL/recovery files. Encrypted databases need key handling and additional
+  migration fixtures before support is added. Failure leaves the source untouched.
+- Logical values are compared as SQL VARCHAR representations. Any representation
+  difference causes a conservative migration failure requiring review.
+- Validation has been run on macOS ARM64. Other platform builds and deployment
+  workflows still need their normal CI validation.
+
+Migration evidence
+
+The supplied SYSDB_0.db was copied to the task's scratch directory. Its production
+source was never opened for writing. The legacy and new readers agreed on four
+tables, four rows and ten nonzero column counters; all four table counters and
+its sequence state survived migration. The source SHA-256 remained:
+3c12f56a78bc2ccf0d525f8173e6981e0d7c16320ecde7294151478f7c43dc6d
+
+A generated legacy fixture with 6,000 rows, VARCHAR/BLOB, STRUCT, LIST, fixed ARRAY,
+a primary key, a secondary index, a view and a sequence also passed the full
+copy/rewrite/reopen comparison, including version values.
+
+Port validation also covers new VARIANT/composite counter persistence across
+checkpoints/restarts, merger updates across multiple row groups, CDC old/new
+values and deletes in later row groups, and repeated long VARCHAR/BLOB updates
+with nulls. The legacy Anybase string-memory patch is restored: statistics no
+longer allocate string copies, and only effective updates copy strings to the
+update heap. Upstream 1.5.6 null-statistics tracking is retained. A regression
+checks that repeated no-op VARCHAR/BLOB updates, including nulls, do not grow
+the update heap.

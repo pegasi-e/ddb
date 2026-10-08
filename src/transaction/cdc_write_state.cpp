@@ -74,7 +74,7 @@ void CDCWriteState::EmitDelete(DeleteInfo &info) {
 		}
 
 		number_of_rows = highest_row - lowest_row + 1;
-		base_row = lowest_row;
+		base_row = info.base_row + lowest_row;
 	}
 
 	table->ScanTableSegment(transaction, base_row, number_of_rows, [&](DataChunk &chunk) {
@@ -87,7 +87,7 @@ void CDCWriteState::EmitDelete(DeleteInfo &info) {
 			SelectionVector sel(info.count);
 			auto delete_rows = info.GetRows();
 			for (idx_t i = 0; i < info.count; i++) {
-				sel.set_index(i, delete_rows[i] - base_row);
+				sel.set_index(i, info.base_row + delete_rows[i] - base_row);
 			}
 			delete_chunk->Slice(sel, info.count);
 		}
@@ -176,7 +176,8 @@ bool CDCWriteState::CanApplyUpdate(UpdateInfo &info) {
 
 	if (info.N != last_update_info.N ||
 		info.vector_index != last_update_info.vector_index ||
-		info.table->GetTableName() != last_update_info.table->GetTableName()) {
+		info.row_group_start != last_update_info.row_group_start ||
+		info.table != last_update_info.table) {
 
 		return false;
 	}
@@ -245,6 +246,7 @@ void CDCWriteState::EmitUpdate(UpdateInfo &info) {
 
 		last_update_info.cdc_tuples = info.GetTuples();
 		last_update_info.vector_index = info.vector_index;
+		last_update_info.row_group_start = info.row_group_start;
 		last_update_info.N = info.N;
 		last_update_info.table = info.table;
 		update_table_version = table->GetVersion();
@@ -265,7 +267,7 @@ void CDCWriteState::EmitUpdate(UpdateInfo &info) {
 			previous_update_chunk->Reset();
 		}
 
-		table->ScanTableSegment(transaction, info.vector_index * STANDARD_VECTOR_SIZE, STANDARD_VECTOR_SIZE,
+		table->ScanTableSegment(transaction, info.row_group_start + info.vector_index * STANDARD_VECTOR_SIZE, STANDARD_VECTOR_SIZE,
 			column_indexes, update_types, [&](DataChunk &chunk) {
 			current_update_chunk->Append(chunk);
 			previous_update_chunk->Append(chunk);

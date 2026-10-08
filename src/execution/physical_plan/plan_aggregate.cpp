@@ -92,16 +92,26 @@ static bool CanUsePartitionedAggregate(ClientContext &context, LogicalAggregate 
 		return false;
 	}
 	// get the base columns by projecting over the projection_ids/column_ids
-	if (!table_scan.projection_ids.empty()) {
-		for (auto &partition_col : partition_columns) {
-			partition_col = table_scan.projection_ids[partition_col];
-		}
-	}
 	vector<column_t> base_columns;
-	for (const auto &partition_idx : partition_columns) {
-		auto col_idx = partition_idx;
-		col_idx = table_scan.column_ids[col_idx].GetPrimaryIndex();
-		base_columns.push_back(col_idx);
+	if (!table_scan.function.projection_pushdown) {
+		// Non-pushdown scans output every base column in order. Any projection above the scan already maps references
+		// into that base-column space.
+		base_columns = partition_columns;
+	} else {
+		if (!table_scan.projection_ids.empty()) {
+			for (auto &partition_col : partition_columns) {
+				if (partition_col >= table_scan.projection_ids.size()) {
+					return false;
+				}
+				partition_col = table_scan.projection_ids[partition_col];
+			}
+		}
+		for (const auto &partition_idx : partition_columns) {
+			if (partition_idx >= table_scan.column_ids.size()) {
+				return false;
+			}
+			base_columns.push_back(table_scan.column_ids[partition_idx].GetPrimaryIndex());
+		}
 	}
 	// check if the source operator is partitioned by the grouping columns
 	TableFunctionPartitionInput input(table_scan.bind_data.get(), base_columns);
@@ -217,14 +227,14 @@ static bool CanUsePerfectHashAggregate(ClientContext &context, LogicalAggregate 
 		bits_per_group.push_back(required_bits);
 		perfect_hash_bits += required_bits;
 		// check if we have exceeded the bits for the hash
-		if (perfect_hash_bits > DBConfig::GetSetting<PerfectHtThresholdSetting>(context)) {
+		if (perfect_hash_bits > Settings::Get<PerfectHtThresholdSetting>(context)) {
 			// too many bits for perfect hash
 			return false;
 		}
 	}
 	for (auto &expression : op.expressions) {
 		auto &aggregate = expression->Cast<BoundAggregateExpression>();
-		if (aggregate.IsDistinct() || !aggregate.function.combine) {
+		if (aggregate.IsDistinct() || !aggregate.function.HasStateCombineCallback()) {
 			// distinct aggregates are not supported in perfect hash aggregates
 			return false;
 		}
@@ -236,12 +246,12 @@ PhysicalOperator &PhysicalPlanGenerator::CreatePlan(LogicalAggregate &op) {
 	D_ASSERT(op.children.size() == 1);
 
 	reference<PhysicalOperator> plan = CreatePlan(*op.children[0]);
-	plan = ExtractAggregateExpressions(plan, op.expressions, op.groups);
+	plan = ExtractAggregateExpressions(plan, op.expressions, op.groups, op.grouping_sets);
 
 	bool can_use_simple_aggregation = true;
 	for (auto &expression : op.expressions) {
 		auto &aggregate = expression->Cast<BoundAggregateExpression>();
-		if (!aggregate.function.simple_update) {
+		if (!aggregate.function.HasStateSimpleUpdateCallback()) {
 			// unsupported aggregate for simple aggregation: use hash aggregation
 			can_use_simple_aggregation = false;
 			break;
@@ -305,7 +315,8 @@ PhysicalOperator &PhysicalPlanGenerator::CreatePlan(LogicalAggregate &op) {
 
 PhysicalOperator &PhysicalPlanGenerator::ExtractAggregateExpressions(PhysicalOperator &child,
                                                                      vector<unique_ptr<Expression>> &aggregates,
-                                                                     vector<unique_ptr<Expression>> &groups) {
+                                                                     vector<unique_ptr<Expression>> &groups,
+                                                                     optional_ptr<vector<GroupingSet>> grouping_sets) {
 	vector<unique_ptr<Expression>> expressions;
 	vector<LogicalType> types;
 
@@ -314,7 +325,7 @@ PhysicalOperator &PhysicalPlanGenerator::ExtractAggregateExpressions(PhysicalOpe
 		auto &bound_aggr = aggr->Cast<BoundAggregateExpression>();
 		if (bound_aggr.order_bys) {
 			// sorted aggregate!
-			FunctionBinder::BindSortedAggregate(context, bound_aggr, groups);
+			FunctionBinder::BindSortedAggregate(context, bound_aggr, groups, grouping_sets);
 		}
 	}
 	for (auto &group : groups) {

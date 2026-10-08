@@ -14,34 +14,27 @@
 #include "duckdb/function/cast/vector_cast_helpers.hpp"
 #include "duckdb/common/operator/string_cast.hpp"
 #include "duckdb/execution/operator/csv_scanner/sniffer/csv_sniffer.hpp"
+#include "duckdb/common/printer.hpp"
 
 #include <complex>
-#include <iostream>
 
 namespace duckdb {
 
 vector<LogicalType> LogStorage::GetSchema(LoggingTargetTable table) {
 	switch (table) {
-	case LoggingTargetTable::ALL_LOGS:
-		return {
-		    LogicalType::UBIGINT,   // context_id
-		    LogicalType::VARCHAR,   // scope
-		    LogicalType::UBIGINT,   // connection_id
-		    LogicalType::UBIGINT,   // transaction_id
-		    LogicalType::UBIGINT,   // query_id
-		    LogicalType::UBIGINT,   // thread
-		    LogicalType::TIMESTAMP, // timestamp
-		    LogicalType::VARCHAR,   // log_type
-		    LogicalType::VARCHAR,   // level
-		    LogicalType::VARCHAR,   // message
-		};
+	case LoggingTargetTable::ALL_LOGS: {
+		auto all_logs = GetSchema(LoggingTargetTable::LOG_CONTEXTS);
+		auto log_entries = GetSchema(LoggingTargetTable::LOG_ENTRIES);
+		all_logs.insert(all_logs.end(), log_entries.begin() + 1, log_entries.end());
+		return all_logs;
+	}
 	case LoggingTargetTable::LOG_ENTRIES:
 		return {
-		    LogicalType::UBIGINT,   // context_id
-		    LogicalType::TIMESTAMP, // timestamp
-		    LogicalType::VARCHAR,   // log_type
-		    LogicalType::VARCHAR,   // level
-		    LogicalType::VARCHAR,   // message
+		    LogicalType::UBIGINT,      // context_id
+		    LogicalType::TIMESTAMP_TZ, // timestamp
+		    LogicalType::VARCHAR,      // log_type
+		    LogicalType::VARCHAR,      // level
+		    LogicalType::VARCHAR,      // message
 		};
 	case LoggingTargetTable::LOG_CONTEXTS:
 		return {
@@ -59,11 +52,12 @@ vector<LogicalType> LogStorage::GetSchema(LoggingTargetTable table) {
 
 vector<string> LogStorage::GetColumnNames(LoggingTargetTable table) {
 	switch (table) {
-	case LoggingTargetTable::ALL_LOGS:
-		return {
-		    "context_id", "scope",     "connection_id", "transaction_id", "query_id",
-		    "thread_id",  "timestamp", "type",          "log_level",      "message",
-		};
+	case LoggingTargetTable::ALL_LOGS: {
+		auto all_logs = GetColumnNames(LoggingTargetTable::LOG_CONTEXTS);
+		auto log_entries = GetColumnNames(LoggingTargetTable::LOG_ENTRIES);
+		all_logs.insert(all_logs.end(), log_entries.begin() + 1, log_entries.end());
+		return all_logs;
+	}
 	case LoggingTargetTable::LOG_ENTRIES:
 		return {"context_id", "timestamp", "type", "log_level", "message"};
 	case LoggingTargetTable::LOG_CONTEXTS:
@@ -89,8 +83,8 @@ void LogStorage::Truncate() {
 }
 
 void LogStorage::UpdateConfig(DatabaseInstance &db, case_insensitive_map_t<Value> &config) {
-	if (config.size() > 1) {
-		throw InvalidInputException("LogStorage does not support passing configuration");
+	if (!config.empty()) {
+		throw InvalidInputException("Log storage '%s' does not support passing configuration", GetStorageName());
 	}
 }
 
@@ -258,8 +252,9 @@ void BufferingLogStorage::UpdateConfigInternal(DatabaseInstance &db, case_insens
 }
 
 void StdOutLogStorage::StdOutWriteStream::WriteData(const_data_ptr_t buffer, idx_t write_size) {
-	std::cout.write(const_char_ptr_cast(buffer), NumericCast<int64_t>(write_size));
-	std::cout.flush();
+	string data(const_char_ptr_cast(buffer), NumericCast<size_t>(write_size));
+	Printer::RawPrint(OutputStream::STREAM_STDOUT, data);
+	Printer::Flush(OutputStream::STREAM_STDOUT);
 }
 
 StdOutLogStorage::StdOutLogStorage(DatabaseInstance &db) : CSVLogStorage(db, false, 1) {
@@ -332,7 +327,7 @@ unique_ptr<BufferedFileWriter> FileLogStorage::InitializeFileWriter(DatabaseInst
 	auto &fs = db.GetFileSystem();
 
 	// Create parent directories if non existent
-	auto pos = path.find_last_of(fs.PathSeparator(path));
+	auto pos = path.find_last_of("/\\");
 	if (pos != path.npos) {
 		fs.CreateDirectoriesRecursive(path.substr(0, pos));
 	}
@@ -599,7 +594,6 @@ BufferingLogStorage::~BufferingLogStorage() {
 }
 
 static void WriteLoggingContextsToChunk(DataChunk &chunk, const RegisteredLoggingContext &context, idx_t &col) {
-
 	auto size = chunk.size();
 
 	auto context_id_data = FlatVector::GetData<idx_t>(chunk.data[col++]);

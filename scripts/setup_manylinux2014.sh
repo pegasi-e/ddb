@@ -77,5 +77,3 @@ for var in "$@"
 do
     install_deps $var
 done
-
-

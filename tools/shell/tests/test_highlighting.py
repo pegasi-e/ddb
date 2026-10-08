@@ -17,7 +17,7 @@ def test_highlight_column_header(shell):
         .statement('select NULL AS r;')
     )
     result = test.run()
-    result.check_stdout('\x1b[90mNULL\x1b[0m')
+    result.check_stdout('\x1b[90mNULL\x1b[00m')
 @pytest.mark.skipif(os.name == 'nt', reason="Windows highlighting does not use shell escapes")
 def test_custom_highlight(shell):
     test = (
@@ -29,8 +29,8 @@ def test_custom_highlight(shell):
         .statement('select * from lineitem;')
     )
     result = test.run()
-    result.check_stdout('\x1b[1m\x1b[31ml_comment\x1b[0m')
-    result.check_stdout('\x1b[33mvarchar\x1b[0m')
+    result.check_stdout('\x1b[1m\x1b[31ml_comment\x1b[00m')
+    result.check_stdout('\x1b[33mvarchar\x1b[00m')
 
 def test_custom_highlight_error(shell):
     test = (
@@ -42,8 +42,36 @@ def test_custom_highlight_error(shell):
     )
     result = test.run()
     result.check_stderr("Unknown element 'column_nameXX'")
-    result.check_stderr("Unknown color 'redXX'")
+    result.check_stderr("Unknown highlighting color 'redXX'")
     result.check_stderr("Unknown intensity 'boldXX'")
-    result.check_stderr("Usage: .highlight_colors")
+    result.check_stderr("Usage")
+
+@pytest.mark.skipif(os.name == 'nt', reason="Deprecated highlighting commands")
+def test_deprecated_highlight_commands(shell):
+    test = (
+        ShellTest(shell)
+        .statement(".keyword brightred")
+        .statement(".comment brightred")
+        .statement(".error brightred")
+        .statement(".cont brightred")
+        .statement(".cont_sel brightred")
+        .statement("select 42;")
+    )
+    result = test.run()
+    result.check_stdout("42")
+    result.check_stderr("use .highlight_colors keyword brightred instead")
+    result.check_stderr("use .highlight_colors comment brightred instead")
+    result.check_stderr("use .highlight_colors error brightred instead")
+    result.check_stderr("use .highlight_colors continuation brightred instead")
+    result.check_stderr("use .highlight_colors continuation_selected brightred instead")
+    assert "Unknown" not in result.stderr
+    assert "render_color" not in result.stderr
+
+@pytest.mark.skipif(os.name == 'nt', reason="Deprecated highlighting commands")
+def test_deprecated_highlight_constant(shell):
+    test = ShellTest(shell).statement(".constant brightred")
+    result = test.run()
+    result.check_stderr(".constant has been split into numeric_constant and string_constant")
+    result.check_stderr(".highlight_colors numeric_constant brightred and .highlight_colors string_constant brightred")
 
 # fmt: on

@@ -8,67 +8,65 @@
 
 #pragma once
 
-#include "duckdb/common/vector_size.hpp"
 #include "duckdb/storage/table/chunk_info.hpp"
-#include "duckdb/storage/storage_info.hpp"
 #include "duckdb/common/mutex.hpp"
+#include "duckdb/execution/index/fixed_size_allocator.hpp"
 
 namespace duckdb {
 
 struct DeleteInfo;
 class MetadataManager;
+class BufferManager;
 struct MetaBlockPointer;
 
 class RowVersionManager {
 public:
-	explicit RowVersionManager(idx_t start) noexcept;
+	explicit RowVersionManager(BufferManager &buffer_manager) noexcept;
 
-	idx_t GetStart() {
-		return start;
-	}
-	void SetStart(idx_t start);
 	idx_t GetCommittedDeletedCount(idx_t count);
 
-	idx_t GetSelVector(TransactionData transaction, idx_t vector_idx, SelectionVector &sel_vector, idx_t max_count);
-	idx_t GetCommittedSelVector(transaction_t start_time, transaction_t transaction_id, idx_t vector_idx,
-	                            SelectionVector &sel_vector, idx_t max_count);
+	idx_t GetSelVector(ScanOptions options, idx_t vector_idx, SelectionVector &sel_vector, idx_t max_count);
 	bool Fetch(TransactionData transaction, idx_t row);
 
 	void AppendVersionInfo(TransactionData transaction, idx_t count, idx_t row_group_start, idx_t row_group_end);
 	void CommitAppend(transaction_t commit_id, idx_t row_group_start, idx_t count);
-	void RevertAppend(idx_t start_row);
+	void RevertAppend(idx_t new_count);
 	void CleanupAppend(transaction_t lowest_active_transaction, idx_t row_group_start, idx_t count);
 
 	idx_t DeleteRows(idx_t vector_idx, transaction_t transaction_id, row_t rows[], idx_t count);
 	void CommitDelete(idx_t vector_idx, transaction_t commit_id, const DeleteInfo &info);
 
-	vector<MetaBlockPointer> Checkpoint(MetadataManager &manager);
-	static shared_ptr<RowVersionManager> Deserialize(MetaBlockPointer delete_pointer, MetadataManager &manager,
-	                                                 idx_t start);
+	//! Attempts to compress the per-row insert/delete ids of each vector into constants
+	//! This is possible when the ids behave identically for all transactions with a start time of at least
+	//! lowest_active_start (i.e. all active and future transactions)
+	//! Cheap when nothing can have changed: the pass only runs when version ids were modified since the
+	//! last pass, or when a previous pass left ids that can still compress once older transactions finish
+	void CompressVersionIds(transaction_t lowest_active_start);
+
+	vector<MetaBlockPointer> Checkpoint(RowGroupWriter &writer);
+	static shared_ptr<RowVersionManager> Deserialize(MetaBlockPointer delete_pointer, MetadataManager &manager);
+
+	bool HasUnserializedChanges();
+	vector<MetaBlockPointer> GetStoragePointers();
 
 private:
 	mutex version_lock;
-	idx_t start;
-	vector<unique_ptr<ChunkInfo>> vector_info;
-	bool has_changes;
+	FixedSizeAllocator allocator;
+	vector<unique_ptr<ChunkVectorInfo>> vector_info;
+	optional_idx uncheckpointed_delete_commit;
 	vector<MetaBlockPointer> storage_pointers;
+	//! Whether a compression pass may achieve anything: set when version ids are modified, cleared when a
+	//! pass finds no ids that could still compress. For deserialized version info this is derived from the
+	//! deserialized content (with the current storage format checkpointed ids are always settled).
+	bool needs_compression_check = false;
 
 private:
-	optional_ptr<ChunkInfo> GetChunkInfo(idx_t vector_idx);
+	FixedSizeAllocator &GetAllocator() {
+		return allocator;
+	}
+	optional_ptr<ChunkVectorInfo> GetChunkInfo(idx_t vector_idx);
 	ChunkVectorInfo &GetVectorInfo(idx_t vector_idx);
 	void FillVectorInfo(idx_t vector_idx);
-
-// start Anybase changes
-public:
-	idx_t GetVersion(const vector<column_t> &columnIds) {
-		for (idx_t i = 0; i < columnIds.size(); i++) {
-			auto verInfo = GetVectorInfo(i).insert_id;
-			return verInfo;
-		}
-
-		return 0;
-	}
-// end Anybase changes
 };
 
 } // namespace duckdb

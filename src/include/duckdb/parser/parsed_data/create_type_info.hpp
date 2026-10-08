@@ -9,20 +9,46 @@
 #pragma once
 
 #include "duckdb/parser/parsed_data/create_info.hpp"
-#include "duckdb/parser/column_definition.hpp"
-#include "duckdb/parser/constraint.hpp"
 #include "duckdb/parser/statement/select_statement.hpp"
 
 namespace duckdb {
 
+class TypeArgument {
+public:
+	TypeArgument(string name_p, Value value_p) : name(std::move(name_p)), value(std::move(value_p)) {
+	}
+	const string &GetName() const {
+		return name;
+	}
+	const Value &GetValue() const {
+		return value;
+	}
+	bool HasName() const {
+		return !name.empty();
+	}
+	bool IsNamed(const char *name_to_check) const {
+		return StringUtil::CIEquals(name, name_to_check);
+	}
+	bool IsNotNull() const {
+		return !value.IsNull();
+	}
+	const LogicalType &GetType() const {
+		return value.type();
+	}
+
+private:
+	string name;
+	Value value;
+};
+
 struct BindLogicalTypeInput {
-	ClientContext &context;
+	optional_ptr<ClientContext> context;
 	const LogicalType &base_type;
-	const vector<Value> &modifiers;
+	const vector<TypeArgument> &modifiers;
 };
 
 //! The type to bind type modifiers to a type
-typedef LogicalType (*bind_logical_type_function_t)(const BindLogicalTypeInput &input);
+typedef LogicalType (*bind_logical_type_function_t)(BindLogicalTypeInput &input);
 
 struct CreateTypeInfo : public CreateInfo {
 	CreateTypeInfo();
@@ -30,6 +56,22 @@ struct CreateTypeInfo : public CreateInfo {
 
 	//! Name of the Type
 	string name;
+
+	//! NOTE(backport): DuckDB 2.0 stores catalog/schema/name in a single `QualifiedName` on `CreateInfo`; here they are
+	//! separate strings and the name lives on the subclass. These accessors only exist so that call sites can be
+	//! spelled exactly as they are on the 2.0 branch.
+	const string &GetTypeName() const {
+		return name;
+	}
+	void SetTypeName(string name_p) {
+		name = std::move(name_p);
+	}
+	const string &GetEntryName() const override {
+		return name;
+	}
+	void SetEntryName(string name_p) override {
+		name = std::move(name_p);
+	}
 	//! Logical Type
 	LogicalType type;
 	//! Used by create enum from query

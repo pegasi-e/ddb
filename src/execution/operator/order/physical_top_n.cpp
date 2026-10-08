@@ -1,6 +1,7 @@
 #include "duckdb/execution/operator/order/physical_top_n.hpp"
 
 #include "duckdb/common/assert.hpp"
+#include "duckdb/common/arena_containers/arena_vector.hpp"
 #include "duckdb/execution/expression_executor.hpp"
 #include "duckdb/function/create_sort_key.hpp"
 #include "duckdb/storage/data_table.hpp"
@@ -85,7 +86,8 @@ public:
 
 	Allocator &allocator;
 	BufferManager &buffer_manager;
-	unsafe_vector<TopNEntry> heap;
+	ArenaAllocator arena_allocator;
+	unsafe_arena_vector<TopNEntry> heap;
 	const vector<LogicalType> &payload_types;
 	const vector<BoundOrderByNode> &orders;
 	vector<OrderModifiers> modifiers;
@@ -135,8 +137,12 @@ public:
 
 private:
 	inline bool EntryShouldBeAdded(const string_t &sort_key) {
+		if (heap_size == 0) {
+			// the heap has no capacity (LIMIT 0) - no entry can ever be added
+			return false;
+		}
 		if (heap.size() < heap_size) {
-			// heap is full - check the latest entry
+			// heap is not full yet - the entry can be added
 			return true;
 		}
 		if (sort_key < heap.front().sort_key) {
@@ -148,7 +154,9 @@ private:
 	}
 
 	inline void AddEntryToHeap(const TopNEntry &entry) {
+		D_ASSERT(heap_size > 0);
 		if (heap.size() >= heap_size) {
+			D_ASSERT(!heap.empty());
 			std::pop_heap(heap.begin(), heap.end());
 			heap.pop_back();
 		}
@@ -162,10 +170,11 @@ private:
 //===--------------------------------------------------------------------===//
 TopNHeap::TopNHeap(ClientContext &context, Allocator &allocator, const vector<LogicalType> &payload_types_p,
                    const vector<BoundOrderByNode> &orders_p, idx_t limit, idx_t offset)
-    : allocator(allocator), buffer_manager(BufferManager::GetBufferManager(context)), payload_types(payload_types_p),
-      orders(orders_p), limit(limit), offset(offset), heap_size(limit + offset), executor(context),
-      sort_key_heap(allocator), matching_sel(STANDARD_VECTOR_SIZE), final_sel(STANDARD_VECTOR_SIZE),
-      true_sel(STANDARD_VECTOR_SIZE), false_sel(STANDARD_VECTOR_SIZE), new_remaining_sel(STANDARD_VECTOR_SIZE) {
+    : allocator(allocator), buffer_manager(BufferManager::GetBufferManager(context)), arena_allocator(allocator),
+      heap(arena_allocator), payload_types(payload_types_p), orders(orders_p), limit(limit), offset(offset),
+      heap_size(limit + offset), executor(context), sort_key_heap(allocator), matching_sel(STANDARD_VECTOR_SIZE),
+      final_sel(STANDARD_VECTOR_SIZE), true_sel(STANDARD_VECTOR_SIZE), false_sel(STANDARD_VECTOR_SIZE),
+      new_remaining_sel(STANDARD_VECTOR_SIZE) {
 	// initialize the executor and the sort_chunk
 	vector<LogicalType> sort_types;
 	for (auto &order : orders) {
@@ -287,6 +296,7 @@ bool TopNHeap::CheckBoundaryValues(DataChunk &sort_chunk, DataChunk &payload, To
 
 	SelectionVector remaining_sel(nullptr);
 	idx_t remaining_count = sort_chunk.size();
+	sort_chunk.Flatten();
 	for (idx_t i = 0; i < orders.size(); i++) {
 		if (remaining_sel.data()) {
 			compare_chunk.data[i].Slice(sort_chunk.data[i], remaining_sel, remaining_count);
@@ -345,6 +355,11 @@ bool TopNHeap::CheckBoundaryValues(DataChunk &sort_chunk, DataChunk &payload, To
 void TopNHeap::Sink(DataChunk &input, optional_ptr<TopNBoundaryValue> global_boundary) {
 	static constexpr idx_t SMALL_HEAP_THRESHOLD = 100;
 
+	if (heap_size == 0) {
+		// LIMIT 0 without OFFSET - the heap can never hold any entry, so there is nothing to do
+		return;
+	}
+
 	// compute the ordering values for the new chunk
 	sort_chunk.Reset();
 	executor.Execute(input, sort_chunk);
@@ -370,7 +385,7 @@ void TopNHeap::Sink(DataChunk &input, optional_ptr<TopNBoundaryValue> global_bou
 
 	// if we modified the heap we might be able to update the global boundary
 	// note that the global boundary only applies to FULL heaps
-	if (heap.size() >= heap_size && global_boundary) {
+	if (!heap.empty() && heap.size() >= heap_size && global_boundary) {
 		global_boundary->UpdateValue(heap.front().sort_key);
 	}
 }
@@ -575,7 +590,8 @@ unique_ptr<LocalSourceState> PhysicalTopN::GetLocalSourceState(ExecutionContext 
 	return make_uniq<TopNLocalSourceState>();
 }
 
-SourceResultType PhysicalTopN::GetData(ExecutionContext &context, DataChunk &chunk, OperatorSourceInput &input) const {
+SourceResultType PhysicalTopN::GetDataInternal(ExecutionContext &context, DataChunk &chunk,
+                                               OperatorSourceInput &input) const {
 	if (limit == 0) {
 		return SourceResultType::FINISHED;
 	}
