@@ -101,4 +101,8 @@ copy/rewrite/reopen comparison, including version values.
 Port validation also covers new VARIANT/composite counter persistence across
 checkpoints/restarts, merger updates across multiple row groups, CDC old/new
 values and deletes in later row groups, and repeated long VARCHAR/BLOB updates
-with nulls. The upstream string-memory implementation is retained.
+with nulls. The legacy Anybase string-memory patch is restored: statistics no
+longer allocate string copies, and only effective updates copy strings to the
+update heap. Upstream 1.5.6 null-statistics tracking is retained. A regression
+checks that repeated no-op VARCHAR/BLOB updates, including nulls, do not grow
+the update heap.

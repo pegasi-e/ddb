@@ -6,6 +6,12 @@
 #include "duckdb/main/client_context.hpp"
 #include "duckdb/main/config.hpp"
 #include "duckdb/common/file_system.hpp"
+#include "duckdb/catalog/catalog.hpp"
+#include "duckdb/catalog/catalog_entry/table_catalog_entry.hpp"
+#include "duckdb/storage/data_table.hpp"
+#include "duckdb/storage/table/row_group.hpp"
+#include "duckdb/storage/table/row_group_collection.hpp"
+#include "duckdb/storage/table/update_segment.hpp"
 #include "test_helpers.hpp"
 
 using namespace duckdb;
@@ -157,7 +163,7 @@ TEST_CASE("Anybase CDC uses absolute positions for separate 1.5 row groups", "[a
 	DeleteDatabase(path);
 }
 
-TEST_CASE("Upstream string-memory fix handles repeated long VARCHAR and BLOB updates", "[anybase_storage]") {
+TEST_CASE("String-memory fix handles repeated long VARCHAR and BLOB updates", "[anybase_storage][anybase_string_memory]") {
 	auto path = TestCreatePath("anybase_string_updates_15.db");
 	DeleteDatabase(path);
 	{
@@ -185,4 +191,40 @@ TEST_CASE("Upstream string-memory fix handles repeated long VARCHAR and BLOB upd
 		REQUIRE(CHECK_COLUMN(result, 0, {100}));
 	}
 	DeleteDatabase(path);
+}
+
+TEST_CASE("No-op long-string updates do not grow the update heap", "[anybase_storage][anybase_string_memory]") {
+	DuckDB db(nullptr);
+	Connection con(db);
+	REQUIRE_NO_FAIL(con.Query("CREATE TABLE strings(text_value VARCHAR, binary_value BLOB)"));
+	REQUIRE_NO_FAIL(con.Query("INSERT INTO strings SELECT 'value', 'binary'::BLOB FROM range(4)"));
+	con.context->RunFunctionInTransaction([&]() {
+		auto &table = Catalog::GetEntry<TableCatalogEntry>(*con.context, INVALID_CATALOG, DEFAULT_SCHEMA, "strings");
+		auto &storage = table.GetStorage();
+		auto row_group = storage.GetRowGroupCollection()->GetRowGroups()->GetSegment(0);
+		REQUIRE(row_group);
+		for (idx_t column_idx = 0; column_idx < 2; column_idx++) {
+			auto &column = row_group->GetNode().GetRawColumnData(column_idx);
+			UpdateSegment segment(column);
+			const auto initial_bytes = segment.GetStringHeap().AllocationSize();
+			const string long_value(65536, 'x');
+			const auto value = column_idx == 0 ? Value(long_value) : Value::BLOB(long_value);
+			for (bool include_null : {false, true}) {
+				Vector base(column.type);
+				for (idx_t row = 0; row < 4; row++) {
+					base.SetValue(row, include_null && row == 3 ? Value(column.type) : value);
+				}
+				row_t ids[] = {0, 1, 2, 3};
+				for (idx_t cycle = 0; cycle < 100; cycle++) {
+					Vector update(column.type);
+					for (idx_t row = 0; row < 4; row++) {
+						update.SetValue(row, base.GetValue(row));
+					}
+					segment.Update(TransactionData(0, 0), storage, column_idx, update, ids, 4, base, 0);
+				}
+				REQUIRE_FALSE(segment.HasUpdates());
+				REQUIRE(segment.GetStringHeap().AllocationSize() == initial_bytes);
+			}
+		}
+	});
 }
