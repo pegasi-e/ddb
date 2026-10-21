@@ -292,7 +292,7 @@ duckdb_data_chunk duckdb_create_data_chunk_copy(duckdb_data_chunk *chunk) {
 	if (!chunk) {
 		return nullptr;
 	}
-	
+
 	auto dchunk = reinterpret_cast<duckdb::DataChunk *>(*chunk);
 
 	auto new_chunk = new duckdb::DataChunk();
@@ -395,7 +395,7 @@ duckdb_error_data duckdb_append_arrow(duckdb_connection connection, duckdb_appen
 	const auto ddbConnection = reinterpret_cast<Connection *>(connection);
 	auto arrow_schema = duckdb::make_uniq<duckdb::ArrowTableSchema>();
 	try {
-		duckdb::ArrowTableFunction::PopulateArrowTableSchema(duckdb::DBConfig::GetConfig(*ddbConnection->context), *arrow_schema, *schema);
+		duckdb::ArrowTableFunction::PopulateArrowTableSchema(*ddbConnection->context, *arrow_schema, *schema);
 	} catch (const duckdb::Exception &ex) {
 		return duckdb_create_error_data(DUCKDB_ERROR_INVALID_INPUT, ex.what());
 	} catch (const std::exception &ex) {
@@ -474,4 +474,3 @@ duckdb_error_data duckdb_append_arrow(duckdb_connection connection, duckdb_appen
 
 	return nullptr;
 }
-

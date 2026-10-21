@@ -91,7 +91,7 @@ import package_build
 # include paths for where to search for include files during amalgamation
 include_paths = [include_dir] + package_build.third_party_includes()
 # paths of where to look for files to compile and include to the final amalgamation
-compile_directories = [src_dir] + package_build.third_party_sources()
+compile_directories = [src_dir] + package_build.third_party_sources() + [normalize_path('extension/loader')]
 
 # files always excluded
 always_excluded = normalize_path(
@@ -108,6 +108,12 @@ excluded_files = ['grammar.cpp', 'grammar.hpp', 'symbols.cpp']
 excluded_compilation_files = excluded_files + ['gram.hpp', 'kwlist.hpp', "duckdb-c.cpp"]
 
 linenumbers = False
+
+
+def is_excluded_file(fname):
+    # In-source CMake builds generate unity sources alongside the real sources.
+    # These are build artifacts and must not become inputs to the amalgamation.
+    return fname in excluded_files or (fname.startswith('ub_') and fname.endswith('.cpp'))
 
 
 def get_includes(fpath, text):
@@ -127,7 +133,9 @@ def get_includes(fpath, text):
             or included_file == 'generated_extension_headers.hpp'
         ):
             continue
-        if 'allocator.cpp' in fpath and included_file.endswith('jemalloc_extension.hpp'):
+        if 'allocator_jemalloc.cpp' in fpath and (
+            included_file.endswith('jemalloc.h') or included_file.endswith('malloc_ncpus.h')
+        ):
             continue
         if x[0] in include_statements:
             raise Exception(f"duplicate include {x[0]} in file {fpath}")
@@ -163,7 +171,7 @@ def need_to_write_file(current_file, ignore_excluded=False):
         return False
     if current_file in always_excluded:
         return False
-    if current_file.split(os.sep)[-1] in excluded_files and not ignore_excluded:
+    if is_excluded_file(current_file.split(os.sep)[-1]) and not ignore_excluded:
         # file is in ignored files set
         return False
     if current_file in written_files:
@@ -177,7 +185,7 @@ def find_license(original_file):
     file = original_file
     license = ""
     while True:
-        (file, end) = os.path.split(file)
+        file, end = os.path.split(file)
         if file == "":
             break
         potential_license = os.path.join(file, "LICENSE")
@@ -212,7 +220,7 @@ def write_file(current_file, ignore_excluded=False):
             + "\n\n// LICENSE_CHANGE_END\n"
         )
 
-    (statements, includes) = get_includes(current_file, text)
+    statements, includes = get_includes(current_file, text)
     # find the linenr of the final #include statement we parsed
     if len(statements) > 0:
         index = text.find(statements[-1])
@@ -239,7 +247,7 @@ def write_dir(dir):
     files.sort()
     text = ""
     for fname in files:
-        if fname in excluded_files:
+        if is_excluded_file(fname):
             continue
         # print(fname)
         fpath = os.path.join(dir, fname)
@@ -372,7 +380,7 @@ def list_files(dname, file_list):
     files = os.listdir(dname)
     files.sort()
     for fname in files:
-        if fname in excluded_files:
+        if is_excluded_file(fname):
             continue
         fpath = os.path.join(dname, fname)
         if os.path.isdir(fpath):
@@ -393,7 +401,7 @@ def list_include_files_recursive(dname, file_list):
     files = os.listdir(dname)
     files.sort()
     for fname in files:
-        if fname in excluded_files:
+        if is_excluded_file(fname):
             continue
         fpath = os.path.join(dname, fname)
         if os.path.isdir(fpath):
@@ -424,7 +432,7 @@ def gather_file(current_file, source_files, header_files):
     with open_utf8(current_file, 'r') as f:
         text = f.read()
 
-    (statements, includes) = get_includes(current_file, text)
+    statements, includes = get_includes(current_file, text)
     # find the linenr of the final #include statement we parsed
     if len(statements) > 0:
         index = text.find(statements[-1])
@@ -454,7 +462,7 @@ def gather_files(dir, source_files, header_files):
     files = os.listdir(dir)
     files.sort()
     for fname in files:
-        if fname in excluded_files:
+        if is_excluded_file(fname):
             continue
         fpath = os.path.join(dir, fname)
         if os.path.isdir(fpath):

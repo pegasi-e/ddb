@@ -29,9 +29,8 @@ void CreateInfo::Serialize(Serializer &serializer) const {
 	if (serializer.ShouldSerialize(2)) {
 		serializer.WritePropertyWithDefault<LogicalDependencyList>(109, "dependencies", dependencies, LogicalDependencyList());
 	}
-	// start Anybase changes
-	serializer.WriteProperty<idx_t>(110, "commit_version", commit_version);
-	// end Anybase changes
+	/* [Deleted] (idx_t) "legacy_commit_version" */
+	serializer.WritePropertyWithDefault<idx_t>(60000, "commit_version", commit_version, 0);
 }
 
 unique_ptr<CreateInfo> CreateInfo::Deserialize(Deserializer &deserializer) {
@@ -45,9 +44,8 @@ unique_ptr<CreateInfo> CreateInfo::Deserialize(Deserializer &deserializer) {
 	auto comment = deserializer.ReadPropertyWithExplicitDefault<Value>(107, "comment", Value());
 	auto tags = deserializer.ReadPropertyWithExplicitDefault<InsertionOrderPreservingMap<string>>(108, "tags", InsertionOrderPreservingMap<string>());
 	auto dependencies = deserializer.ReadPropertyWithExplicitDefault<LogicalDependencyList>(109, "dependencies", LogicalDependencyList());
-	// start Anybase changes
-	auto commit_version = deserializer.ReadPropertyWithDefault<idx_t>(110, "commit_version");
-	// end Anybase changes
+	auto legacy_commit_version = deserializer.ReadPropertyWithExplicitDefault<idx_t>(110, "legacy_commit_version", 0);
+	auto commit_version = deserializer.ReadPropertyWithExplicitDefault<idx_t>(60000, "commit_version", 0);
 	deserializer.Set<CatalogType>(type);
 	unique_ptr<CreateInfo> result;
 	switch (type) {
@@ -88,9 +86,8 @@ unique_ptr<CreateInfo> CreateInfo::Deserialize(Deserializer &deserializer) {
 	result->comment = comment;
 	result->tags = std::move(tags);
 	result->dependencies = dependencies;
-	// start Anybase changes
 	result->commit_version = commit_version;
-	// end Anybase changes
+	if (result->commit_version == 0) { result->commit_version = legacy_commit_version; }
 	return result;
 }
 
@@ -177,6 +174,9 @@ void CreateTableInfo::Serialize(Serializer &serializer) const {
 	serializer.WriteProperty<ColumnList>(201, "columns", columns);
 	serializer.WritePropertyWithDefault<vector<unique_ptr<Constraint>>>(202, "constraints", constraints);
 	serializer.WritePropertyWithDefault<unique_ptr<SelectStatement>>(203, "query", query);
+	serializer.WritePropertyWithDefault<vector<unique_ptr<ParsedExpression>>>(204, "partition_keys", partition_keys);
+	serializer.WritePropertyWithDefault<vector<unique_ptr<ParsedExpression>>>(205, "sort_keys", sort_keys);
+	serializer.WritePropertyWithDefault<case_insensitive_map_t<unique_ptr<ParsedExpression>>>(206, "options", options);
 }
 
 unique_ptr<CreateInfo> CreateTableInfo::Deserialize(Deserializer &deserializer) {
@@ -185,6 +185,9 @@ unique_ptr<CreateInfo> CreateTableInfo::Deserialize(Deserializer &deserializer) 
 	deserializer.ReadProperty<ColumnList>(201, "columns", result->columns);
 	deserializer.ReadPropertyWithDefault<vector<unique_ptr<Constraint>>>(202, "constraints", result->constraints);
 	deserializer.ReadPropertyWithDefault<unique_ptr<SelectStatement>>(203, "query", result->query);
+	deserializer.ReadPropertyWithDefault<vector<unique_ptr<ParsedExpression>>>(204, "partition_keys", result->partition_keys);
+	deserializer.ReadPropertyWithDefault<vector<unique_ptr<ParsedExpression>>>(205, "sort_keys", result->sort_keys);
+	deserializer.ReadPropertyWithDefault<case_insensitive_map_t<unique_ptr<ParsedExpression>>>(206, "options", result->options);
 	return std::move(result);
 }
 
@@ -208,17 +211,27 @@ void CreateViewInfo::Serialize(Serializer &serializer) const {
 	serializer.WritePropertyWithDefault<vector<LogicalType>>(202, "types", types);
 	serializer.WritePropertyWithDefault<unique_ptr<SelectStatement>>(203, "query", query);
 	serializer.WritePropertyWithDefault<vector<string>>(204, "names", names);
-	serializer.WritePropertyWithDefault<vector<Value>>(205, "column_comments", column_comments, vector<Value>());
+	if (!serializer.ShouldSerialize(7)) {
+		serializer.WritePropertyWithDefault<vector<Value>>(205, "column_comments", GetColumnCommentsList());
+	}
+	if (serializer.ShouldSerialize(7)) {
+		serializer.WritePropertyWithDefault<unordered_map<string, Value>>(206, "column_comments_map", column_comments_map, unordered_map<string, Value>());
+	}
 }
 
 unique_ptr<CreateInfo> CreateViewInfo::Deserialize(Deserializer &deserializer) {
-	auto result = duckdb::unique_ptr<CreateViewInfo>(new CreateViewInfo());
-	deserializer.ReadPropertyWithDefault<string>(200, "view_name", result->view_name);
-	deserializer.ReadPropertyWithDefault<vector<string>>(201, "aliases", result->aliases);
-	deserializer.ReadPropertyWithDefault<vector<LogicalType>>(202, "types", result->types);
-	deserializer.ReadPropertyWithDefault<unique_ptr<SelectStatement>>(203, "query", result->query);
-	deserializer.ReadPropertyWithDefault<vector<string>>(204, "names", result->names);
-	deserializer.ReadPropertyWithExplicitDefault<vector<Value>>(205, "column_comments", result->column_comments, vector<Value>());
+	auto view_name = deserializer.ReadPropertyWithDefault<string>(200, "view_name");
+	auto aliases = deserializer.ReadPropertyWithDefault<vector<string>>(201, "aliases");
+	auto types = deserializer.ReadPropertyWithDefault<vector<LogicalType>>(202, "types");
+	auto query = deserializer.ReadPropertyWithDefault<unique_ptr<SelectStatement>>(203, "query");
+	auto names = deserializer.ReadPropertyWithDefault<vector<string>>(204, "names");
+	auto column_comments = deserializer.ReadPropertyWithDefault<vector<Value>>(205, "column_comments");
+	auto column_comments_map = deserializer.ReadPropertyWithExplicitDefault<unordered_map<string, Value>>(206, "column_comments_map", unordered_map<string, Value>());
+	auto result = duckdb::unique_ptr<CreateViewInfo>(new CreateViewInfo(std::move(names), std::move(column_comments), std::move(column_comments_map)));
+	result->view_name = std::move(view_name);
+	result->aliases = std::move(aliases);
+	result->types = std::move(types);
+	result->query = std::move(query);
 	return std::move(result);
 }
 

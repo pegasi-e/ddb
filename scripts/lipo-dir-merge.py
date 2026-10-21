@@ -43,7 +43,7 @@ def find_and_merge_libs(src, dst):
     if os.path.exists(lib_in_secondary) == False:
         print("Lib not found in secondary source: {lib_in_secondary}")
         return
-    
+
     merge_libs(src, lib_in_secondary, dst)
 
 # Either copy the file at `src` to `dst`, or, if it is a static

@@ -3,6 +3,7 @@
 #include "duckdb/common/limits.hpp"
 #include "fmt/format.h"
 #include "fmt/printf.h"
+#include "utf8proc_wrapper.hpp"
 
 namespace duckdb {
 
@@ -180,6 +181,11 @@ static void PrintfFunction(DataChunk &args, ExpressionState &state, Vector &resu
 		}
 		// finally actually perform the format
 		string dynamic_result = FORMAT_FUN::template OP<CTX>(format_string.c_str(), format_args);
+		if (!Utf8Proc::IsValid(dynamic_result.c_str(), dynamic_result.size())) {
+			throw InvalidInputException("Invalid UTF8 produced by format string \"%s\" - note that %%c writes a "
+			                            "single byte, use chr(...) to write a Unicode code point",
+			                            format_string);
+		}
 		result_data[idx] = StringVector::AddString(result, dynamic_result);
 	}
 }
@@ -189,7 +195,7 @@ ScalarFunction PrintfFun::GetFunction() {
 	ScalarFunction printf_fun({LogicalType::VARCHAR}, LogicalType::VARCHAR,
 	                          PrintfFunction<FMTPrintf, duckdb_fmt::printf_context>, BindPrintfFunction);
 	printf_fun.varargs = LogicalType::ANY;
-	BaseScalarFunction::SetReturnsError(printf_fun);
+	printf_fun.SetFallible();
 	return printf_fun;
 }
 
@@ -198,7 +204,7 @@ ScalarFunction FormatFun::GetFunction() {
 	ScalarFunction format_fun({LogicalType::VARCHAR}, LogicalType::VARCHAR,
 	                          PrintfFunction<FMTFormat, duckdb_fmt::format_context>, BindPrintfFunction);
 	format_fun.varargs = LogicalType::ANY;
-	BaseScalarFunction::SetReturnsError(format_fun);
+	format_fun.SetFallible();
 	return format_fun;
 }
 
