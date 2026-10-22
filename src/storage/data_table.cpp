@@ -37,6 +37,7 @@
 
 // start anybase change
 #include "duckdb/main/database.hpp"
+#include <algorithm>
 // end anybase change
 
 namespace duckdb {
@@ -1926,34 +1927,64 @@ void DataTable::AddIndex(const ColumnList &columns, const vector<LogicalIndex> &
 }
 
 // start Anybase changes
-// TODO: should we use a hash table to keep track of this instead?
 template <bool GLOBAL>
 static bool CheckForDuplicateTargets(const Vector &row_ids, idx_t count) {
-	// Insert all rows, if any of the rows has already been updated before, we throw an error
 	auto data = FlatVector::GetData<row_t>(row_ids);
+	if (count < 2) {
+		return true;
+	}
+	auto throw_duplicate = []() {
+		throw InvalidInputException(
+		    "ON CONFLICT DO UPDATE can not update the same row twice in the same command. Ensure that no rows "
+		    "proposed for insertion within the same command have duplicate constrained values");
+	};
 
-	// The rowids in the transaction-local ART aren't final yet so we have to separately keep track of the two sets of
-	// rowids
-	// Rows that have been updated by a DO UPDATE conflict
-	unordered_set<row_t> updated_global_rows;
-	// Rows in the transaction-local storage that have been updated by a DO UPDATE conflict
-	unordered_set<row_t> updated_local_rows;
-	unordered_set<row_t> &updated_rows = GLOBAL ? updated_global_rows :updated_local_rows;
 	bool is_sorted = true;
-	for (idx_t i = 0; i < count; i++) {
-		auto result = updated_rows.insert(data[i]);
-		if (result.second == false) {
-			throw InvalidInputException(
-				"ON CONFLICT DO UPDATE can not update the same row twice in the same command. Ensure that no rows "
-				"proposed for insertion within the same command have duplicate constrained values");
+	auto minimum = data[0];
+	auto maximum = data[0];
+	for (idx_t i = 1; i < count; i++) {
+		if (data[i - 1] == data[i]) {
+			throw_duplicate();
 		}
-
-		if (i > 0 && data[i - 1] > data[i]) {
-			is_sorted = false;
-		}
+		is_sorted &= data[i - 1] < data[i];
+		minimum = MinValue(minimum, data[i]);
+		maximum = MaxValue(maximum, data[i]);
+	}
+	if (is_sorted) {
+		// Equal neighbors have already been rejected; no tracking allocation is needed.
+		return true;
 	}
 
-	return is_sorted;
+	// Normalize to the observed range, including transaction-local row ID offsets.
+	// Unsigned subtraction avoids signed overflow even across the row_t sign boundary.
+	const auto span = uint64_t(maximum) - uint64_t(minimum);
+	const auto word_count = span / 64 + 1;
+	if (word_count <= count) {
+		// Cap bitset storage at eight bytes per input row. Sparse ranges use the
+		// hash-set fallback rather than allocating according to their largest row ID.
+		vector<uint64_t> seen(word_count, 0);
+		auto words = seen.data();
+		for (idx_t i = 0; i < count; i++) {
+			const auto offset = uint64_t(data[i]) - uint64_t(minimum);
+			const auto word_index = offset / 64;
+			const auto mask = uint64_t(1) << (offset % 64);
+			D_ASSERT(word_index < word_count);
+			if (words[word_index] & mask) {
+				throw_duplicate();
+			}
+			words[word_index] |= mask;
+		}
+	} else {
+		unordered_set<row_t> updated_rows;
+		updated_rows.reserve(count);
+		for (idx_t i = 0; i < count; i++) {
+			if (!updated_rows.insert(data[i]).second) {
+				throw_duplicate();
+			}
+		}
+	}
+	// Global and transaction-local calls retain independent tracking state.
+	return false;
 }
 
 static vector<LogicalType> GetTypesOfSetColumns(const vector<PhysicalIndex>& set_columns, TableCatalogEntry &table) {
@@ -2026,8 +2057,7 @@ static idx_t PerformOrderedUpdate(TableCatalogEntry &table, ClientContext &conte
 }
 
 struct GroupedUpdate {
-	explicit GroupedUpdate() {
-		count = 0;
+	GroupedUpdate() : count(0) {
 	}
 
 	void Initialize(idx_t size) {
@@ -2036,7 +2066,6 @@ struct GroupedUpdate {
 
 	SelectionVector sel;
 	idx_t count;
-	vector<row_t> ids;
 };
 
 static map<std::tuple<idx_t, idx_t>, GroupedUpdate> GroupUpdatesByRowGroup(DataChunk &conflict_chunk, Vector &row_ids,
@@ -2045,23 +2074,25 @@ static map<std::tuple<idx_t, idx_t>, GroupedUpdate> GroupUpdatesByRowGroup(DataC
 
 	auto flat_row_ids = FlatVector::GetData<row_t>(row_ids);
 	map<std::tuple<idx_t, idx_t>, GroupedUpdate> grouped_updates;
+	// Duplicate targets have already been rejected. Each bucket contains distinct
+	// rows from one storage vector, so it never needs row-group-sized capacity.
+	const auto group_capacity = MinValue<idx_t>(STANDARD_VECTOR_SIZE, conflict_chunk.size());
 	for (idx_t i = 0; i < conflict_chunk.size(); i++) {
 		auto row_group = row_groups->GetRowGroupByRowNumber(UnsafeNumericCast<idx_t>(flat_row_ids[i]));
 		auto rg_index = row_group->GetIndex();
 		auto c_index = ((idx_t)flat_row_ids[i] - row_group->GetRowStart()) / STANDARD_VECTOR_SIZE;
 		auto key = std::make_tuple(rg_index, c_index);
 
-		if (grouped_updates.find(key) == grouped_updates.end()) {
-			GroupedUpdate grouped_update;
-			grouped_update.Initialize(row_group->GetNode().count);
-			grouped_updates[key] = std::move(grouped_update);
+		// One tree lookup per row. The hint also avoids a second lookup on insertion.
+		auto entry = grouped_updates.lower_bound(key);
+		if (entry == grouped_updates.end() || entry->first != key) {
+			entry = grouped_updates.emplace_hint(entry, key, GroupedUpdate());
+			entry->second.Initialize(group_capacity);
 		}
 
-		auto grouped_update = std::move(grouped_updates[key]);
-
-		grouped_update.sel.set_index(grouped_update.count, i);
-		grouped_update.count++;
-		grouped_updates[key] = std::move(grouped_update);
+		auto &group = entry->second;
+		D_ASSERT(group.count < group_capacity);
+		group.sel.set_index(group.count++, i);
 	}
 
 	return grouped_updates;
@@ -2076,8 +2107,17 @@ static idx_t PerformUnOrderedUpdate(TableCatalogEntry &table, ClientContext &con
 
 	idx_t updated_tuples = 0;
 	auto grouped_updates = GroupUpdatesByRowGroup(conflict_chunk, row_ids, row_groups);
+	auto row_id_data = FlatVector::GetData<row_t>(row_ids);
 
 	for (auto &kvp : grouped_updates) {
+		// Sort the shared selection once, before slicing both row IDs and payloads.
+		// Each column (including validity) can then use its existing sorted fast path.
+		auto selection = kvp.second.sel.data();
+		auto selection_end = selection + kvp.second.count;
+		auto compare_rows = [row_id_data](sel_t a, sel_t b) { return row_id_data[a] < row_id_data[b]; };
+		if (!std::is_sorted(selection, selection_end, compare_rows)) {
+			std::sort(selection, selection_end, compare_rows);
+		}
 		duckdb::DataChunk data_chunk;
 		data_chunk.Initialize(context, conflict_chunk.GetTypes());
 		data_chunk.Reference(conflict_chunk);

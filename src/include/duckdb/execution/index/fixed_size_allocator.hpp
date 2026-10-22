@@ -25,6 +25,64 @@ namespace duckdb {
 //! It is also possible to directly request a C++ pointer to the underlying segment of an index pointer.
 class FixedSizeAllocator {
 public:
+	// start Anybase changes
+	//! A bounded lookup-only cache. Requires exclusive ART access and no allocator mutation.
+	//! Its independent pins outlive every returned address and are released before the ART lock.
+	class LookupCache {
+	public:
+		LookupCache() = default;
+		~LookupCache() {
+			if (owner) {
+				D_ASSERT(owner->lookup_cache == this);
+				owner->lookup_cache = nullptr;
+			}
+		}
+		LookupCache(const LookupCache &) = delete;
+		LookupCache &operator=(const LookupCache &) = delete;
+		void Bind(FixedSizeAllocator &allocator) {
+			D_ASSERT(!owner && !allocator.lookup_cache);
+			if (allocator.buffers.empty()) {
+				return;
+			}
+			idx_t capacity = 1;
+			while (capacity < allocator.buffers.size() && capacity < 256) {
+				capacity *= 2;
+			}
+			entries.resize(capacity);
+			owner = &allocator;
+			owner->lookup_cache = this;
+		}
+		data_ptr_t Resolve(const idx_t buffer_id, const bool dirty) {
+			auto &entry = entries[buffer_id & (entries.size() - 1)];
+			if (entry.id != buffer_id) {
+				auto it = owner->buffers.find(buffer_id);
+				D_ASSERT(it != owner->buffers.end());
+				auto &buffer = *it->second;
+				entry.pin = buffer.PinForLookup(dirty);
+				entry.base = entry.pin.Ptr();
+				entry.buffer = &buffer;
+				entry.dirty = dirty;
+				entry.id = buffer_id;
+			} else if (dirty && !entry.dirty) {
+				entry.pin = entry.buffer->PinForLookup(true);
+				entry.base = entry.pin.Ptr();
+				entry.dirty = true;
+			}
+			return entry.base;
+		}
+	private:
+		struct Entry {
+			idx_t id = NumericLimits<idx_t>::Maximum();
+			BufferHandle pin;
+			data_ptr_t base = nullptr;
+			FixedSizeBuffer *buffer = nullptr;
+			bool dirty = false;
+		};
+		FixedSizeAllocator *owner = nullptr;
+		unsafe_vector<Entry> entries;
+	};
+	// end Anybase changes
+
 	//! We can vacuum 10% or more of the total in-memory footprint
 	static constexpr uint8_t VACUUM_THRESHOLD = 10;
 
@@ -67,6 +125,11 @@ public:
 	//! DEPRECATED. Use segment handles.
 	inline data_ptr_t Get(const IndexPointer ptr, const bool dirty = true) {
 		D_ASSERT(ptr.GetOffset() < available_segments_per_buffer);
+		// start Anybase changes
+		if (lookup_cache) {
+			return lookup_cache->Resolve(ptr.GetBufferId(), dirty) + ptr.GetOffset() * segment_size + bitmask_offset;
+		}
+		// end Anybase changes
 
 		auto buffer_it = buffers.find(ptr.GetBufferId());
 		D_ASSERT(buffer_it != buffers.end());
@@ -185,6 +248,9 @@ private:
 
 	//! Buffers containing the segments.
 	unordered_map<idx_t, unique_ptr<FixedSizeBuffer>> buffers;
+// start Anybase changes
+	LookupCache *lookup_cache = nullptr;
+// end Anybase changes
 	//! Buffers with free space.
 	unordered_set<idx_t> buffers_with_free_space;
 	//! Caches the next buffer to be filled up.

@@ -71,6 +71,20 @@ FixedSizeBuffer::~FixedSizeBuffer() {
 	}
 }
 
+// start Anybase changes
+BufferHandle FixedSizeBuffer::PinForLookup(const bool dirty_p) {
+	lock_guard<mutex> l(lock);
+	if (!InMemory()) {
+		LoadFromDisk();
+	}
+	if (dirty_p) {
+		dirty = true;
+	}
+	auto resident_block = buffer_handle.GetBlockHandle();
+	return block_manager.buffer_manager.Pin(resident_block);
+}
+// end Anybase changes
+
 void FixedSizeBuffer::Serialize(PartialBlockManager &partial_block_manager, const idx_t available_segments,
                                 const idx_t segment_size, const idx_t bitmask_offset) {
 	D_ASSERT(readers == 0);
