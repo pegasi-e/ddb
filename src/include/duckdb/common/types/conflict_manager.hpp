@@ -201,8 +201,8 @@ private:
 	bool IsConflict(LookupResultType type);
 	// start Anybase changes
 	//! Keep per-hit callbacks concrete to avoid allocating a std::function wrapper.
-	template <class CALLBACK>
-	bool AddHitInternal(const idx_t index_in_chunk, const CALLBACK &callback);
+	template <class CALLBACK_TYPE>
+	bool AddHitInternal(const idx_t index_in_chunk, const CALLBACK_TYPE &callback);
 	// end Anybase changes
 	//! Determine visible row ID for each index with two possible row IDs.
 	void Finalize(const std::function<bool(const row_t row_id)> &callback);

@@ -42,8 +42,8 @@ bool ConflictManager::IsConflict(LookupResultType type) {
 }
 
 // start Anybase changes
-template <class CALLBACK>
-bool ConflictManager::AddHitInternal(const idx_t index_in_chunk, const CALLBACK &callback) {
+template <class CALLBACK_TYPE>
+bool ConflictManager::AddHitInternal(const idx_t index_in_chunk, const CALLBACK_TYPE &callback) {
 	D_ASSERT(index_in_chunk < chunk_size);
 	if (ShouldThrow(index_in_chunk)) {
 		return true;
