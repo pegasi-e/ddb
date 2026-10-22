@@ -941,3 +941,203 @@ TEST_CASE("Large Merger conflict verification reports the first input error afte
 	ConflictQuery(con, "CHECKPOINT");
 }
 // end Anybase changes
+
+// start Anybase changes
+TEST_CASE("Merger reuses update state across global and shuffled local targets", "[merger][updatereuse]") {
+	DuckDB db(nullptr);
+	Connection con(db);
+	const idx_t committed = STANDARD_VECTOR_SIZE * 3 + 31;
+	const idx_t local = STANDARD_VECTOR_SIZE * 2 + 19;
+	const idx_t total = committed + local;
+	GroupingQuery(con, "CREATE TABLE reuse_mixed(id BIGINT PRIMARY KEY, n BIGINT CHECK(n >= 0), s VARCHAR)");
+	GroupingQuery(con, "INSERT INTO reuse_mixed SELECT i, 0, 'initial' FROM range(" + std::to_string(committed) + ") t(i)");
+	GroupingQuery(con, "BEGIN");
+	GroupingQuery(con, "INSERT INTO reuse_mixed SELECT i, 0, 'initial' FROM range(" + std::to_string(committed) + ", " + std::to_string(total) + ") t(i)");
+	std::vector<idx_t> order(total);
+	std::iota(order.begin(), order.end(), 0);
+	std::mt19937 rng(20261021);
+	std::shuffle(order.begin(), order.end(), rng);
+	DataChunk batch;
+	batch.Initialize(Allocator::DefaultAllocator(), {LogicalType::BIGINT, LogicalType::BIGINT, LogicalType::VARCHAR}, total);
+	batch.SetCardinality(total);
+	for (idx_t r = 0; r < total; r++) {
+		auto id = order[r];
+		batch.SetValue(0, r, Value::BIGINT(id));
+		batch.SetValue(1, r, id % 7 == 0 ? Value(LogicalType::BIGINT) : Value::BIGINT(id * 3));
+		batch.SetValue(2, r, Value("long updated payload for target " + std::to_string(id)));
+	}
+	{
+		Merger merger(con, "reuse_mixed");
+		merger.AppendDataChunk(batch);
+		merger.Close();
+	}
+	REQUIRE(ConflictScalar(con, "SELECT count(*) FROM reuse_mixed") == int64_t(total));
+	REQUIRE(ConflictScalar(con, "SELECT count(*) FROM reuse_mixed WHERE n IS DISTINCT FROM CASE WHEN id % 7 = 0 THEN NULL ELSE id * 3 END OR s <> 'long updated payload for target ' || id::VARCHAR") == 0);
+	GroupingQuery(con, "ROLLBACK");
+	REQUIRE(ConflictScalar(con, "SELECT count(*) FROM reuse_mixed") == int64_t(committed));
+	REQUIRE(ConflictScalar(con, "SELECT count(*) FROM reuse_mixed WHERE n <> 0 OR s <> 'initial'") == 0);
+	// A failing flush must release all reusable state before a later successful merge.
+	batch.SetValue(1, total - 1, Value::BIGINT(-1));
+	GroupingQuery(con, "BEGIN");
+	{
+		Merger merger(con, "reuse_mixed");
+		merger.AppendDataChunk(batch);
+		REQUIRE_THROWS(merger.Close());
+		merger.Clear();
+	}
+	GroupingQuery(con, "ROLLBACK");
+	{
+		Merger merger(con, "reuse_mixed");
+		merger.AppendRow(int64_t(0), int64_t(17), "valid after failure");
+		merger.Close();
+	}
+	REQUIRE(ConflictScalar(con, "SELECT n FROM reuse_mixed WHERE id=0") == 17);
+}
+
+TEST_CASE("Merger fetch reuse preserves compressed nullable columns and skipped vectors", "[merger][updatereuse]") {
+	string compression;
+	SECTION("Uncompressed") { compression = "uncompressed"; }
+	SECTION("Run length encoding") { compression = "rle"; }
+	SECTION("Bit packing") { compression = "bitpacking"; }
+	auto path = TestCreatePath("merger_fetch_reuse_" + compression + ".db");
+	DeleteDatabase(path);
+	const idx_t rows = DEFAULT_ROW_GROUP_SIZE + 37;
+	{
+		DuckDB db(path);
+		Connection con(db);
+		GroupingQuery(con, "SET force_compression='" + compression + "'");
+		GroupingQuery(con, "CREATE TABLE reuse_disk(id BIGINT PRIMARY KEY, n BIGINT, v INTEGER, s VARCHAR)");
+		GroupingQuery(con, "INSERT INTO reuse_disk SELECT i, CASE WHEN i % 5 = 0 THEN NULL ELSE i % 100 END, CASE WHEN i % 3 = 0 THEN NULL ELSE 7 END, 'initial long payload' FROM range(" + std::to_string(rows) + ") t(i)");
+		GroupingQuery(con, "CHECKPOINT");
+	}
+	{
+		DuckDB db(path);
+		Connection con(db);
+		std::vector<idx_t> ids;
+		for (idx_t i = 0; i < rows; i++) {
+			if ((i / STANDARD_VECTOR_SIZE) % 3 != 1) ids.push_back(i);
+		}
+		std::reverse(ids.begin(), ids.end());
+		DataChunk batch;
+		batch.Initialize(Allocator::DefaultAllocator(), {LogicalType::BIGINT, LogicalType::BIGINT, LogicalType::INTEGER, LogicalType::VARCHAR}, ids.size());
+		batch.SetCardinality(ids.size());
+		for (idx_t r = 0; r < ids.size(); r++) {
+			auto id = ids[r];
+			batch.SetValue(0, r, Value::BIGINT(id));
+			batch.SetValue(1, r, id % 7 == 0 ? Value(LogicalType::BIGINT) : Value::BIGINT(id * 11));
+			batch.SetValue(2, r, id % 11 == 0 ? Value(LogicalType::INTEGER) : Value::INTEGER(99));
+			batch.SetValue(3, r, Value("updated long payload for " + std::to_string(id)));
+		}
+		auto merge = [&]() {
+			Merger merger(con, "reuse_disk");
+			merger.AppendDataChunk(batch);
+			merger.Close();
+		};
+		GroupingQuery(con, "BEGIN");
+		merge();
+		GroupingQuery(con, "ROLLBACK");
+		REQUIRE(ConflictScalar(con, "SELECT count(*) FROM reuse_disk WHERE n IS DISTINCT FROM CASE WHEN id % 5 = 0 THEN NULL ELSE id % 100 END OR v IS DISTINCT FROM CASE WHEN id % 3 = 0 THEN NULL ELSE 7 END OR s <> 'initial long payload'") == 0);
+		merge();
+		GroupingQuery(con, "CHECKPOINT");
+	}
+	{
+		DuckDB db(path);
+		Connection con(db);
+		REQUIRE(ConflictScalar(con, "SELECT count(*) FROM reuse_disk") == int64_t(rows));
+		REQUIRE(ConflictScalar(con, "SELECT count(*) FROM reuse_disk WHERE n IS DISTINCT FROM CASE WHEN (id // " + std::to_string(STANDARD_VECTOR_SIZE) + ") % 3 = 1 THEN CASE WHEN id % 5 = 0 THEN NULL ELSE id % 100 END ELSE CASE WHEN id % 7 = 0 THEN NULL ELSE id * 11 END END OR v IS DISTINCT FROM CASE WHEN (id // " + std::to_string(STANDARD_VECTOR_SIZE) + ") % 3 = 1 THEN CASE WHEN id % 3 = 0 THEN NULL ELSE 7 END ELSE CASE WHEN id % 11 = 0 THEN NULL ELSE 99 END END OR s <> CASE WHEN (id // " + std::to_string(STANDARD_VECTOR_SIZE) + ") % 3 = 1 THEN 'initial long payload' ELSE 'updated long payload for ' || id::VARCHAR END") == 0);
+	}
+	DeleteDatabase(path);
+}
+
+TEST_CASE("Merger validity no-op guard preserves overlays snapshots and rollback", "[merger][validityreuse]") {
+	auto path = TestCreatePath("merger_validity_noop.db");
+	DeleteDatabase(path);
+	const idx_t rows = STANDARD_VECTOR_SIZE * 2 + 13;
+	{
+		DuckDB db(path);
+		Connection con(db), reader(db);
+		GroupingQuery(con, "CREATE TABLE validity_noop(id BIGINT PRIMARY KEY, n BIGINT)");
+		GroupingQuery(con, "INSERT INTO validity_noop SELECT i, i FROM range(" + std::to_string(rows) + ") t(i)");
+		GroupingQuery(con, "CHECKPOINT");
+		auto merge = [&](int64_t generation, bool nulls) {
+			DataChunk batch;
+			batch.Initialize(Allocator::DefaultAllocator(), {LogicalType::BIGINT, LogicalType::BIGINT}, rows);
+			batch.SetCardinality(rows);
+			for (idx_t i = 0; i < rows; i++) {
+				auto id = rows - 1 - i;
+				batch.SetValue(0, i, Value::BIGINT(id));
+				batch.SetValue(1, i, nulls && id % 3 == 0 ? Value(LogicalType::BIGINT)
+				                                              : Value::BIGINT(generation + id));
+			}
+			Merger merger(con, "validity_noop");
+			merger.AppendDataChunk(batch);
+			merger.Close();
+		};
+		merge(1000, false);
+		GroupingQuery(reader, "BEGIN");
+		REQUIRE(ConflictScalar(reader, "SELECT n FROM validity_noop WHERE id=0") == 1000);
+		GroupingQuery(con, "BEGIN");
+		merge(2000, true);
+		merge(3000, false); // Original storage is all valid, but the overlay must still be updated.
+		REQUIRE(ConflictScalar(con, "SELECT count(*) FROM validity_noop WHERE n IS DISTINCT FROM id+3000") == 0);
+		REQUIRE(ConflictScalar(reader, "SELECT n FROM validity_noop WHERE id=0") == 1000);
+		GroupingQuery(con, "ROLLBACK");
+		REQUIRE(ConflictScalar(con, "SELECT count(*) FROM validity_noop WHERE n IS DISTINCT FROM id+1000") == 0);
+		GroupingQuery(reader, "ROLLBACK");
+
+		GroupingQuery(reader, "BEGIN");
+		REQUIRE(ConflictScalar(reader, "SELECT n FROM validity_noop WHERE id=0") == 1000);
+		GroupingQuery(con, "BEGIN");
+		merge(2000, true);
+		REQUIRE(reader.Query("UPDATE validity_noop SET n=NULL WHERE id=0")->HasError());
+		GroupingQuery(reader, "ROLLBACK");
+		GroupingQuery(con, "COMMIT");
+		REQUIRE(ConflictScalar(con, "SELECT count(*) FROM validity_noop WHERE n IS DISTINCT FROM CASE WHEN id%3=0 THEN NULL ELSE id+2000 END") == 0);
+		merge(4000, false);
+		GroupingQuery(con, "CHECKPOINT");
+		merge(5000, false); // Re-enter the no-overlay path after checkpointing.
+		GroupingQuery(con, "CHECKPOINT");
+	}
+	{
+		DuckDB db(path);
+		Connection con(db);
+		REQUIRE(ConflictScalar(con, "SELECT count(*) FROM validity_noop WHERE n IS DISTINCT FROM id+5000") == 0);
+	}
+	DeleteDatabase(path);
+}
+
+TEST_CASE("Merger numeric gather refreshes validity and checks constraints", "[merger][payloadreuse]") {
+	DuckDB db(nullptr);
+	Connection con(db);
+	const idx_t rows = STANDARD_VECTOR_SIZE * 3 + 17;
+	GroupingQuery(con, "CREATE TABLE gather_numeric(id BIGINT PRIMARY KEY, n BIGINT CHECK(n>=0), d DOUBLE, u USMALLINT)");
+	GroupingQuery(con, "INSERT INTO gather_numeric SELECT i, i, i::DOUBLE, (i%65535)::USMALLINT FROM range(" + std::to_string(rows) + ") t(i)");
+	auto merge = [&](bool invalid) {
+		DataChunk batch;
+		batch.Initialize(Allocator::DefaultAllocator(),
+		                 {LogicalType::BIGINT, LogicalType::BIGINT, LogicalType::DOUBLE, LogicalType::USMALLINT}, rows);
+		batch.SetCardinality(rows);
+		for (idx_t i = 0; i < rows; i++) {
+			auto id = rows - 1 - i;
+			batch.SetValue(0, i, Value::BIGINT(id));
+			batch.SetValue(1, i, invalid && id == rows - 1 ? Value::BIGINT(-1)
+				                         : (id / STANDARD_VECTOR_SIZE) % 2 == 0 ? Value(LogicalType::BIGINT)
+				                                                                         : Value::BIGINT(id + 1000000));
+			batch.SetValue(2, i, Value::DOUBLE(double(id) + 0.5));
+			batch.SetValue(3, i, Value::USMALLINT((id + 3) % 65535));
+		}
+		Merger merger(con, "gather_numeric");
+		merger.AppendDataChunk(batch);
+		merger.Close();
+	};
+	GroupingQuery(con, "BEGIN");
+	REQUIRE_THROWS(merge(true));
+	GroupingQuery(con, "ROLLBACK");
+	REQUIRE(ConflictScalar(con, "SELECT count(*) FROM gather_numeric WHERE n IS DISTINCT FROM id OR d<>id OR u<>id%65535") == 0);
+	merge(false);
+	REQUIRE(ConflictScalar(con, "SELECT count(*) FROM gather_numeric WHERE n IS DISTINCT FROM CASE WHEN (id // " + std::to_string(STANDARD_VECTOR_SIZE) + ")%2=0 THEN NULL ELSE id+1000000 END OR d<>id+0.5 OR u<>(id+3)%65535") == 0);
+	// Updated values lie outside the old range: statistics must not prune matching rows.
+	REQUIRE(ConflictScalar(con, "SELECT count(*) FROM gather_numeric WHERE n>=1000000") == int64_t(STANDARD_VECTOR_SIZE + 17));
+	REQUIRE(ConflictScalar(con, "SELECT count(*) FROM gather_numeric WHERE d>=" + std::to_string(rows - 1) + ".5") == 1);
+}
+// end Anybase changes
