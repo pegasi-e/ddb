@@ -139,8 +139,10 @@ private:
 	//! All matching indexes by their name (unique identifier).
 	case_insensitive_set_t index_names;
 
+//start Anybase changes
 	//! Registers all conflicting rows in a data chunk.
-	unordered_set<idx_t> conflict_rows;
+	// unordered_set<idx_t> conflict_rows;
+//end Anybase changes
 	//! True, if we can skip recording any further conflicts.
 	bool finished = false;
 
@@ -197,10 +199,20 @@ private:
 private:
 	//! Returns true, if we register a conflict for the lookup type.
 	bool IsConflict(LookupResultType type);
-	//! Adds a hit to the conflicts.
-	bool AddHit(const idx_t index_in_chunk, const std::function<void()> &callback);
+	// start Anybase changes
+	//! Keep per-hit callbacks concrete to avoid allocating a std::function wrapper.
+	template <class CALLBACK_TYPE>
+	bool AddHitInternal(const idx_t index_in_chunk, const CALLBACK_TYPE &callback);
+	// end Anybase changes
 	//! Determine visible row ID for each index with two possible row IDs.
 	void Finalize(const std::function<bool(const row_t row_id)> &callback);
+//start Anybase changes
+	//! Tests existing primary conflict flags without allocating on a miss.
+	bool HasRecordedConflict(const idx_t index_in_chunk) const {
+		// An uninitialized validity array means "all valid", not "no conflicts".
+		return HasConflicts() && conflict_data[FIRST].validity.RowIsValid(index_in_chunk);
+	}
+//end Anybase changes
 	//! Returns true, if the conflict manager should throw an exception, else false.
 	bool ShouldThrow(const idx_t index_in_chunk) const;
 	//! Returns true, if we ignore NULLs, else false.
@@ -222,20 +234,21 @@ private:
 
 	//! Adds a row ID to the primary conflict data.
 	void AddRowId(const idx_t index_in_chunk, const row_t row_id) {
-		// Only ON CONFLICT DO NOTHING can have multiple conflict targets,
-		// which can cause multiple row IDs per index_in_chunk.
-		// We let them overwrite each other, as we don't need the row IDs later.
-		auto elem = conflict_rows.find(index_in_chunk);
-		if (elem == conflict_rows.end()) {
-			// We have not yet seen this conflict: insert.
-			conflict_rows.insert(index_in_chunk);
-			GetConflictData(FIRST).Insert(index_in_chunk, row_id);
+// start Anybase changes
+		// Untargeted DO NOTHING can discover the same input position through
+		// multiple indexes. Keep its first row ID, matching the existing behavior.
+		auto &data = GetConflictData(FIRST);
+		if (!data.validity.RowIsValid(index_in_chunk)) {
+			data.Insert(index_in_chunk, row_id);
 		}
+// end Anybase changes
 	}
 
 	//! Adds a row ID to the secondary conflict data.
 	void AddSecondRowId(const idx_t index_in_chunk, const row_t row_id) {
-		D_ASSERT(conflict_rows.find(index_in_chunk) != conflict_rows.end());
+// start Anybase changes
+		D_ASSERT(HasRecordedConflict(index_in_chunk));
+// end Anybase changes
 		GetConflictData(SECOND).Insert(index_in_chunk, row_id);
 	}
 };

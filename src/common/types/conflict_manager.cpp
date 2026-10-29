@@ -41,7 +41,9 @@ bool ConflictManager::IsConflict(LookupResultType type) {
 	}
 }
 
-bool ConflictManager::AddHit(const idx_t index_in_chunk, const std::function<void()> &callback) {
+// start Anybase changes
+template <class CALLBACK_TYPE>
+bool ConflictManager::AddHitInternal(const idx_t index_in_chunk, const CALLBACK_TYPE &callback) {
 	D_ASSERT(index_in_chunk < chunk_size);
 	if (ShouldThrow(index_in_chunk)) {
 		return true;
@@ -66,12 +68,13 @@ bool ConflictManager::AddHit(const idx_t index_in_chunk, const std::function<voi
 }
 
 bool ConflictManager::AddHit(const idx_t index_in_chunk, const row_t row_id) {
-	return AddHit(index_in_chunk, [&]() { AddRowId(index_in_chunk, row_id); });
+	return AddHitInternal(index_in_chunk, [&]() { AddRowId(index_in_chunk, row_id); });
 }
 
 bool ConflictManager::AddSecondHit(const idx_t index_in_chunk, const row_t row_id) {
-	return AddHit(index_in_chunk, [&]() { AddSecondRowId(index_in_chunk, row_id); });
+	return AddHitInternal(index_in_chunk, [&]() { AddSecondRowId(index_in_chunk, row_id); });
 }
+// end Anybase changes
 
 bool ConflictManager::AddNull(const idx_t index_in_chunk) {
 	D_ASSERT(index_in_chunk < chunk_size);
@@ -128,7 +131,7 @@ bool ConflictManager::ShouldThrow(const idx_t index_in_chunk) const {
 
 	// If we have already seen a conflict for this index, then we don't throw.
 	D_ASSERT(mode == ConflictManagerMode::THROW);
-	return conflict_rows.find(index_in_chunk) == conflict_rows.end();
+	return !HasRecordedConflict(index_in_chunk);
 }
 
 bool ConflictManager::IgnoreNulls() const {

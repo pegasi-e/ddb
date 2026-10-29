@@ -850,7 +850,8 @@ void RowGroupCollection::Update(TransactionData transaction, DataTable &data_tab
 		auto l = stats.GetLock();
 		for (idx_t i = 0; i < column_ids.size(); i++) {
 			auto column_id = column_ids[i];
-			stats.MergeStats(*l, column_id.index, *current_row_group.GetStatistics(column_id.index));
+			// Merge under the existing table/column lock order without allocating a statistics snapshot.
+			current_row_group.MergeIntoStatistics(column_id.index, stats.GetStats(*l, column_id.index).Statistics());
 		}
 	} while (pos < updates.size());
 }

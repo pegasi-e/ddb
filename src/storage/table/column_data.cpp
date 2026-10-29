@@ -18,6 +18,9 @@
 #include "duckdb/common/serializer/serializer.hpp"
 #include "duckdb/function/variant/variant_shredding.hpp"
 #include "duckdb/storage/table/geo_column_data.hpp"
+// start Anybase changes
+#include "duckdb/storage/table/merger_fetch_state.hpp"
+// end Anybase changes
 
 namespace duckdb {
 
@@ -287,6 +290,20 @@ void ColumnData::UpdateInternal(TransactionData transaction, DataTable &data_tab
                                 Vector &update_vector, row_t *row_ids, idx_t update_count, Vector &base_vector,
                                 idx_t row_group_start) {
 	lock_guard<mutex> update_guard(update_lock);
+	// start Anybase changes
+	// Original storage validity is sufficient only while this vector has no validity overlay.
+	// Hold update_lock through the check so another update cannot invalidate that conclusion.
+	auto merger_scope = MergerFetchScope::Current();
+	if (merger_scope && &merger_scope->table == &data_table && data_type == ColumnDataType::MAIN_TABLE &&
+	    type.InternalType() == PhysicalType::BIT && update_count > 0 &&
+	    update_vector.GetVectorType() == VectorType::FLAT_VECTOR &&
+	    FlatVector::Validity(update_vector).AllValid() && FlatVector::Validity(base_vector).AllValid()) {
+		auto vector_index = (UnsafeNumericCast<idx_t>(row_ids[0]) - row_group_start) / STANDARD_VECTOR_SIZE;
+		if (!updates || !updates->HasUpdates(vector_index)) {
+			return;
+		}
+	}
+	// end Anybase changes
 	if (!updates) {
 		updates = make_uniq<UpdateSegment>(*this);
 	}
@@ -585,6 +602,57 @@ idx_t ColumnData::FetchUpdateData(ColumnScanState &state, row_t *row_ids, Vector
 	base_vector.Flatten(fetch_count);
 	return fetch_count;
 }
+
+// start Anybase changes
+idx_t ColumnData::FetchUpdateData(ColumnScanState &state, row_t *row_ids, Vector &base_vector, idx_t row_group_start,
+                                 shared_ptr<ColumnSegment> &cached_segment) {
+	if (row_ids[0] < UnsafeNumericCast<row_t>(row_group_start)) {
+		throw InternalException("ColumnData::FetchUpdateData out of range");
+	}
+	auto row = UnsafeNumericCast<idx_t>(row_ids[0] - UnsafeNumericCast<row_t>(row_group_start));
+	if (row > count) {
+		throw InternalException("ColumnData::Fetch - row_id out of range");
+	}
+	auto offset = row / STANDARD_VECTOR_SIZE * STANDARD_VECTOR_SIZE;
+	optional_ptr<SegmentNode<ColumnSegment>> segment;
+	shared_ptr<ColumnSegment> owner;
+	{
+		auto l = data.Lock();
+		segment = data.GetSegment(l, offset);
+		owner = segment->ReferenceNode();
+	}
+	// Refresh the tree node every call. The shared segment identity prevents stale/ABA reuse.
+	if (!state.initialized || cached_segment != owner || state.internal_index > offset) {
+		state.scan_state.reset();
+		state.previous_states.clear();
+		state.initialized = false;
+		state.internal_index = segment->GetRowStart();
+	}
+	state.current = segment;
+	state.offset_in_column = offset;
+	cached_segment = std::move(owner);
+	// Numeric uncompressed storage can expose its pinned bytes directly. UpdateSegment only reads
+	// base values at the selected positions; avoid copying the entire vector into the scratch buffer.
+	// Keep cross-segment and compressed scans on the existing materializing path.
+	auto &current = segment->GetNode();
+	auto vector_count = MinValue<idx_t>(STANDARD_VECTOR_SIZE, count - offset);
+	bool reference_base = TypeIsNumeric(type.InternalType()) &&
+	                      current.GetCompressionFunction().type == CompressionType::COMPRESSION_UNCOMPRESSED &&
+	                      offset + vector_count <= segment->GetRowStart() + current.count &&
+	                      (!state.scan_options || !state.scan_options->force_fetch_row);
+	auto scan_type = reference_base ? ScanVectorType::SCAN_ENTIRE_VECTOR : ScanVectorType::SCAN_FLAT_VECTOR;
+	auto fetch_count = ScanVector(state, base_vector, STANDARD_VECTOR_SIZE, scan_type);
+	base_vector.Flatten(fetch_count);
+	// Crossing segments uses the original scanner; start afresh on the next fetch.
+	if (state.current.get() != segment.get()) {
+		state.scan_state.reset();
+		state.previous_states.clear();
+		state.initialized = false;
+		cached_segment.reset();
+	}
+	return fetch_count;
+}
+// end Anybase changes
 
 void ColumnData::Update(TransactionData transaction, DataTable &data_table, idx_t column_index, Vector &update_vector,
                         row_t *row_ids, idx_t update_count, idx_t row_group_start) {

@@ -1,4 +1,7 @@
 #include "duckdb/storage/data_table.hpp"
+// start Anybase changes
+#include "duckdb/storage/table/merger_fetch_state.hpp"
+// end Anybase changes
 #include "duckdb/storage/table/data_table_info.hpp"
 #include "duckdb/transaction/commit_state.hpp"
 
@@ -37,6 +40,7 @@
 
 // start anybase change
 #include "duckdb/main/database.hpp"
+#include <algorithm>
 // end anybase change
 
 namespace duckdb {
@@ -602,6 +606,20 @@ static void VerifyGeneratedExpressionSuccess(ClientContext &context, TableCatalo
 
 static void VerifyCheckConstraint(ClientContext &context, TableCatalogEntry &table, Expression &expr, DataChunk &chunk,
                                   CheckConstraint &check) {
+	// start Anybase changes
+	// Expression intermediates have standard vector capacity, unlike Merger input batches.
+	if (chunk.size() > STANDARD_VECTOR_SIZE) {
+		DataChunk part;
+		part.InitializeEmpty(chunk.GetTypes());
+		for (idx_t offset = 0; offset < chunk.size(); offset += STANDARD_VECTOR_SIZE) {
+			auto count = MinValue<idx_t>(STANDARD_VECTOR_SIZE, chunk.size() - offset);
+			part.Reference(chunk);
+			part.Slice(offset, count);
+			VerifyCheckConstraint(context, table, expr, part, check);
+		}
+		return;
+	}
+	// end Anybase changes
 	ExpressionExecutor executor(context, expr);
 	Vector result(LogicalType::INTEGER);
 	try {
@@ -1747,6 +1765,35 @@ void DataTable::Update(TableUpdateState &state, ClientContext &context, Vector &
 	// first verify that no constraints are violated
 	VerifyUpdateConstraints(*state.constraint_state, context, updates, column_ids);
 
+	// start Anybase changes
+	bool use_global_rows = state.merger_global_rows;
+	if (use_global_rows) {
+		row_ids.Flatten(count);
+		auto ids = FlatVector::GetData<row_t>(row_ids);
+		for (idx_t i = 0; i < count; i++) {
+			if (ids[i] >= MAX_ROW_ID) {
+				use_global_rows = false;
+				break;
+			}
+		}
+	}
+	if (use_global_rows) {
+		// Merger has already separated global rows; retain all constraint checks above.
+		updates.Flatten();
+		row_ids.Flatten(count);
+		auto ids = FlatVector::GetData<row_t>(row_ids);
+#ifdef DEBUG
+		for (idx_t i = 0; i < count; i++) {
+			D_ASSERT(ids[i] >= 0 && ids[i] < MAX_ROW_ID);
+		}
+#endif
+		auto &transaction = DuckTransaction::Get(context, db);
+		transaction.ModifyTable(*this);
+		row_groups->Update(transaction, *this, ids, column_ids, updates);
+		return;
+	}
+	// end Anybase changes
+
 	// now perform the actual update
 	Vector max_row_id_vec(Value::BIGINT(MAX_ROW_ID));
 	Vector row_ids_slice(LogicalType::BIGINT);
@@ -1926,34 +1973,64 @@ void DataTable::AddIndex(const ColumnList &columns, const vector<LogicalIndex> &
 }
 
 // start Anybase changes
-// TODO: should we use a hash table to keep track of this instead?
 template <bool GLOBAL>
 static bool CheckForDuplicateTargets(const Vector &row_ids, idx_t count) {
-	// Insert all rows, if any of the rows has already been updated before, we throw an error
 	auto data = FlatVector::GetData<row_t>(row_ids);
+	if (count < 2) {
+		return true;
+	}
+	auto throw_duplicate = []() {
+		throw InvalidInputException(
+		    "ON CONFLICT DO UPDATE can not update the same row twice in the same command. Ensure that no rows "
+		    "proposed for insertion within the same command have duplicate constrained values");
+	};
 
-	// The rowids in the transaction-local ART aren't final yet so we have to separately keep track of the two sets of
-	// rowids
-	// Rows that have been updated by a DO UPDATE conflict
-	unordered_set<row_t> updated_global_rows;
-	// Rows in the transaction-local storage that have been updated by a DO UPDATE conflict
-	unordered_set<row_t> updated_local_rows;
-	unordered_set<row_t> &updated_rows = GLOBAL ? updated_global_rows :updated_local_rows;
 	bool is_sorted = true;
-	for (idx_t i = 0; i < count; i++) {
-		auto result = updated_rows.insert(data[i]);
-		if (result.second == false) {
-			throw InvalidInputException(
-				"ON CONFLICT DO UPDATE can not update the same row twice in the same command. Ensure that no rows "
-				"proposed for insertion within the same command have duplicate constrained values");
+	auto minimum = data[0];
+	auto maximum = data[0];
+	for (idx_t i = 1; i < count; i++) {
+		if (data[i - 1] == data[i]) {
+			throw_duplicate();
 		}
-
-		if (i > 0 && data[i - 1] > data[i]) {
-			is_sorted = false;
-		}
+		is_sorted &= data[i - 1] < data[i];
+		minimum = MinValue(minimum, data[i]);
+		maximum = MaxValue(maximum, data[i]);
+	}
+	if (is_sorted) {
+		// Equal neighbors have already been rejected; no tracking allocation is needed.
+		return true;
 	}
 
-	return is_sorted;
+	// Normalize to the observed range, including transaction-local row ID offsets.
+	// Unsigned subtraction avoids signed overflow even across the row_t sign boundary.
+	const auto span = uint64_t(maximum) - uint64_t(minimum);
+	const auto word_count = span / 64 + 1;
+	if (word_count <= count) {
+		// Cap bitset storage at eight bytes per input row. Sparse ranges use the
+		// hash-set fallback rather than allocating according to their largest row ID.
+		vector<uint64_t> seen(word_count, 0);
+		auto words = seen.data();
+		for (idx_t i = 0; i < count; i++) {
+			const auto offset = uint64_t(data[i]) - uint64_t(minimum);
+			const auto word_index = offset / 64;
+			const auto mask = uint64_t(1) << (offset % 64);
+			D_ASSERT(word_index < word_count);
+			if (words[word_index] & mask) {
+				throw_duplicate();
+			}
+			words[word_index] |= mask;
+		}
+	} else {
+		unordered_set<row_t> updated_rows;
+		updated_rows.reserve(count);
+		for (idx_t i = 0; i < count; i++) {
+			if (!updated_rows.insert(data[i]).second) {
+				throw_duplicate();
+			}
+		}
+	}
+	// Global and transaction-local calls retain independent tracking state.
+	return false;
 }
 
 static vector<LogicalType> GetTypesOfSetColumns(const vector<PhysicalIndex>& set_columns, TableCatalogEntry &table) {
@@ -1969,8 +2046,9 @@ static void CreateUpdateChunk(ClientContext &context, DataChunk &chunk, TableCat
 							  const vector<LogicalType> &set_types) {
 
 	D_ASSERT(table.GetColumns().Physical().Size() == chunk.ColumnCount());
-	auto update_types = GetTypesOfSetColumns(set_columns, table);
-	update_chunk.Initialize(context, set_types, chunk.size());
+	if (update_chunk.ColumnCount() == 0) {
+		update_chunk.InitializeEmpty(set_types);
+	}
 	for (idx_t i = 0; i < set_columns.size(); i++) {
 		update_chunk.data[i].Reference(chunk.data[set_columns[i].index]);
 	}
@@ -1978,19 +2056,31 @@ static void CreateUpdateChunk(ClientContext &context, DataChunk &chunk, TableCat
 	update_chunk.SetCardinality(chunk);
 }
 
+struct MergerUpdateState {
+	unique_ptr<TableUpdateState> table_state;
+	DataChunk update_chunk;
+	DataChunk materialized_row_ids;
+};
+
 template <bool GLOBAL>
 static idx_t PerformOnConflictAction(ClientContext &context, DataChunk &chunk, TableCatalogEntry &table,
 									 Vector &row_ids, const vector<PhysicalIndex>& set_columns,
 									 const vector<unique_ptr<BoundConstraint>> &bound_constraints,
-									 const vector<LogicalType> &set_types) {
-	DataChunk update_chunk;
-	CreateUpdateChunk(context, chunk, table, set_columns, row_ids, update_chunk, set_types);
+									 const vector<LogicalType> &set_types, MergerUpdateState &state,
+									 bool prepared_updates = false) {
+	auto &update_chunk = state.update_chunk;
+	if (!prepared_updates) {
+		CreateUpdateChunk(context, chunk, table, set_columns, row_ids, update_chunk, set_types);
+	}
 
 	auto &data_table = table.GetStorage();
 	// Perform the update, using the results of the SET expressions
 	if (GLOBAL) {
-		auto update_state = data_table.InitializeUpdate(table, context, bound_constraints);
-		data_table.Update(*update_state, context, row_ids, set_columns, update_chunk);
+		if (!state.table_state) {
+			state.table_state = data_table.InitializeUpdate(table, context, bound_constraints);
+			state.table_state->merger_global_rows = true;
+		}
+		data_table.Update(*state.table_state, context, row_ids, set_columns, update_chunk);
 	} else {
 		auto &local_storage = LocalStorage::Get(context, data_table.db);
 		// Perform the update, using the results of the SET expressions
@@ -2006,28 +2096,28 @@ static idx_t PerformOrderedUpdate(TableCatalogEntry &table, ClientContext &conte
 								  Vector &row_ids, DataChunk &conflict_chunk,
 								  const vector<LogicalType> &set_types) {
 
+	MergerUpdateState state;
+	DataChunk data_chunk;
+	data_chunk.InitializeEmpty(conflict_chunk.GetTypes());
 	idx_t updated_tuples = 0;
 	auto standard_chunk_count = (idx_t) ceil((double) conflict_chunk.size() / STANDARD_VECTOR_SIZE);
 	for (idx_t i = 0; i < standard_chunk_count; i++) {
 		auto chunk_size = std::min<idx_t>(conflict_chunk.size() - updated_tuples, STANDARD_VECTOR_SIZE);
 		auto offset = i * STANDARD_VECTOR_SIZE;
-		DataChunk data_chunk;
-		data_chunk.Initialize(context, conflict_chunk.GetTypes());
 		data_chunk.Reference(conflict_chunk);
 		data_chunk.Slice(offset, chunk_size);
 
 		Vector group_row_ids(row_ids);
 		group_row_ids.Slice(row_ids, offset, offset + chunk_size);
 
-		updated_tuples += PerformOnConflictAction<GLOBAL>(context, data_chunk, table, group_row_ids, set_columns, bound_constraints, set_types);
+		updated_tuples += PerformOnConflictAction<GLOBAL>(context, data_chunk, table, group_row_ids, set_columns, bound_constraints, set_types, state);
 	}
 
 	return updated_tuples;
 }
 
 struct GroupedUpdate {
-	explicit GroupedUpdate() {
-		count = 0;
+	GroupedUpdate() : count(0) {
 	}
 
 	void Initialize(idx_t size) {
@@ -2036,34 +2126,56 @@ struct GroupedUpdate {
 
 	SelectionVector sel;
 	idx_t count;
-	vector<row_t> ids;
 };
 
-static map<std::tuple<idx_t, idx_t>, GroupedUpdate> GroupUpdatesByRowGroup(DataChunk &conflict_chunk, Vector &row_ids,
-																		   const shared_ptr<RowGroupCollection> &row_groups) {
-	D_ASSERT(row_ids.GetType().InternalType() == ROW_TYPE);
-
-	auto flat_row_ids = FlatVector::GetData<row_t>(row_ids);
-	map<std::tuple<idx_t, idx_t>, GroupedUpdate> grouped_updates;
-	for (idx_t i = 0; i < conflict_chunk.size(); i++) {
-		auto row_group = row_groups->GetRowGroupByRowNumber(UnsafeNumericCast<idx_t>(flat_row_ids[i]));
-		auto rg_index = row_group->GetIndex();
-		auto c_index = ((idx_t)flat_row_ids[i] - row_group->GetRowStart()) / STANDARD_VECTOR_SIZE;
-		auto key = std::make_tuple(rg_index, c_index);
-
-		if (grouped_updates.find(key) == grouped_updates.end()) {
-			GroupedUpdate grouped_update;
-			grouped_update.Initialize(row_group->GetNode().count);
-			grouped_updates[key] = std::move(grouped_update);
-		}
-
-		auto grouped_update = std::move(grouped_updates[key]);
-
-		grouped_update.sel.set_index(grouped_update.count, i);
-		grouped_update.count++;
-		grouped_updates[key] = std::move(grouped_update);
+struct GroupedRowGroup {
+	GroupedRowGroup(idx_t start_p, idx_t end_p) : start(start_p), end(end_p) {
+		buckets.resize((end - start + STANDARD_VECTOR_SIZE - 1) / STANDARD_VECTOR_SIZE);
 	}
+	idx_t start;
+	idx_t end;
+	vector<GroupedUpdate> buckets;
+};
 
+static map<idx_t, GroupedRowGroup> GroupUpdatesByRowGroup(DataChunk &conflict_chunk, Vector &row_ids,
+                                                       const shared_ptr<RowGroupCollection> &row_groups) {
+	D_ASSERT(row_ids.GetType().InternalType() == ROW_TYPE);
+	auto flat_row_ids = FlatVector::GetData<row_t>(row_ids);
+	map<idx_t, GroupedRowGroup> grouped_updates;
+	// Only resolve touched row groups. Cache their actual ranges, including partial groups.
+	map<idx_t, GroupedRowGroup *> ranges;
+	const auto group_capacity = MinValue<idx_t>(STANDARD_VECTOR_SIZE, conflict_chunk.size());
+	for (idx_t i = 0; i < conflict_chunk.size(); i++) {
+		auto row = UnsafeNumericCast<idx_t>(flat_row_ids[i]);
+		GroupedRowGroup *group = nullptr;
+		auto range = ranges.upper_bound(row);
+		if (range != ranges.begin()) {
+			--range;
+			if (row < range->second->end) {
+				group = range->second;
+			}
+		}
+		if (!group) {
+			auto row_group = row_groups->GetRowGroupByRowNumber(row);
+			auto start = row_group->GetRowStart();
+			auto end = start + row_group->GetNode().count;
+			auto entry = grouped_updates.find(row_group->GetIndex());
+			if (entry == grouped_updates.end()) {
+				entry = grouped_updates.emplace(row_group->GetIndex(), GroupedRowGroup(start, end)).first;
+			} else if (end > entry->second.end) {
+				entry->second.end = end;
+				entry->second.buckets.resize((end - start + STANDARD_VECTOR_SIZE - 1) / STANDARD_VECTOR_SIZE);
+			}
+			group = &entry->second;
+			ranges[start] = group;
+		}
+		auto &bucket = group->buckets[(row - group->start) / STANDARD_VECTOR_SIZE];
+		if (!bucket.count) {
+			bucket.Initialize(group_capacity);
+		}
+		D_ASSERT(bucket.count < group_capacity);
+		bucket.sel.set_index(bucket.count++, i);
+	}
 	return grouped_updates;
 }
 
@@ -2074,20 +2186,61 @@ static idx_t PerformUnOrderedUpdate(TableCatalogEntry &table, ClientContext &con
 									Vector &row_ids, DataChunk &conflict_chunk, const shared_ptr<RowGroupCollection> &row_groups,
 									const vector<LogicalType> &set_types) {
 
+	MergerUpdateState state;
+	DataChunk data_chunk;
+	data_chunk.InitializeEmpty(conflict_chunk.GetTypes());
 	idx_t updated_tuples = 0;
+	bool materialize_numeric = GLOBAL;
+	for (auto &type : set_types) {
+		materialize_numeric = materialize_numeric && TypeIsNumeric(type.InternalType());
+	}
 	auto grouped_updates = GroupUpdatesByRowGroup(conflict_chunk, row_ids, row_groups);
+	auto row_id_data = FlatVector::GetData<row_t>(row_ids);
 
-	for (auto &kvp : grouped_updates) {
-		duckdb::DataChunk data_chunk;
-		data_chunk.Initialize(context, conflict_chunk.GetTypes());
-		data_chunk.Reference(conflict_chunk);
-		data_chunk.Slice(kvp.second.sel, kvp.second.count);
+	for (auto &row_group : grouped_updates) {
+		for (auto &group : row_group.second.buckets) {
+			if (!group.count) {
+				continue;
+			}
+			// Sort the shared selection once, before slicing both row IDs and payloads.
+			// Each column (including validity) can then use its existing sorted fast path.
+			auto selection = group.sel.data();
+			auto selection_end = selection + group.count;
+			auto compare_rows = [row_id_data](sel_t a, sel_t b) { return row_id_data[a] < row_id_data[b]; };
+			if (!std::is_sorted(selection, selection_end, compare_rows)) {
+				std::sort(selection, selection_end, compare_rows);
+			}
+			if (materialize_numeric) {
+				if (state.materialized_row_ids.ColumnCount() == 0) {
+					state.update_chunk.Initialize(Allocator::DefaultAllocator(), set_types);
+					state.materialized_row_ids.Initialize(Allocator::DefaultAllocator(), {LogicalType::ROW_TYPE});
+				} else {
+					state.update_chunk.Reset();
+					state.materialized_row_ids.Reset();
+				}
+				// Gather only SET columns into owned buffers. Both values and validity are refreshed
+				// for every group; storage consumes them before the next group resets the caches.
+				for (idx_t i = 0; i < set_columns.size(); i++) {
+					VectorOperations::Copy(conflict_chunk.data[set_columns[i].index], state.update_chunk.data[i],
+					                       group.sel, group.count, 0, 0);
+				}
+				state.update_chunk.SetCardinality(group.count);
+				VectorOperations::Copy(row_ids, state.materialized_row_ids.data[0], group.sel, group.count, 0, 0);
+				state.materialized_row_ids.SetCardinality(group.count);
+				updated_tuples += PerformOnConflictAction<GLOBAL>(context, conflict_chunk, table,
+				                                                state.materialized_row_ids.data[0], set_columns,
+				                                                bound_constraints, set_types, state, true);
+				continue;
+			}
+			data_chunk.Reference(conflict_chunk);
+			data_chunk.Slice(group.sel, group.count);
 
-		auto row_group_ids = Vector(row_ids);
-		row_group_ids.Slice(kvp.second.sel, kvp.second.count);
+			auto row_group_ids = Vector(row_ids);
+			row_group_ids.Slice(group.sel, group.count);
 
-		updated_tuples += PerformOnConflictAction<GLOBAL>(context, data_chunk, table, row_group_ids,
-														  set_columns, bound_constraints, set_types);
+			updated_tuples += PerformOnConflictAction<GLOBAL>(context, data_chunk, table, row_group_ids,
+															  set_columns, bound_constraints, set_types, state);
+		}
 	}
 
 	return updated_tuples;
@@ -2136,7 +2289,7 @@ static idx_t HandleInsertConflicts(TableCatalogEntry &table, ClientContext &cont
 	DataChunk combined_chunk; // contains conflict_chunk + scan_chunk (wide)
 
 	// Filter out everything but the conflicting rows
-	conflict_chunk.Initialize(context, insert_chunk.GetTypes());
+	conflict_chunk.InitializeEmpty(insert_chunk.GetTypes());
 	conflict_chunk.Reference(insert_chunk);
 	conflict_chunk.Slice(conflict_selection, conflict_count);
 	conflict_chunk.SetCardinality(conflict_count);
@@ -2153,7 +2306,7 @@ static idx_t HandleInsertConflicts(TableCatalogEntry &table, ClientContext &cont
 	// End CDC changes
 
 	// We have not scanned the initial table, so we can just duplicate the initial chunk
-	combined_chunk.Initialize(context, conflict_chunk.GetTypes());
+	combined_chunk.InitializeEmpty(conflict_chunk.GetTypes());
 	combined_chunk.Reference(conflict_chunk);
 	combined_chunk.SetCardinality(conflict_chunk);
 
@@ -2162,7 +2315,8 @@ static idx_t HandleInsertConflicts(TableCatalogEntry &table, ClientContext &cont
 	idx_t updated_tuples = 0;
 
 	if (!set_types.empty()) {
-		if (is_sorted || row_groups == nullptr) {
+		// The supplied collection describes committed storage, never local row-ID ranges.
+		if (!GLOBAL || is_sorted || row_groups == nullptr) {
 			// fast path for sorted updates
 			updated_tuples = PerformOrderedUpdate<GLOBAL>(table, context, bound_constraints, set_columns, row_ids,
 														  combined_chunk, set_types);
@@ -2233,6 +2387,7 @@ void DataTable::Merge(TableCatalogEntry &table, ClientContext &context, ColumnDa
 		}
 	}
 
+	MergerFetchScope fetch_scope(storage);
 	auto set_types = GetTypesOfSetColumns(set_columns, table);
 	OnConflictHandling(table, context, insert_chunk, bound_constraints, conflict_target, set_columns, set_types, row_groups);
 	AppendInsertChunks(table, context, storage, insert_chunk, append_state);

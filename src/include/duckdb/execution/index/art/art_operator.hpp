@@ -13,11 +13,38 @@
 #include "duckdb/execution/index/art/prefix.hpp"
 #include "duckdb/execution/index/art/leaf.hpp"
 #include "duckdb/execution/index/art/base_node.hpp"
+// start Anybase changes
+#include <exception>
+// end Anybase changes
 
 namespace duckdb {
 
 //! ARTOperator provides functionality for different ART operations.
 class ARTOperator {
+	// start Anybase changes
+private:
+	//! Compare short prefixes with bounded, unaligned loads; use libc for longer prefixes.
+	static bool PrefixMatches(const_data_ptr_t prefix, const_data_ptr_t key, const idx_t count) {
+		if (count > 16) {
+			return memcmp(prefix, key, count) == 0;
+		}
+		// The first and last words cover the prefix without reading past either end.
+		if (count >= 8) {
+			return Load<uint64_t>(prefix) == Load<uint64_t>(key) &&
+			       Load<uint64_t>(prefix + count - 8) == Load<uint64_t>(key + count - 8);
+		}
+		if (count >= 4) {
+			return Load<uint32_t>(prefix) == Load<uint32_t>(key) &&
+			       Load<uint32_t>(prefix + count - 4) == Load<uint32_t>(key + count - 4);
+		}
+		if (count >= 2) {
+			return Load<uint16_t>(prefix) == Load<uint16_t>(key) &&
+			       Load<uint16_t>(prefix + count - 2) == Load<uint16_t>(key + count - 2);
+		}
+		return !count || *prefix == *key;
+	}
+	// end Anybase changes
+
 public:
 	//! Lookup returns a pointer to the leaf matching the key,
 	//! or nullptr, if no such leaf exists.
@@ -33,13 +60,16 @@ public:
 			// Traverse the prefix.
 			if (ref.get().GetType() == NType::PREFIX) {
 				Prefix prefix(art, ref.get());
-				for (idx_t i = 0; i < prefix.data[art.PrefixCount()]; i++) {
-					if (prefix.data[i] != key[depth]) {
-						// The key and the prefix don't match.
+				// start Anybase changes
+				const idx_t count = prefix.data[art.PrefixCount()];
+				if (count) {
+					if (depth >= key.len || count > key.len - depth ||
+					    !PrefixMatches(prefix.data, key.data + depth, count)) {
 						return nullptr;
 					}
-					depth++;
 				}
+				depth += count;
+				// end Anybase changes
 				ref = *prefix.ptr;
 				continue;
 			}
@@ -61,6 +91,69 @@ public:
 
 		return nullptr;
 	}
+
+	// start Anybase changes
+	struct LookupResult {
+		unsafe_optional_ptr<const Node> leaf;
+		std::exception_ptr error;
+	};
+	//! Advance independent traversals one hop per lane, without changing node dispatch.
+	//! Errors are deferred so the caller can verify leaves and report errors in input order.
+	static void LookupBatch(ART &art, const Node &root, const ARTKey *keys, idx_t count,
+	                        array<LookupResult, 8> &results) {
+		D_ASSERT(count <= 8);
+		struct Lane {
+			const Node *node;
+			idx_t depth;
+			bool done;
+		};
+		array<Lane, 8> lanes;
+		idx_t pending = count;
+		for (idx_t i = 0; i < count; i++) {
+			lanes[i] = {&root, 0, keys[i].Empty()};
+			pending -= lanes[i].done;
+			results[i].leaf = nullptr;
+			results[i].error = std::exception_ptr();
+		}
+		while (pending) {
+			for (idx_t i = 0; i < count; i++) {
+				auto &lane = lanes[i];
+				if (lane.done) {
+					continue;
+				}
+				try {
+					auto &node = *lane.node;
+					if (!node.HasMetadata()) {
+						lane.done = true;
+					} else if (node.IsAnyLeaf() || node.GetGateStatus() == GateStatus::GATE_SET) {
+						results[i].leaf = lane.node;
+						lane.done = true;
+					} else if (node.GetType() == NType::PREFIX) {
+						Prefix prefix(art, node);
+						const idx_t size = prefix.data[art.PrefixCount()];
+						if (size && (lane.depth >= keys[i].len || size > keys[i].len - lane.depth ||
+						             !PrefixMatches(prefix.data, keys[i].data + lane.depth, size))) {
+							lane.done = true;
+						} else {
+							lane.depth += size;
+							lane.node = prefix.ptr;
+						}
+					} else {
+						D_ASSERT(lane.depth < keys[i].len);
+						auto child = node.GetChild(art, keys[i][lane.depth]);
+						lane.node = child.get();
+						lane.done = !child;
+						lane.depth++;
+					}
+				} catch (...) {
+					results[i].error = std::current_exception();
+					lane.done = true;
+				}
+				pending -= lane.done;
+			}
+		}
+	}
+	// end Anybase changes
 
 	//! LookupInLeaf returns true if the rowid is in the leaf:
 	//! 1) If the leaf is an inlined leaf, check if the rowid matches.

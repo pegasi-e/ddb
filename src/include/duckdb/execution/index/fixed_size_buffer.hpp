@@ -51,6 +51,11 @@ public:
 	~FixedSizeBuffer();
 
 private:
+	// start Anybase changes
+	//! Return an independent pin of the current resident bytes, preserving dirty-access semantics.
+	BufferHandle PinForLookup(const bool dirty_p);
+	// end Anybase changes
+
 	//! Returns a pointer to the buffer in memory, and calls Deserialize, if the buffer is not in memory.
 	//! DEPRECATED. Use segment handles.
 	data_ptr_t GetDeprecated(const bool dirty_p = true) {

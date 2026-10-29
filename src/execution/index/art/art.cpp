@@ -1,5 +1,10 @@
 #include "duckdb/execution/index/art/art.hpp"
 
+// start Anybase changes
+#include <cstdlib>
+#include <cstring>
+// end Anybase changes
+
 #include "duckdb/common/types/conflict_manager.hpp"
 #include "duckdb/common/unordered_map.hpp"
 #include "duckdb/common/vector_operations/vector_operations.hpp"
@@ -944,20 +949,66 @@ void ART::VerifyConstraint(DataChunk &chunk, IndexAppendInfo &info, ConflictMana
 	GenerateKeys<>(arena_allocator, expr_chunk, keys);
 
 	optional_idx conflict_idx;
-	for (idx_t i = 0; !conflict_idx.IsValid() && i < chunk.size(); i++) {
-		if (keys[i].Empty()) {
-			if (manager.AddNull(i)) {
-				conflict_idx = i;
-			}
-			continue;
-		}
 
-		auto leaf = ARTOperator::Lookup(*this, tree, keys[i], 0);
-		if (!leaf) {
-			continue;
+// start Anybase changes
+
+	// Confined to the custom Merger's large-batch verification while holding this ART's lock.
+	array<FixedSizeAllocator::LookupCache, ALLOCATOR_COUNT> lookup_caches;
+	static const bool reuse_buffers = []() {
+		auto value = std::getenv("DUCKDB_ART_BUFFER_CACHE");
+		return !value || std::strcmp(value, "0") != 0;
+	}();
+	if (reuse_buffers && allow_non_standard_vector_size && owns_data && chunk.size() > STANDARD_VECTOR_SIZE) {
+		for (idx_t i = 0; i < allocators->size(); i++) {
+			lookup_caches[i].Bind(*(*allocators)[i]);
 		}
-		VerifyLeaf(*leaf, keys[i], DeleteIndexInfo(info.delete_indexes), manager, conflict_idx, i);
 	}
+
+	static const idx_t lookup_lanes = []() -> idx_t {
+		auto value = std::getenv("DUCKDB_ART_LOOKUP_LANES");
+		if (value && std::strcmp(value, "1") == 0) {
+			return 1;
+		}
+		if (value && std::strcmp(value, "4") == 0) {
+			return 4;
+		}
+		return 8;
+	}();
+	if (lookup_lanes > 1 && allow_non_standard_vector_size && chunk.size() > STANDARD_VECTOR_SIZE) {
+		array<ARTOperator::LookupResult, 8> results;
+		for (idx_t base = 0; base < chunk.size() && !conflict_idx.IsValid(); base += lookup_lanes) {
+			auto count = MinValue<idx_t>(lookup_lanes, chunk.size() - base);
+			ARTOperator::LookupBatch(*this, tree, keys.data() + base, count, results);
+			for (idx_t lane = 0; lane < count && !conflict_idx.IsValid(); lane++) {
+				auto i = base + lane;
+				if (keys[i].Empty()) {
+					if (manager.AddNull(i)) {
+						conflict_idx = i;
+					}
+				} else if (results[lane].error) {
+					std::rethrow_exception(results[lane].error);
+				} else if (results[lane].leaf) {
+					VerifyLeaf(*results[lane].leaf, keys[i], DeleteIndexInfo(info.delete_indexes), manager, conflict_idx, i);
+				}
+			}
+		}
+	} else {
+		for (idx_t i = 0; !conflict_idx.IsValid() && i < chunk.size(); i++) {
+			if (keys[i].Empty()) {
+				if (manager.AddNull(i)) {
+					conflict_idx = i;
+				}
+				continue;
+			}
+
+			auto leaf = ARTOperator::Lookup(*this, tree, keys[i], 0);
+			if (!leaf) {
+				continue;
+			}
+			VerifyLeaf(*leaf, keys[i], DeleteIndexInfo(info.delete_indexes), manager, conflict_idx, i);
+		}
+	}
+// end Anybase changes
 
 	manager.FinishLookup();
 	if (!conflict_idx.IsValid()) {

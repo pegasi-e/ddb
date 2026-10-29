@@ -6,6 +6,9 @@
 #include "duckdb/storage/table/column_checkpoint_state.hpp"
 #include "duckdb/common/serializer/deserializer.hpp"
 #include "duckdb/storage/table/column_data_checkpointer.hpp"
+// start Anybase changes
+#include "duckdb/storage/table/merger_fetch_state.hpp"
+// end Anybase changes
 
 namespace duckdb {
 
@@ -152,6 +155,20 @@ idx_t StandardColumnData::Fetch(ColumnScanState &state, row_t row_id, Vector &re
 
 void StandardColumnData::Update(TransactionData transaction, DataTable &data_table, idx_t column_index,
                                 Vector &update_vector, row_t *row_ids, idx_t update_count, idx_t row_group_start) {
+	// start Anybase changes
+	auto scope = MergerFetchScope::Current();
+	if (scope && &scope->table == &data_table && GetDataType() == ColumnDataType::MAIN_TABLE &&
+	    type.InternalType() != PhysicalType::VARCHAR) {
+		auto &state = scope->Get(*this, column_index, type);
+		FetchUpdateData(state.standard, row_ids, state.base, row_group_start, state.standard_segment);
+		validity->FetchUpdateData(state.validity, row_ids, state.base, row_group_start, state.validity_segment);
+		UpdateInternal(transaction, data_table, column_index, update_vector, row_ids, update_count, state.base,
+		               row_group_start);
+		validity->UpdateInternal(transaction, data_table, column_index, update_vector, row_ids, update_count, state.base,
+		                         row_group_start);
+		return;
+	}
+	// end Anybase changes
 	ColumnScanState standard_state(nullptr);
 	ColumnScanState validity_state(nullptr);
 	Vector base_vector(type);
