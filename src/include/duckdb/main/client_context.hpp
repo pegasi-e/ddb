@@ -334,7 +334,7 @@ public:
 	DUCKDB_API void Merge(TableDescription &description, ColumnDataCollection &collection, optional_ptr<const vector<LogicalIndex>> column_ids);
 	DUCKDB_API void SetActiveResult(ClientContextLock &lock, BaseQueryResult &result);
 	DUCKDB_API idx_t GetTableVersion(const char *schema, const char *table);
-	DUCKDB_API idx_t GetTotalRows(const char *catalog, const char *schema, const char *table);
+	DUCKDB_API idx_t GetEstimatedTotalRows(const char *catalog, const char *schema, const char *table);
 	DUCKDB_API idx_t GetColumnVersion(const char *schema, const char *table, const char *column);
 	DUCKDB_API void BeginTransaction(const timestamp_t timestamp, const transaction_t sequenceNumber) {
 		transaction.BeginTransaction(timestamp, sequenceNumber);

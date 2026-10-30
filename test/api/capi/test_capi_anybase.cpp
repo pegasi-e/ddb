@@ -93,6 +93,78 @@ TEST_CASE("Get table row count", "[capi]") {
 	duckdb_close(&db);
 }
 
+TEST_CASE("Estimated table row count excludes committed deletes", "[capi][cAnybaseApi]") {
+	CAPITester tester;
+	REQUIRE(tester.OpenDatabase(nullptr));
+	REQUIRE_NO_FAIL(tester.Query("CREATE TABLE live_rows(i INTEGER)"));
+	auto estimate = [&]() {
+		char *error = nullptr;
+		auto count = duckdb_estimated_row_count(tester.connection, nullptr, nullptr, "live_rows", &error);
+		string message = error ? error : "";
+		duckdb_free(error);
+		INFO(message);
+		REQUIRE(message.empty());
+		return count;
+	};
+	REQUIRE(estimate() == 0);
+	REQUIRE_NO_FAIL(tester.Query("INSERT INTO live_rows SELECT range FROM range(1000)"));
+	REQUIRE(estimate() == 1000);
+	REQUIRE_NO_FAIL(tester.Query("DELETE FROM live_rows WHERE i < 400"));
+	REQUIRE(estimate() == 600);
+
+	// Local inserts and uncommitted deletes do not affect the committed live-row estimate.
+	REQUIRE_NO_FAIL(tester.Query("BEGIN"));
+	REQUIRE_NO_FAIL(tester.Query("INSERT INTO live_rows VALUES (1000), (1001)"));
+	REQUIRE_NO_FAIL(tester.Query("DELETE FROM live_rows WHERE i < 500 OR i = 1001"));
+	REQUIRE(estimate() == 600);
+	REQUIRE_NO_FAIL(tester.Query("ROLLBACK"));
+	REQUIRE(estimate() == 600);
+
+	// The estimate uses current committed deletes, not an older reader's snapshot.
+	CAPITester reader;
+	REQUIRE(duckdb_connect(tester.database, &reader.connection) == DuckDBSuccess);
+	REQUIRE_NO_FAIL(reader.Query("BEGIN"));
+	auto snapshot = reader.Query("SELECT count(*) FROM live_rows");
+	REQUIRE_NO_FAIL(*snapshot);
+	REQUIRE(snapshot->Fetch<int64_t>(0, 0) == 600);
+	REQUIRE_NO_FAIL(tester.Query("DELETE FROM live_rows WHERE i < 500"));
+	REQUIRE(estimate() == 500);
+	REQUIRE(duckdb_estimated_row_count(reader.connection, nullptr, nullptr, "live_rows", nullptr) == 500);
+	snapshot = reader.Query("SELECT count(*) FROM live_rows");
+	REQUIRE_NO_FAIL(*snapshot);
+	REQUIRE(snapshot->Fetch<int64_t>(0, 0) == 600);
+	REQUIRE_NO_FAIL(reader.Query("ROLLBACK"));
+	REQUIRE_NO_FAIL(tester.Query("DELETE FROM live_rows"));
+	REQUIRE(estimate() == 0);
+}
+
+TEST_CASE("Estimated table row count loads persisted deletes", "[capi][cAnybaseApi]") {
+	auto path = TestCreatePath("estimated_live_rows.db");
+	DeleteDatabase(path);
+	{
+		CAPITester tester;
+		REQUIRE(tester.OpenDatabase(path.c_str()));
+		// Keep an index so checkpointing does not simply vacuum away all deleted slots.
+		REQUIRE_NO_FAIL(tester.Query("CREATE TABLE live_rows(i BIGINT PRIMARY KEY)"));
+		REQUIRE_NO_FAIL(tester.Query("INSERT INTO live_rows SELECT range FROM range(300000)"));
+		REQUIRE_NO_FAIL(tester.Query("DELETE FROM live_rows WHERE i % 3 = 0"));
+		REQUIRE(duckdb_estimated_row_count(tester.connection, nullptr, nullptr, "live_rows", nullptr) == 200000);
+		REQUIRE_NO_FAIL(tester.Query("CHECKPOINT"));
+	}
+	{
+		CAPITester tester;
+		REQUIRE(tester.OpenDatabase(path.c_str()));
+		// Count before running SELECT so the API itself must load persisted deletion metadata.
+		REQUIRE(duckdb_estimated_row_count(tester.connection, nullptr, nullptr, "live_rows", nullptr) == 200000);
+		auto actual = tester.Query("SELECT count(*) FROM live_rows");
+		REQUIRE_NO_FAIL(*actual);
+		REQUIRE(actual->Fetch<int64_t>(0, 0) == 200000);
+		REQUIRE_NO_FAIL(tester.Query("INSERT INTO live_rows VALUES (300001)"));
+		REQUIRE(duckdb_estimated_row_count(tester.connection, nullptr, nullptr, "live_rows", nullptr) == 200001);
+	}
+	DeleteDatabase(path);
+}
+
 TEST_CASE("Ensure begin transaction succeeds", "[cAnybaseApi]") {
 	duckdb_database db;
 	duckdb_connection con;
