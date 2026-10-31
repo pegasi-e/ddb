@@ -271,6 +271,7 @@ public:
 		return row_groups;
 	}
 
+	idx_t GetEstimatedVisibleRowCount(ClientContext &context);
 	void BindIndexes(ClientContext &context);
 	bool HasIndexes() const;
 	bool HasUniqueIndexes() const;

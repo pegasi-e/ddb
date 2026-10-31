@@ -1655,7 +1655,7 @@ idx_t ClientContext::GetTableVersion(const char *schema, const char *table) {
 	return version;
 }
 
-idx_t ClientContext::GetTotalRows(const char *catalog, const char *schema, const char *table) {
+idx_t ClientContext::GetEstimatedTotalRows(const char *catalog, const char *schema, const char *table) {
 	idx_t rowCount = 0;
 	RunFunctionInTransaction([&]() {
 		if (schema == nullptr) {
@@ -1667,8 +1667,8 @@ idx_t ClientContext::GetTotalRows(const char *catalog, const char *schema, const
 		}
 
 		auto &table_entry = Catalog::GetEntry<DuckTableEntry>(*this, catalog, schema, table);
-		const auto &dataTable = table_entry.GetStorage();
-		rowCount = dataTable.GetTotalRows();
+		auto &dataTable = table_entry.GetStorage();
+		rowCount = dataTable.GetEstimatedVisibleRowCount(*this);
 	});
 
 	return rowCount;
