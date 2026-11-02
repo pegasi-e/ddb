@@ -365,7 +365,7 @@ idx_t duckdb_estimated_row_count(const duckdb_connection connection, const char 
 	auto *ddbConnection = reinterpret_cast<Connection *>(connection);
 
 	try {
-		return ddbConnection->context->GetTotalRows(catalog, schema, table);
+		return ddbConnection->context->GetEstimatedTotalRows(catalog, schema, table);
 	} catch (std::exception &ex) {
 		if (error) {
 			ErrorData parsed_error(ex);

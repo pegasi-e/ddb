@@ -39,6 +39,7 @@
 #include "duckdb/transaction/local_storage.hpp"
 
 // start anybase change
+#include "duckdb/storage/table/row_group_segment_tree.hpp"
 #include "duckdb/main/database.hpp"
 #include <algorithm>
 // end anybase change
@@ -1973,6 +1974,21 @@ void DataTable::AddIndex(const ColumnList &columns, const vector<LogicalIndex> &
 }
 
 // start Anybase changes
+idx_t DataTable::GetEstimatedVisibleRowCount(ClientContext &context) {
+	auto &transaction = DuckTransaction::Get(context, db);
+	// Follow AppendLock's lock order. Approximate visibility still requires safe storage access.
+	lock_guard<mutex> append_guard(append_lock);
+	auto table_lock = transaction.SharedLockTable(*info);
+	auto collection = row_groups;
+	auto groups = collection->GetRowGroups();
+	auto segment_lock = groups->Lock();
+	idx_t estimated_count = 0;
+	for (auto &entry : groups->SegmentNodes(segment_lock)) {
+		estimated_count += entry.GetNode().GetCommittedRowCount();
+	}
+	return estimated_count;
+}
+
 template <bool GLOBAL>
 static bool CheckForDuplicateTargets(const Vector &row_ids, idx_t count) {
 	auto data = FlatVector::GetData<row_t>(row_ids);
