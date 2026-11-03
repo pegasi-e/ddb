@@ -380,6 +380,92 @@ TEST_CASE("Unordered Merger grouping preserves full buckets and partial row grou
 	verify();
 }
 
+TEST_CASE("Merger grouping mixes complete vectors sparse gaps and partial tails", "[merger][grouping]") {
+	DuckDB db(nullptr);
+	Connection con(db);
+	const idx_t rows = STANDARD_VECTOR_SIZE * 4 + 37;
+	bool complete_tail = true;
+	SECTION("Complete partial tail") { complete_tail = true; }
+	SECTION("Sparse partial tail") { complete_tail = false; }
+	GroupingQuery(con, "CREATE TABLE dense_mix(id BIGINT PRIMARY KEY, n BIGINT CHECK(n>=0), d DOUBLE)");
+	GroupingQuery(con, "INSERT INTO dense_mix SELECT i, 0, -1 FROM range(" + std::to_string(rows) + ") t(i)");
+	// A deleted storage position must not be treated as a complete vector of visible rows.
+	GroupingQuery(con, "DELETE FROM dense_mix WHERE id=" + std::to_string(STANDARD_VECTOR_SIZE + 3));
+	std::vector<idx_t> ids;
+	for (idx_t id = 0; id < rows; id++) {
+		auto vector_index = id / STANDARD_VECTOR_SIZE;
+		if (id == STANDARD_VECTOR_SIZE + 3) continue;
+		if (vector_index == 0 || vector_index == 3 ||
+		    (vector_index == 1 && (complete_tail || id % 3 == 0)) ||
+		    (vector_index == 4 && (complete_tail || id != rows - 1))) {
+			ids.push_back(id);
+		}
+	}
+	std::mt19937 rng(20261102);
+	std::shuffle(ids.begin(), ids.end(), rng);
+	DataChunk batch;
+	batch.Initialize(Allocator::DefaultAllocator(), {LogicalType::BIGINT, LogicalType::BIGINT, LogicalType::DOUBLE}, ids.size());
+	batch.SetCardinality(ids.size());
+	for (idx_t i = 0; i < ids.size(); i++) {
+		auto id = ids[i];
+		batch.SetValue(0, i, Value::BIGINT(id));
+		batch.SetValue(1, i, id % 7 == 0 ? Value(LogicalType::BIGINT) : Value::BIGINT(id * 3 + 1));
+		batch.SetValue(2, i, Value::DOUBLE(double(id) * 0.25 + 0.5));
+	}
+	auto merge = [&]() {
+		Merger merger(con, "dense_mix");
+		merger.AppendDataChunk(batch);
+		merger.Close();
+	};
+	GroupingQuery(con, "BEGIN");
+	merge();
+	GroupingQuery(con, "ROLLBACK");
+	auto original = con.Query("SELECT count(*) FROM dense_mix WHERE n<>0 OR d<>-1");
+	REQUIRE_FALSE(original->HasError());
+	REQUIRE(original->GetValue(0, 0).GetValue<int64_t>() == 0);
+	merge();
+	auto selected = "(id<" + std::to_string(STANDARD_VECTOR_SIZE) +
+	                " OR (id>=" + std::to_string(STANDARD_VECTOR_SIZE * 3) + " AND id<" + std::to_string(STANDARD_VECTOR_SIZE * 4) + ")" +
+	                " OR (id>=" + std::to_string(STANDARD_VECTOR_SIZE) + " AND id<" + std::to_string(STANDARD_VECTOR_SIZE * 2) + (complete_tail ? ")" : " AND id%3=0)") +
+	                " OR (id>=" + std::to_string(STANDARD_VECTOR_SIZE * 4) +
+	                (complete_tail ? ")" : " AND id<" + std::to_string(rows - 1) + ")") + ")";
+	auto verify = [&]() {
+		auto result = con.Query("SELECT count(*), count(*) FILTER(WHERE "
+		                        "n IS DISTINCT FROM CASE WHEN " + selected +
+		                        " THEN CASE WHEN id%7=0 THEN NULL ELSE id*3+1 END ELSE 0 END OR "
+		                        "d<>CASE WHEN " + selected + " THEN id*0.25+0.5 ELSE -1 END) FROM dense_mix");
+		REQUIRE_FALSE(result->HasError());
+		REQUIRE(result->GetValue(0, 0).GetValue<int64_t>() == int64_t(rows - 1));
+		REQUIRE(result->GetValue(1, 0).GetValue<int64_t>() == 0);
+	};
+	verify();
+
+	// Exactly vector-sized input with a duplicate and a missing row must fail before direct placement.
+	DataChunk duplicates;
+	duplicates.Initialize(Allocator::DefaultAllocator(), batch.GetTypes());
+	duplicates.SetCardinality(STANDARD_VECTOR_SIZE);
+	for (idx_t i = 0; i < STANDARD_VECTOR_SIZE; i++) {
+		duplicates.SetValue(0, i, Value::BIGINT(i == STANDARD_VECTOR_SIZE - 1 ? 0 : i));
+		duplicates.SetValue(1, i, Value::BIGINT(777));
+		duplicates.SetValue(2, i, Value::DOUBLE(333));
+	}
+	GroupingQuery(con, "BEGIN");
+	{
+		Merger merger(con, "dense_mix");
+		string error;
+		try {
+			merger.AppendDataChunk(duplicates);
+			merger.Close();
+		} catch (const std::exception &ex) {
+			error = ex.what();
+		}
+		merger.Clear();
+		REQUIRE(error.find("can not update the same row twice") != string::npos);
+	}
+	GroupingQuery(con, "ROLLBACK");
+	verify();
+}
+
 TEST_CASE("Merger duplicate-target checks preserve ordered and sparse inputs", "[merger][duplicates]") {
 	DuckDB db(nullptr);
 	Connection con(db);

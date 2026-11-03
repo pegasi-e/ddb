@@ -2212,9 +2212,12 @@ static idx_t PerformUnOrderedUpdate(TableCatalogEntry &table, ClientContext &con
 	}
 	auto grouped_updates = GroupUpdatesByRowGroup(conflict_chunk, row_ids, row_groups);
 	auto row_id_data = FlatVector::GetData<row_t>(row_ids);
+	sel_t ordered_selection[STANDARD_VECTOR_SIZE];
 
 	for (auto &row_group : grouped_updates) {
-		for (auto &group : row_group.second.buckets) {
+		auto &row_group_data = row_group.second;
+		for (idx_t vector_index = 0; vector_index < row_group_data.buckets.size(); vector_index++) {
+			auto &group = row_group_data.buckets[vector_index];
 			if (!group.count) {
 				continue;
 			}
@@ -2223,8 +2226,22 @@ static idx_t PerformUnOrderedUpdate(TableCatalogEntry &table, ClientContext &con
 			auto selection = group.sel.data();
 			auto selection_end = selection + group.count;
 			auto compare_rows = [row_id_data](sel_t a, sel_t b) { return row_id_data[a] < row_id_data[b]; };
+			auto vector_start = row_group_data.start + vector_index * STANDARD_VECTOR_SIZE;
+			auto vector_count = MinValue<idx_t>(STANDARD_VECTOR_SIZE, row_group_data.end - vector_start);
 			if (!std::is_sorted(selection, selection_end, compare_rows)) {
-				std::sort(selection, selection_end, compare_rows);
+				if (group.count == vector_count) {
+					// Duplicate targets were rejected before grouping. A complete vector therefore
+					// contains every local row offset exactly once, including a partial tail vector.
+					for (idx_t i = 0; i < group.count; i++) {
+						auto source_index = selection[i];
+						auto local_row = UnsafeNumericCast<idx_t>(row_id_data[source_index]) - vector_start;
+						D_ASSERT(local_row < vector_count);
+						ordered_selection[local_row] = source_index;
+					}
+					memcpy(selection, ordered_selection, group.count * sizeof(sel_t));
+				} else {
+					std::sort(selection, selection_end, compare_rows);
+				}
 			}
 			if (materialize_numeric) {
 				if (state.materialized_row_ids.ColumnCount() == 0) {
