@@ -10344,6 +10344,9 @@ DUCKDB_C_API uint64_t duckdb_get_hlc_timestamp();
 DUCKDB_C_API void duckdb_set_hlc_timestamp(uint64_t ts);
 DUCKDB_C_API idx_t duckdb_get_table_version(duckdb_connection connection, const char *schema, const char *table, char **error);
 DUCKDB_C_API idx_t duckdb_get_column_version(duckdb_connection connection, const char *schema, const char *table, const char *column, char **error);
+DUCKDB_C_API duckdb_state duckdb_get_table_and_column_versions(duckdb_connection connection, const char *schema, const char *table,
+                                                  const char *const *columns, idx_t column_count, idx_t *out_versions,
+                                                  idx_t *out_table_version, char **error);
 DUCKDB_C_API idx_t duckdb_estimated_row_count(duckdb_connection connection, const char *catalog, const char *schema, const char *table, char **error);
 DUCKDB_C_API duckdb_state duckdb_begin_transaction(duckdb_connection connection, int64_t micro_seconds, uint64_t sequence, char **error);
 

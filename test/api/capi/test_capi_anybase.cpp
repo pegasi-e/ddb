@@ -1,9 +1,163 @@
 #include "capi_tester.hpp"
+#include "duckdb/catalog/catalog.hpp"
 #include "duckdb/common/types/data_chunk.hpp"
+#include "duckdb/main/client_context.hpp"
+#include "duckdb/transaction/duck_transaction.hpp"
 #include "duckdb.h"
 
 using namespace duckdb;
 using namespace std;
+
+TEST_CASE("Batch column versions preserve ordering and scalar behavior", "[capi][cAnybaseApi]") {
+	CAPITester tester;
+	REQUIRE(tester.OpenDatabase(nullptr));
+	REQUIRE_NO_FAIL(tester.Query("CREATE SCHEMA versions_schema"));
+	REQUIRE_NO_FAIL(tester.Query(
+	    "CREATE TABLE versions_schema.versions(i INTEGER, v INTEGER, \"caf\xC3\xA9\" INTEGER)"));
+	REQUIRE_NO_FAIL(tester.Query("INSERT INTO versions_schema.versions VALUES (1, 2, 3)"));
+	REQUIRE_NO_FAIL(tester.Query("UPDATE versions_schema.versions SET v = 4"));
+
+	const char *columns[] = {"v", "I", "caf\xC3\xA9", "missing", "v"};
+	idx_t versions[5] = {};
+	idx_t table_version = 0;
+	char *error = nullptr;
+	REQUIRE(duckdb_get_table_and_column_versions(tester.connection, "versions_schema", "versions", columns, 5, versions,
+	                                  &table_version, &error) == DuckDBSuccess);
+	REQUIRE(error == nullptr);
+	REQUIRE(table_version == duckdb_get_table_version(tester.connection, "versions_schema", "versions", &error));
+	REQUIRE(error == nullptr);
+	REQUIRE(table_version > 0);
+	for (idx_t i = 0; i < 5; i++) {
+		REQUIRE(versions[i] ==
+		        duckdb_get_column_version(tester.connection, "versions_schema", "versions", columns[i], &error));
+		REQUIRE(error == nullptr);
+	}
+	REQUIRE(versions[0] > versions[1]);
+	REQUIRE(versions[0] == versions[4]);
+	REQUIRE(versions[3] == 0);
+
+	duckdb::vector<const char *> many_columns(4096, "v");
+	duckdb::vector<idx_t> many_versions(many_columns.size());
+	REQUIRE(duckdb_get_table_and_column_versions(tester.connection, "versions_schema", "versions", many_columns.data(),
+	                                  many_columns.size(), many_versions.data(), &table_version, &error) ==
+	        DuckDBSuccess);
+	REQUIRE(error == nullptr);
+	for (auto version : many_versions) {
+		REQUIRE(version == versions[0]);
+	}
+}
+
+TEST_CASE("Batch column versions use one transaction and reuse active transactions", "[capi][cAnybaseApi]") {
+	CAPITester tester;
+	REQUIRE(tester.OpenDatabase(nullptr));
+	REQUIRE_NO_FAIL(tester.Query("CREATE TABLE versions(i INTEGER, v INTEGER)"));
+	REQUIRE_NO_FAIL(tester.Query("INSERT INTO versions VALUES (1, 2)"));
+	auto &context = *reinterpret_cast<Connection *>(tester.connection)->context;
+	auto transaction_id = [&]() {
+		transaction_t id = 0;
+		context.RunFunctionInTransaction([&]() {
+			auto &catalog = Catalog::GetCatalog(context, INVALID_CATALOG);
+			id = DuckTransaction::Get(context, catalog).transaction_id;
+		});
+		return id;
+	};
+	const char *columns[] = {"v", "i", "v", "missing"};
+	idx_t versions[4];
+	idx_t table_version = 0;
+	auto before = transaction_id();
+	REQUIRE(duckdb_get_table_and_column_versions(tester.connection, nullptr, "versions", columns, 4, versions, &table_version,
+	                                  nullptr) == DuckDBSuccess);
+	REQUIRE_FALSE(context.transaction.HasActiveTransaction());
+	REQUIRE(transaction_id() == before + 2);
+	REQUIRE(table_version == 1);
+	before = transaction_id();
+	table_version = 0;
+	REQUIRE(duckdb_get_table_and_column_versions(tester.connection, nullptr, "versions", nullptr, 0, nullptr, &table_version,
+	                                  nullptr) == DuckDBSuccess);
+	REQUIRE(transaction_id() == before + 2);
+	REQUIRE_FALSE(context.transaction.HasActiveTransaction());
+	REQUIRE(table_version == 1);
+
+	REQUIRE_NO_FAIL(tester.Query("BEGIN"));
+	auto active_id = transaction_id();
+	REQUIRE_NO_FAIL(tester.Query("UPDATE versions SET v = 99"));
+	REQUIRE(duckdb_get_table_and_column_versions(tester.connection, "", "versions", columns, 4, versions, &table_version,
+	                                  nullptr) == DuckDBSuccess);
+	REQUIRE(context.transaction.HasActiveTransaction());
+	REQUIRE_FALSE(context.transaction.IsAutoCommit());
+	REQUIRE(transaction_id() == active_id);
+	REQUIRE(versions[0] == 1);
+	REQUIRE(table_version == 1);
+	REQUIRE_NO_FAIL(tester.Query("ROLLBACK"));
+	auto result = tester.Query("SELECT v FROM versions");
+	REQUIRE_NO_FAIL(*result);
+	REQUIRE(result->Fetch<int32_t>(0, 0) == 2);
+
+	REQUIRE_NO_FAIL(tester.Query("UPDATE versions SET v = 100"));
+	REQUIRE(duckdb_get_table_and_column_versions(tester.connection, nullptr, "versions", columns, 4, versions, &table_version,
+	                                  nullptr) == DuckDBSuccess);
+	REQUIRE(table_version == 2);
+	REQUIRE(versions[0] == 2);
+	REQUIRE(versions[1] == 1);
+}
+
+TEST_CASE("Batch column version errors leave output unchanged", "[capi][cAnybaseApi]") {
+	CAPITester tester;
+	REQUIRE(tester.OpenDatabase(nullptr));
+	REQUIRE_NO_FAIL(tester.Query("CREATE TABLE versions(i INTEGER, g INTEGER GENERATED ALWAYS AS (i + 1))"));
+	REQUIRE_NO_FAIL(tester.Query("INSERT INTO versions(i) VALUES (1)"));
+	const char *columns[] = {"i", "g"};
+	const char *null_column[] = {"i", nullptr};
+	idx_t versions[] = {123, 456};
+	idx_t table_version = 789;
+	auto expect_error = [&](duckdb_connection connection, const char *table, const char *const *names,
+	                        idx_t *output) {
+		char *error = nullptr;
+		auto state = duckdb_get_table_and_column_versions(connection, nullptr, table, names, 2, output, &table_version, &error);
+		string message = error ? error : "";
+		duckdb_free(error);
+		INFO(message);
+		REQUIRE(state == DuckDBError);
+		REQUIRE_FALSE(message.empty());
+		REQUIRE(versions[0] == 123);
+		REQUIRE(versions[1] == 456);
+		REQUIRE(table_version == 789);
+	};
+	expect_error(nullptr, "versions", columns, versions);
+	expect_error(tester.connection, nullptr, columns, versions);
+	expect_error(tester.connection, "versions", nullptr, versions);
+	expect_error(tester.connection, "versions", columns, nullptr);
+	expect_error(tester.connection, "versions", null_column, versions);
+	expect_error(tester.connection, "missing_table", columns, versions);
+	expect_error(tester.connection, "versions", columns, versions);
+	REQUIRE(duckdb_get_table_and_column_versions(tester.connection, nullptr, "missing_table", columns, 2, versions, &table_version,
+	                                  nullptr) == DuckDBError);
+	char *empty_error = nullptr;
+	REQUIRE(duckdb_get_table_and_column_versions(tester.connection, nullptr, "missing_table", nullptr, 0, nullptr, &table_version,
+	                                  &empty_error) == DuckDBError);
+	REQUIRE(empty_error != nullptr);
+	duckdb_free(empty_error);
+	REQUIRE(table_version == 789);
+	char *null_output_error = nullptr;
+	REQUIRE(duckdb_get_table_and_column_versions(tester.connection, nullptr, "versions", columns, 2, versions, nullptr,
+	                                  &null_output_error) == DuckDBError);
+	REQUIRE(null_output_error != nullptr);
+	duckdb_free(null_output_error);
+	REQUIRE(versions[0] == 123);
+	REQUIRE(versions[1] == 456);
+	auto &context = *reinterpret_cast<Connection *>(tester.connection)->context;
+	REQUIRE_FALSE(context.transaction.HasActiveTransaction());
+
+	char previous_message[] = "previous message";
+	char *error = previous_message;
+	const char *physical_column[] = {"i"};
+	REQUIRE(duckdb_get_table_and_column_versions(tester.connection, nullptr, "versions", physical_column, 1, versions,
+	                                  &table_version, &error) == DuckDBSuccess);
+	REQUIRE(error == nullptr);
+	REQUIRE(versions[0] == 1);
+	REQUIRE(versions[1] == 456);
+	REQUIRE(table_version == 1);
+}
 
 TEST_CASE("Test Insert version isolation", "[capi]") {
 

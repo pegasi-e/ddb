@@ -336,6 +336,8 @@ public:
 	DUCKDB_API idx_t GetTableVersion(const char *schema, const char *table);
 	DUCKDB_API idx_t GetEstimatedTotalRows(const char *catalog, const char *schema, const char *table);
 	DUCKDB_API idx_t GetColumnVersion(const char *schema, const char *table, const char *column);
+	DUCKDB_API vector<idx_t> GetColumnVersions(const char *schema, const char *table, const char *const *columns,
+	                                         idx_t column_count, idx_t &table_version);
 	DUCKDB_API void BeginTransaction(const timestamp_t timestamp, const transaction_t sequenceNumber) {
 		transaction.BeginTransaction(timestamp, sequenceNumber);
 		transaction.SetAutoCommit(false);
