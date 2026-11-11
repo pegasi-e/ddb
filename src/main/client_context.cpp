@@ -1674,6 +1674,17 @@ idx_t ClientContext::GetEstimatedTotalRows(const char *catalog, const char *sche
 	return rowCount;
 }
 
+static idx_t GetStorageColumnVersion(TableCatalogEntry &table_entry, const DataTable &storage, const char *column) {
+	if (!table_entry.ColumnExists(column)) {
+		return 0;
+	}
+	const auto &column_definition = table_entry.GetColumn(column);
+	if (column_definition.Generated()) {
+		throw InvalidInputException("Cannot fetch a storage version for generated column \"%s\"", column);
+	}
+	return storage.GetColumnVersion(column_definition.Physical().index);
+}
+
 idx_t ClientContext::GetColumnVersion(const char *schema, const char *table, const char *column) {
 	idx_t version = 0;
 	RunFunctionInTransaction([&]() {
@@ -1683,13 +1694,35 @@ idx_t ClientContext::GetColumnVersion(const char *schema, const char *table, con
 
 		auto &table_entry = Catalog::GetEntry<TableCatalogEntry>(*this, INVALID_CATALOG, schema, table);
 		const auto &dataTable = table_entry.GetStorage();
-		if (table_entry.ColumnExists(column)) {
-			const auto cIndex = table_entry.GetColumn(column).Physical();
-			version = dataTable.GetColumnVersion(cIndex.index);
-		}
+		version = GetStorageColumnVersion(table_entry, dataTable, column);
 	});
 
 	return version;
+}
+
+vector<idx_t> ClientContext::GetColumnVersions(const char *schema, const char *table, const char *const *columns,
+                                            idx_t column_count) {
+	if (!table || (column_count && !columns)) {
+		throw InvalidInputException("Invalid argument(s) to GetColumnVersions");
+	}
+	for (idx_t i = 0; i < column_count; i++) {
+		if (!columns[i]) {
+			throw InvalidInputException("Column name at index %llu must not be NULL", i);
+		}
+	}
+	vector<idx_t> versions(column_count);
+	if (column_count == 0) {
+		return versions;
+	}
+	RunFunctionInTransaction([&]() {
+		auto &table_entry =
+		    Catalog::GetEntry<TableCatalogEntry>(*this, INVALID_CATALOG, schema ? schema : INVALID_SCHEMA, table);
+		const auto &storage = table_entry.GetStorage();
+		for (idx_t i = 0; i < column_count; i++) {
+			versions[i] = GetStorageColumnVersion(table_entry, storage, columns[i]);
+		}
+	});
+	return versions;
 }
 // end Anybase changes
 
