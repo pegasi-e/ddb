@@ -341,20 +341,23 @@ idx_t duckdb_get_column_version(const duckdb_connection connection, const char *
 	} // LCOV_EXCL_STOP
 }
 
-duckdb_state duckdb_get_column_versions(duckdb_connection connection, const char *schema, const char *table,
-                                       const char *const *columns, idx_t column_count, idx_t *out_versions, char **error) {
+duckdb_state duckdb_get_table_and_column_versions(duckdb_connection connection, const char *schema, const char *table,
+                                       const char *const *columns, idx_t column_count, idx_t *out_versions,
+                                       idx_t *out_table_version, char **error) {
 	if (error) {
 		*error = nullptr;
 	}
 	try {
-		if (!connection || !table || (column_count && (!columns || !out_versions))) {
-			throw duckdb::InvalidInputException("Invalid argument(s) to duckdb_get_column_versions");
+		if (!connection || !table || !out_table_version || (column_count && (!columns || !out_versions))) {
+			throw duckdb::InvalidInputException("Invalid argument(s) to duckdb_get_table_and_column_versions");
 		}
 		auto *ddb_connection = reinterpret_cast<Connection *>(connection);
-		auto versions = ddb_connection->context->GetColumnVersions(schema, table, columns, column_count);
+		idx_t table_version;
+		auto versions = ddb_connection->context->GetColumnVersions(schema, table, columns, column_count, table_version);
 		for (idx_t i = 0; i < column_count; i++) {
 			out_versions[i] = versions[i];
 		}
+		*out_table_version = table_version;
 		return DuckDBSuccess;
 	} catch (std::exception &ex) {
 		if (error) {

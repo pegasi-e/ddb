@@ -1701,7 +1701,7 @@ idx_t ClientContext::GetColumnVersion(const char *schema, const char *table, con
 }
 
 vector<idx_t> ClientContext::GetColumnVersions(const char *schema, const char *table, const char *const *columns,
-                                            idx_t column_count) {
+                                            idx_t column_count, idx_t &table_version) {
 	if (!table || (column_count && !columns)) {
 		throw InvalidInputException("Invalid argument(s) to GetColumnVersions");
 	}
@@ -1711,17 +1711,17 @@ vector<idx_t> ClientContext::GetColumnVersions(const char *schema, const char *t
 		}
 	}
 	vector<idx_t> versions(column_count);
-	if (column_count == 0) {
-		return versions;
-	}
+	idx_t version = 0;
 	RunFunctionInTransaction([&]() {
 		auto &table_entry =
 		    Catalog::GetEntry<TableCatalogEntry>(*this, INVALID_CATALOG, schema ? schema : INVALID_SCHEMA, table);
 		const auto &storage = table_entry.GetStorage();
+		version = storage.GetVersion();
 		for (idx_t i = 0; i < column_count; i++) {
 			versions[i] = GetStorageColumnVersion(table_entry, storage, columns[i]);
 		}
 	});
+	table_version = version;
 	return versions;
 }
 // end Anybase changes
