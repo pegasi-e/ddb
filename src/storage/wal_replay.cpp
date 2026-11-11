@@ -32,6 +32,9 @@
 #include "duckdb/storage/write_ahead_log.hpp"
 #include "duckdb/transaction/meta_transaction.hpp"
 #include "duckdb/transaction/duck_transaction.hpp"
+// Start Anybase changes
+#include "duckdb/transaction/duck_transaction_manager.hpp"
+// End Anybase changes
 #include "duckdb/main/client_data.hpp"
 #include "duckdb/main/settings.hpp"
 
@@ -55,6 +58,9 @@ public:
 	optional_idx checkpoint_end_position;
 	optional_idx expected_checkpoint_id;
 	WALReplayState replay_state;
+	// Start Anybase changes
+	CommitHLC commit_hlc;
+	// End Anybase changes
 
 	struct ReplayIndexInfo {
 		ReplayIndexInfo(TableIndexList &index_list, unique_ptr<Index> index, const string &table_schema,
@@ -204,6 +210,12 @@ public:
 		deserializer.Begin();
 		auto wal_type = deserializer.ReadProperty<WALType>(100, "wal_type");
 		if (wal_type == WALType::WAL_FLUSH) {
+			// Start Anybase changes
+			state.commit_hlc.timestamp =
+			    deserializer.ReadPropertyWithDefault<int64_t>(CommitHLC::TIMESTAMP_FIELD_ID, "commit_hlc_timestamp");
+			state.commit_hlc.sequence =
+			    deserializer.ReadPropertyWithDefault<uint64_t>(CommitHLC::SEQUENCE_FIELD_ID, "commit_hlc_sequence");
+			// End Anybase changes
 			deserializer.End();
 			return true;
 		}
@@ -564,6 +576,9 @@ unique_ptr<WriteAheadLog> WriteAheadLogReplayer::ReplayLog(unique_ptr<FileHandle
 			auto deserializer = WriteAheadLogDeserializer::GetEntryDeserializer(state, wal_reader);
 			if (deserializer.ReplayEntry()) {
 				con.Commit();
+				// Start Anybase changes
+				DuckTransactionManager::Get(database).RestoreCommitHLC(state.commit_hlc);
+				// End Anybase changes
 
 				// Commit any outstanding indexes.
 				for (auto &info : state.replay_index_infos) {

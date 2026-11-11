@@ -116,11 +116,17 @@ void ActiveCheckpointWrapper::Clear() {
 }
 
 transaction_t DuckTransactionManager::GetNewCheckpointId() {
+	// Start Anybase changes
+	lock_guard<mutex> lock(transaction_lock);
+	// End Anybase changes
 	if (active_checkpoint != MAX_TRANSACTION_ID) {
 		throw InternalException(
 		    "DuckTransactionManager::GetNewCheckpointId requested a new id but active_checkpoint was already set");
 	}
 	auto result = last_commit.load();
+	// Start Anybase changes
+	checkpoint_hlc = commit_version_manager.GetCommitHLC();
+	// End Anybase changes
 	active_checkpoint = result;
 	return result;
 }
@@ -128,6 +134,23 @@ transaction_t DuckTransactionManager::GetNewCheckpointId() {
 void DuckTransactionManager::ResetCheckpointId() {
 	active_checkpoint = MAX_TRANSACTION_ID;
 }
+
+// Start Anybase changes
+CommitHLC DuckTransactionManager::GetCommitHLC() {
+	lock_guard<mutex> lock(transaction_lock);
+	return commit_version_manager.GetCommitHLC();
+}
+
+CommitHLC DuckTransactionManager::GetCheckpointHLC() {
+	lock_guard<mutex> lock(transaction_lock);
+	return checkpoint_hlc;
+}
+
+void DuckTransactionManager::RestoreCommitHLC(CommitHLC hlc) {
+	lock_guard<mutex> lock(transaction_lock);
+	commit_version_manager.RestoreCommitHLC(hlc);
+}
+// End Anybase changes
 
 DuckTransactionManager::CheckpointDecision::CheckpointDecision(string reason_p)
     : can_checkpoint(false), reason(std::move(reason_p)) {
@@ -319,6 +342,9 @@ void DuckTransactionManager::CleanupTransactions() {
 ErrorData DuckTransactionManager::CommitTransaction(ClientContext &context, Transaction &transaction_p) {
 	auto &transaction = transaction_p.Cast<DuckTransaction>();
 	unique_lock<mutex> t_lock(transaction_lock);
+	// Start Anybase changes
+	const bool advance_hlc = transaction.ChangesMade() && !db.IsSystem() && db.GetStorageManager().IsLoaded();
+	// End Anybase changes
 	if (!db.IsSystem() && !db.IsTemporary()) {
 		if (transaction.ChangesMade()) {
 			if (transaction.IsReadOnly()) {
@@ -399,6 +425,20 @@ ErrorData DuckTransactionManager::CommitTransaction(ClientContext &context, Tran
 	// obtain a commit id for the transaction
 	CommitInfo info;
 	info.commit_id = GetCommitTimestamp();
+	// Start Anybase changes
+	CommitHLC commit_hlc;
+	if (!error.HasError() && advance_hlc) {
+		try {
+			commit_hlc =
+			    commit_version_manager.NextCommitHLC(Timestamp::GetEpochMicroSeconds(Timestamp::GetCurrentTimestamp()));
+			if (commit_state) {
+				commit_state->commit_hlc = commit_hlc;
+			}
+		} catch (std::exception &ex) {
+			error = ErrorData(ex);
+		}
+	}
+	// End Anybase changes
 
 	// commit the UndoBuffer of the transaction
 	if (!error.HasError()) {
@@ -411,6 +451,10 @@ ErrorData DuckTransactionManager::CommitTransaction(ClientContext &context, Tran
 	}
 
 	if (error.HasError()) {
+		// Start Anybase changes
+		// A clock allocation failure can leave staged WAL data that has not been passed to Commit.
+		commit_state.reset();
+		// End Anybase changes
 		DUCKDB_LOG(context, TransactionLogType, db, "Rollback (after failed commit)", info.commit_id);
 
 		// COMMIT not successful: ROLLBACK.
@@ -426,6 +470,11 @@ ErrorData DuckTransactionManager::CommitTransaction(ClientContext &context, Tran
 	} else {
 		DUCKDB_LOG(context, TransactionLogType, db, "Commit", info.commit_id);
 		last_commit = info.commit_id;
+		// Start Anybase changes
+		if (advance_hlc) {
+			commit_version_manager.DidCommitTransaction(info.commit_id, commit_hlc);
+		}
+		// End Anybase changes
 
 		// check if catalog changes were made
 		if (transaction.catalog_version >= TRANSACTION_ID_START) {

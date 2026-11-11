@@ -10381,6 +10381,16 @@ DUCKDB_C_API duckdb_state duckdb_merger_create_ext(duckdb_connection connection,
 											 const char *table, duckdb_appender *out_appender);
 
 /*!
+ * Retrieves the current commit timestamp and sequence number from the database connection.
+ * @param connection The database connection.
+ * @param out_timestamp Pointer to store the commit timestamp.
+ * @param out_sequence Pointer to store the commit sequence number.
+ * @return `DuckDBSuccess` on success or `DuckDBError` on failure.
+ */
+DUCKDB_C_API duckdb_state duckdb_get_commit_hlc(duckdb_connection connection, int64_t *out_timestamp,
+												uint64_t *out_sequence);
+
+/*!
 Creates an merger object that allows upsert style merges with existing data while appending new data.
 
 Note that the object must be destroyed with `duckdb_appender_destroy`.

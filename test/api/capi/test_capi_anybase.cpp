@@ -4,9 +4,367 @@
 #include "duckdb/main/client_context.hpp"
 #include "duckdb/transaction/duck_transaction.hpp"
 #include "duckdb.h"
+#include "duckdb/common/file_system.hpp"
+#include "duckdb/common/types/timestamp.hpp"
+#include "duckdb/main/attached_database.hpp"
+#include "duckdb/main/database_manager.hpp"
+#include "duckdb/storage/table/commit_version_manager.hpp"
+#include "duckdb/transaction/duck_transaction_manager.hpp"
+
+#include <atomic>
+#include <fstream>
+#include <thread>
 
 using namespace duckdb;
 using namespace std;
+
+static CommitHLC ReadCommitHLC(duckdb_connection connection) {
+	CommitHLC result;
+	REQUIRE(duckdb_get_commit_hlc(connection, &result.timestamp, &result.sequence) == DuckDBSuccess);
+	return result;
+}
+
+static void RequireCommitHLC(duckdb_connection connection, CommitHLC expected) {
+	auto actual = ReadCommitHLC(connection);
+	REQUIRE(actual.timestamp == expected.timestamp);
+	REQUIRE(actual.sequence == expected.sequence);
+}
+
+TEST_CASE("Commit HLC clamps wall time and never resets its sequence", "[commit_hlc]") {
+	CommitVersionManager manager;
+	REQUIRE(manager.GetCommitHLC().timestamp == 0);
+	REQUIRE(manager.GetCommitHLC().sequence == 0);
+	auto first = manager.NextCommitHLC(1000);
+	REQUIRE(first.timestamp == 1000);
+	REQUIRE(first.sequence == 1);
+	REQUIRE(manager.GetCommitHLC().sequence == 0);
+	manager.DidCommitTransaction(2, first);
+	manager.DidCommitTransaction(2, manager.NextCommitHLC(2000));
+	REQUIRE(manager.GetCommitHLC().sequence == 1);
+	REQUIRE(manager.GetVersion() == 1);
+	auto backwards = manager.NextCommitHLC(500);
+	REQUIRE(backwards.timestamp == 1000);
+	REQUIRE(backwards.sequence == 2);
+	manager.DidCommitTransaction(3, backwards);
+	auto forwards = manager.NextCommitHLC(3000);
+	REQUIRE(forwards.timestamp == 3000);
+	REQUIRE(forwards.sequence == 3);
+	manager.RestoreCommitHLC(forwards);
+	manager.RestoreCommitHLC(first);
+	REQUIRE(manager.GetCommitHLC().sequence == 3);
+	CommitHLC exhausted;
+	exhausted.timestamp = 3000;
+	exhausted.sequence = NumericLimits<uint64_t>::Maximum();
+	manager.RestoreCommitHLC(exhausted);
+	REQUIRE_THROWS(manager.NextCommitHLC(4000));
+	REQUIRE(manager.GetCommitHLC().sequence == exhausted.sequence);
+}
+
+TEST_CASE("C API commit HLC advances once per successful write transaction", "[capi][commit_hlc]") {
+	CAPITester tester;
+	REQUIRE(tester.OpenDatabase(nullptr));
+	RequireCommitHLC(tester.connection, CommitHLC());
+	int64_t timestamp = -1;
+	uint64_t sequence = 42;
+	REQUIRE(duckdb_get_commit_hlc(nullptr, &timestamp, &sequence) == DuckDBError);
+	REQUIRE(duckdb_get_commit_hlc(tester.connection, nullptr, &sequence) == DuckDBError);
+	REQUIRE(duckdb_get_commit_hlc(tester.connection, &timestamp, nullptr) == DuckDBError);
+	REQUIRE(timestamp == -1);
+	REQUIRE(sequence == 42);
+
+	auto before_us = Timestamp::GetEpochMicroSeconds(Timestamp::GetCurrentTimestamp());
+	REQUIRE_NO_FAIL(tester.Query("CREATE TABLE hlc_test(i INTEGER PRIMARY KEY)"));
+	auto created = ReadCommitHLC(tester.connection);
+	REQUIRE(created.sequence == 1);
+	REQUIRE(created.timestamp >= before_us);
+	REQUIRE(created.timestamp <= Timestamp::GetEpochMicroSeconds(Timestamp::GetCurrentTimestamp()));
+	REQUIRE_NO_FAIL(tester.Query("BEGIN"));
+	REQUIRE_NO_FAIL(tester.Query("INSERT INTO hlc_test VALUES (1), (2)"));
+	REQUIRE_NO_FAIL(tester.Query("CREATE TABLE hlc_other(i INTEGER)"));
+	REQUIRE_NO_FAIL(tester.Query("INSERT INTO hlc_other VALUES (1)"));
+	RequireCommitHLC(tester.connection, created);
+	REQUIRE_NO_FAIL(tester.Query("COMMIT"));
+	auto committed = ReadCommitHLC(tester.connection);
+	REQUIRE(committed.sequence == created.sequence + 1);
+	REQUIRE(committed.timestamp >= created.timestamp);
+
+	REQUIRE_NO_FAIL(tester.Query("BEGIN"));
+	REQUIRE_NO_FAIL(tester.Query("UPDATE hlc_test SET i = i + 10"));
+	REQUIRE_NO_FAIL(tester.Query("ROLLBACK"));
+	REQUIRE_NO_FAIL(tester.Query("BEGIN"));
+	REQUIRE_NO_FAIL(tester.Query("SELECT * FROM hlc_test"));
+	REQUIRE_NO_FAIL(tester.Query("COMMIT"));
+	REQUIRE_NO_FAIL(tester.Query("BEGIN"));
+	REQUIRE_NO_FAIL(tester.Query("COMMIT"));
+	REQUIRE(tester.Query("INSERT INTO hlc_test VALUES (1)")->HasError());
+	RequireCommitHLC(tester.connection, committed);
+	REQUIRE_NO_FAIL(tester.Query("UPDATE hlc_test SET i = i + 10"));
+	REQUIRE(ReadCommitHLC(tester.connection).sequence == committed.sequence + 1);
+	REQUIRE_NO_FAIL(tester.Query("DELETE FROM hlc_test"));
+	REQUIRE(ReadCommitHLC(tester.connection).sequence == committed.sequence + 2);
+	REQUIRE_NO_FAIL(tester.Query("DROP TABLE hlc_test"));
+	REQUIRE(ReadCommitHLC(tester.connection).sequence == committed.sequence + 3);
+}
+
+TEST_CASE("C API commit HLC follows the selected database", "[capi][commit_hlc]") {
+	CAPITester tester;
+	REQUIRE(tester.OpenDatabase(nullptr));
+	REQUIRE_NO_FAIL(tester.Query("CREATE TABLE main_table(i INTEGER)"));
+	auto main_hlc = ReadCommitHLC(tester.connection);
+	REQUIRE_NO_FAIL(tester.Query("ATTACH ':memory:' AS other_hlc"));
+	REQUIRE_NO_FAIL(tester.Query("USE other_hlc"));
+	RequireCommitHLC(tester.connection, CommitHLC());
+	REQUIRE_NO_FAIL(tester.Query("CREATE TABLE other_table(i INTEGER)"));
+	REQUIRE(ReadCommitHLC(tester.connection).sequence == 1);
+	REQUIRE_NO_FAIL(tester.Query("USE memory"));
+	RequireCommitHLC(tester.connection, main_hlc);
+}
+
+TEST_CASE("C API commit HLC survives WAL recovery and checkpoints", "[capi][commit_hlc]") {
+	auto path = TestCreatePath("commit_hlc_recovery.db");
+	DeleteDatabase(path);
+	CommitHLC expected;
+	{
+		CAPITester tester;
+		REQUIRE(tester.OpenDatabase(path.c_str()));
+		REQUIRE_NO_FAIL(tester.Query("PRAGMA disable_checkpoint_on_shutdown"));
+		SECTION("Recover from WAL only") {
+			REQUIRE_NO_FAIL(tester.Query("SET debug_skip_checkpoint_on_commit = true"));
+		}
+		SECTION("Recover from checkpoint and later WAL") {
+			REQUIRE_NO_FAIL(tester.Query("CREATE TABLE checkpoint_table(i INTEGER)"));
+			REQUIRE_NO_FAIL(tester.Query("CHECKPOINT"));
+		}
+		SECTION("Commit using an automatic checkpoint with WAL") {
+			REQUIRE_NO_FAIL(tester.Query("SET checkpoint_threshold = '0B'"));
+			REQUIRE_NO_FAIL(tester.Query("SET auto_checkpoint_skip_wal_threshold = 18446744073709551615"));
+		}
+		SECTION("Commit using an automatic checkpoint without WAL") {
+			REQUIRE_NO_FAIL(tester.Query("SET checkpoint_threshold = '0B'"));
+			REQUIRE_NO_FAIL(tester.Query("SET debug_skip_checkpoint_on_commit = false"));
+			REQUIRE_NO_FAIL(tester.Query("SET auto_checkpoint_skip_wal_threshold = 0"));
+		}
+		REQUIRE_NO_FAIL(tester.Query("CREATE TABLE recovered_hlc(i INTEGER)"));
+		REQUIRE_NO_FAIL(tester.Query("INSERT INTO recovered_hlc VALUES (42)"));
+		expected = ReadCommitHLC(tester.connection);
+		REQUIRE(expected.sequence >= 2);
+	}
+	{
+		CAPITester tester;
+		REQUIRE(tester.OpenDatabase(path.c_str()));
+		REQUIRE_NO_FAIL(tester.Query("PRAGMA disable_checkpoint_on_shutdown"));
+		RequireCommitHLC(tester.connection, expected);
+		REQUIRE_NO_FAIL(tester.Query("SELECT * FROM recovered_hlc"));
+		RequireCommitHLC(tester.connection, expected);
+	}
+	{
+		CAPITester tester;
+		REQUIRE(tester.OpenDatabase(path.c_str()));
+		RequireCommitHLC(tester.connection, expected);
+		REQUIRE_NO_FAIL(tester.Query("INSERT INTO recovered_hlc VALUES (43)"));
+		auto next = ReadCommitHLC(tester.connection);
+		REQUIRE(next.sequence == expected.sequence + 1);
+		REQUIRE(next.timestamp >= expected.timestamp);
+		expected = next;
+		REQUIRE_NO_FAIL(tester.Query("CHECKPOINT"));
+		RequireCommitHLC(tester.connection, expected);
+	}
+	{
+		CAPITester tester;
+		REQUIRE(tester.OpenDatabase(path.c_str()));
+		RequireCommitHLC(tester.connection, expected);
+	}
+	{
+		CAPITester tester;
+		duckdb_config config;
+		REQUIRE(duckdb_create_config(&config) == DuckDBSuccess);
+		REQUIRE(duckdb_set_config(config, "access_mode", "READ_ONLY") == DuckDBSuccess);
+		auto state = duckdb_open_ext(path.c_str(), &tester.database, config, nullptr);
+		duckdb_destroy_config(&config);
+		REQUIRE(state == DuckDBSuccess);
+		REQUIRE(duckdb_connect(tester.database, &tester.connection) == DuckDBSuccess);
+		RequireCommitHLC(tester.connection, expected);
+	}
+	DeleteDatabase(path);
+}
+
+TEST_CASE("HLC exhaustion rolls back staged WAL data", "[commit_hlc]") {
+	auto path = TestCreatePath("commit_hlc_exhausted.db");
+	DeleteDatabase(path);
+	CommitHLC durable;
+	{
+		DuckDB db(path);
+		Connection con(db);
+		REQUIRE_NO_FAIL(con.Query("PRAGMA disable_checkpoint_on_shutdown"));
+		REQUIRE_NO_FAIL(con.Query("CREATE TABLE exhausted_hlc(i INTEGER)"));
+		auto attached =
+		    db.instance->GetDatabaseManager().GetDatabase(DatabaseManager::GetDefaultDatabase(*con.context));
+		REQUIRE(attached);
+		auto &manager = DuckTransactionManager::Get(*attached);
+		durable = manager.GetCommitHLC();
+		auto exhausted = durable;
+		exhausted.sequence = NumericLimits<uint64_t>::Maximum();
+		manager.RestoreCommitHLC(exhausted);
+		auto result = con.Query("INSERT INTO exhausted_hlc VALUES (1)");
+		REQUIRE(result->HasError());
+		REQUIRE(result->GetError().find("commit HLC sequence exhausted") != string::npos);
+		REQUIRE(manager.GetCommitHLC().sequence == exhausted.sequence);
+		result = con.Query("SELECT count(*) FROM exhausted_hlc");
+		REQUIRE_NO_FAIL(*result);
+		REQUIRE(CHECK_COLUMN(result, 0, {0}));
+	}
+	{
+		CAPITester tester;
+		REQUIRE(tester.OpenDatabase(path.c_str()));
+		RequireCommitHLC(tester.connection, durable);
+		auto result = tester.Query("SELECT count(*) FROM exhausted_hlc");
+		REQUIRE_NO_FAIL(*result);
+		REQUIRE(result->Fetch<int64_t>(0, 0) == 0);
+	}
+	DeleteDatabase(path);
+}
+
+TEST_CASE("A concurrent checkpoint stores the HLC of its data snapshot", "[commit_hlc]") {
+	auto path = TestCreatePath("commit_hlc_concurrent_checkpoint.db");
+	auto snapshot_path = TestCreatePath("commit_hlc_checkpoint_snapshot.db");
+	DeleteDatabase(path);
+	DeleteDatabase(snapshot_path);
+	CommitHLC checkpoint_hlc;
+	CommitHLC latest_hlc;
+	{
+		DuckDB db(path);
+		Connection con(db);
+		REQUIRE_NO_FAIL(con.Query("PRAGMA disable_checkpoint_on_shutdown"));
+		REQUIRE_NO_FAIL(con.Query("SET checkpoint_threshold = '1GB'"));
+		REQUIRE_NO_FAIL(con.Query("CREATE TABLE checkpoint_hlc(i INTEGER)"));
+		REQUIRE_NO_FAIL(con.Query("INSERT INTO checkpoint_hlc VALUES (1)"));
+		REQUIRE_NO_FAIL(con.Query("SET debug_checkpoint_sleep_ms = 200"));
+		auto attached =
+		    db.instance->GetDatabaseManager().GetDatabase(DatabaseManager::GetDefaultDatabase(*con.context));
+		REQUIRE(attached);
+		auto &manager = DuckTransactionManager::Get(*attached);
+		checkpoint_hlc = manager.GetCommitHLC();
+		std::atomic<bool> done {false};
+		bool checkpoint_failed = false;
+		std::thread checkpoint([&]() {
+			Connection checkpoint_con(db);
+			checkpoint_failed = checkpoint_con.Query("CHECKPOINT")->HasError();
+			done = true;
+		});
+		while (manager.GetActiveCheckpoint() == MAX_TRANSACTION_ID && !done) {
+			std::this_thread::yield();
+		}
+		bool overlapped = !done;
+		auto insert = con.Query("INSERT INTO checkpoint_hlc VALUES (2)");
+		checkpoint.join();
+		REQUIRE(overlapped);
+		REQUIRE_FALSE(checkpoint_failed);
+		REQUIRE_NO_FAIL(*insert);
+		latest_hlc = manager.GetCommitHLC();
+		REQUIRE(latest_hlc.sequence == checkpoint_hlc.sequence + 1);
+	}
+	{
+		std::ifstream source(path, std::ios::binary);
+		std::ofstream target(snapshot_path, std::ios::binary);
+		target << source.rdbuf();
+		REQUIRE(source.good());
+		REQUIRE(target.good());
+	}
+	{
+		CAPITester tester;
+		REQUIRE(tester.OpenDatabase(snapshot_path.c_str()));
+		RequireCommitHLC(tester.connection, checkpoint_hlc);
+		auto result = tester.Query("SELECT count(*) FROM checkpoint_hlc");
+		REQUIRE_NO_FAIL(*result);
+		REQUIRE(result->Fetch<int64_t>(0, 0) == 1);
+	}
+	{
+		CAPITester tester;
+		REQUIRE(tester.OpenDatabase(path.c_str()));
+		RequireCommitHLC(tester.connection, latest_hlc);
+		auto result = tester.Query("SELECT count(*) FROM checkpoint_hlc");
+		REQUIRE_NO_FAIL(*result);
+		REQUIRE(result->Fetch<int64_t>(0, 0) == 2);
+	}
+	DeleteDatabase(path);
+	DeleteDatabase(snapshot_path);
+}
+
+TEST_CASE("An incomplete WAL commit does not advance recovered HLC", "[capi][commit_hlc]") {
+	auto path = TestCreatePath("commit_hlc_torn_wal.db");
+	DeleteDatabase(path);
+	CommitHLC expected;
+	{
+		CAPITester tester;
+		REQUIRE(tester.OpenDatabase(path.c_str()));
+		REQUIRE_NO_FAIL(tester.Query("PRAGMA disable_checkpoint_on_shutdown"));
+		REQUIRE_NO_FAIL(tester.Query("SET debug_skip_checkpoint_on_commit = true"));
+		REQUIRE_NO_FAIL(tester.Query("CREATE TABLE torn_hlc(i INTEGER)"));
+		REQUIRE_NO_FAIL(tester.Query("INSERT INTO torn_hlc VALUES (1)"));
+		expected = ReadCommitHLC(tester.connection);
+		REQUIRE_NO_FAIL(tester.Query("INSERT INTO torn_hlc VALUES (2)"));
+		REQUIRE(ReadCommitHLC(tester.connection).sequence == expected.sequence + 1);
+	}
+	{
+		auto fs = FileSystem::CreateLocal();
+		auto wal = fs->OpenFile(path + ".wal", FileFlags::FILE_FLAGS_WRITE);
+		fs->Truncate(*wal, fs->GetFileSize(*wal) - 1);
+	}
+	{
+		CAPITester tester;
+		REQUIRE(tester.OpenDatabase(path.c_str()));
+		RequireCommitHLC(tester.connection, expected);
+		auto result = tester.Query("SELECT count(*) FROM torn_hlc");
+		REQUIRE_NO_FAIL(*result);
+		REQUIRE(result->Fetch<int64_t>(0, 0) == 1);
+	}
+	DeleteDatabase(path);
+}
+
+TEST_CASE("Concurrent commits share a coherent database HLC", "[capi][commit_hlc]") {
+	CAPITester tester;
+	REQUIRE(tester.OpenDatabase(nullptr));
+	REQUIRE_NO_FAIL(tester.Query("CREATE TABLE concurrent_hlc(i INTEGER)"));
+	auto initial = ReadCommitHLC(tester.connection);
+	std::atomic<bool> failed {false};
+	std::atomic<idx_t> finished {0};
+	duckdb::vector<std::thread> writers;
+	for (idx_t t = 0; t < 4; t++) {
+		writers.emplace_back([&]() {
+			duckdb_connection connection = nullptr;
+			if (duckdb_connect(tester.database, &connection) != DuckDBSuccess) {
+				failed = true;
+			} else {
+				for (idx_t i = 0; i < 25; i++) {
+					if (duckdb_query(connection, "INSERT INTO concurrent_hlc VALUES (1)", nullptr) != DuckDBSuccess) {
+						failed = true;
+						break;
+					}
+				}
+				duckdb_disconnect(&connection);
+			}
+			finished++;
+		});
+	}
+	auto previous = initial;
+	while (finished < 4) {
+		CommitHLC current;
+		if (duckdb_get_commit_hlc(tester.connection, &current.timestamp, &current.sequence) != DuckDBSuccess ||
+		    current.timestamp < previous.timestamp || current.sequence < previous.sequence ||
+		    (current.sequence == previous.sequence && current.timestamp != previous.timestamp)) {
+			failed = true;
+		}
+		previous = current;
+		std::this_thread::yield();
+	}
+	for (auto &writer : writers) {
+		writer.join();
+	}
+	REQUIRE_FALSE(failed.load());
+	REQUIRE(ReadCommitHLC(tester.connection).sequence == initial.sequence + 100);
+}
+// End Anybase changes
+
 
 TEST_CASE("Batch column versions preserve ordering and scalar behavior", "[capi][cAnybaseApi]") {
 	CAPITester tester;

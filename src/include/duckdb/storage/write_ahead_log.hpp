@@ -15,6 +15,9 @@
 #include "duckdb/common/serializer/buffered_file_writer.hpp"
 #include "duckdb/common/types/data_chunk.hpp"
 #include "duckdb/storage/block.hpp"
+// Start Anybase changes
+#include "duckdb/storage/table/commit_version_manager.hpp"
+// End Anybase changes
 
 namespace duckdb {
 
@@ -115,7 +118,9 @@ public:
 	//! Truncate the WAL to a previous size, and clear anything currently set in the writer.
 	//! Used during RevertCommit.
 	void Truncate(idx_t size);
-	void Flush();
+	// Start Anybase changes
+	void Flush(const CommitHLC *commit_hlc = nullptr);
+	// End Anybase changes
 	//! Increment the WAL entry count, which is used for the auto-checkpoint threshold.
 	void IncrementWALEntriesCount();
 	void WriteCheckpoint(MetaBlockPointer meta_block);

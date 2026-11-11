@@ -539,13 +539,20 @@ void WriteAheadLog::WriteAlter(CatalogEntry &entry, const AlterInfo &info) {
 //===--------------------------------------------------------------------===//
 // FLUSH
 //===--------------------------------------------------------------------===//
-void WriteAheadLog::Flush() {
+// Start Anybase changes
+void WriteAheadLog::Flush(const CommitHLC *commit_hlc) {
+// End Anybase changes
 	if (!writer) {
 		return;
 	}
 
-	// write an empty entry
 	WriteAheadLogSerializer serializer(*this, WALType::WAL_FLUSH);
+// Start Anybase changes
+	if (commit_hlc) {
+		serializer.WriteProperty(CommitHLC::TIMESTAMP_FIELD_ID, "commit_hlc_timestamp", commit_hlc->timestamp);
+		serializer.WriteProperty(CommitHLC::SEQUENCE_FIELD_ID, "commit_hlc_sequence", commit_hlc->sequence);
+	}
+// End Anybase changes
 	serializer.End();
 
 	// flushes all changes made to the WAL to disk
