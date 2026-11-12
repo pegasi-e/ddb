@@ -2,6 +2,8 @@
 #include "duckdb/catalog/catalog.hpp"
 #include "duckdb/common/types/data_chunk.hpp"
 #include "duckdb/main/client_context.hpp"
+#include "duckdb/main/pending_query_result.hpp"
+#include "duckdb/main/stream_query_result.hpp"
 #include "duckdb/transaction/duck_transaction.hpp"
 #include "duckdb.h"
 #include "duckdb/common/file_system.hpp"
@@ -268,6 +270,87 @@ TEST_CASE("C API commit handles empty transactions and invalid calls", "[capi][c
 	REQUIRE_NO_FAIL(tester.Query("INSERT INTO commit_guard VALUES (3)"));
 	expect_error(tester.connection);
 	REQUIRE(ReadCommitHLC(tester.connection).sequence == UINT64_MAX);
+}
+
+TEST_CASE("C API commit cleans up outstanding results like SQL COMMIT", "[capi][commit_hlc]") {
+	bool streaming = false;
+	SECTION("Unexecuted pending select") {
+	}
+	SECTION("Partially consumed streaming select") {
+		streaming = true;
+	}
+	for (bool sql_commit : {false, true}) {
+		INFO("SQL COMMIT: " << sql_commit);
+		CAPITester tester;
+		REQUIRE(tester.OpenDatabase(nullptr));
+		auto &con = *reinterpret_cast<Connection *>(tester.connection);
+		REQUIRE_NO_FAIL(tester.Query("CREATE TABLE commit_cleanup(i BIGINT)"));
+		auto before = ReadCommitHLC(tester.connection);
+		REQUIRE_NO_FAIL(tester.Query("BEGIN"));
+		REQUIRE_NO_FAIL(tester.Query("INSERT INTO commit_cleanup VALUES (42)"));
+		duckdb::unique_ptr<PendingQueryResult> pending;
+		duckdb::unique_ptr<QueryResult> stream;
+		if (streaming) {
+			stream = con.SendQuery("SELECT * FROM range(100000)");
+			REQUIRE_NO_FAIL(*stream);
+			REQUIRE(stream->type == QueryResultType::STREAM_RESULT);
+			auto chunk = stream->Fetch();
+			REQUIRE(chunk);
+			REQUIRE(chunk->size() > 0);
+			REQUIRE(stream->Cast<StreamQueryResult>().IsOpen());
+		} else {
+			pending = con.PendingQuery("SELECT sum(i) FROM range(100000) t(i)");
+			REQUIRE_FALSE(pending->HasError());
+		}
+		CommitHLC committed;
+		if (sql_commit) {
+			REQUIRE_NO_FAIL(tester.Query("COMMIT"));
+			committed = ReadCommitHLC(tester.connection);
+		} else {
+			committed = CommitWithHLC(tester.connection);
+		}
+		REQUIRE(committed.sequence == before.sequence + 1);
+		RequireCommitHLC(tester.connection, committed);
+		REQUIRE_FALSE(con.context->transaction.HasActiveTransaction());
+		REQUIRE(con.context->transaction.IsAutoCommit());
+		if (streaming) {
+			REQUIRE_FALSE(stream->Cast<StreamQueryResult>().IsOpen());
+			REQUIRE_THROWS(stream->Fetch());
+		} else {
+			REQUIRE_THROWS(pending->ExecuteTask());
+			REQUIRE_THROWS(pending->Execute());
+		}
+		auto rows = tester.Query("SELECT count(*), sum(i) FROM commit_cleanup");
+		REQUIRE_NO_FAIL(*rows);
+		REQUIRE(rows->Fetch<int64_t>(0, 0) == 1);
+		REQUIRE(rows->Fetch<int64_t>(1, 0) == 42);
+	}
+}
+
+TEST_CASE("C API commit cleans up pending results without an explicit transaction", "[capi][commit_hlc]") {
+	CAPITester tester;
+	REQUIRE(tester.OpenDatabase(nullptr));
+	auto &con = *reinterpret_cast<Connection *>(tester.connection);
+	auto before = ReadCommitHLC(tester.connection);
+	auto pending = con.PendingQuery("SELECT sum(i) FROM range(100000) t(i)");
+	REQUIRE_FALSE(pending->HasError());
+	int64_t timestamp = 99;
+	uint64_t sequence = 99;
+	bool has_hlc = true;
+	char *error = nullptr;
+	auto state = duckdb_commit_transaction(tester.connection, &timestamp, &sequence, &has_hlc, &error);
+	string message = error ? error : "";
+	duckdb_free(error);
+	INFO(message);
+	REQUIRE(state == DuckDBError);
+	REQUIRE(message.find("no explicit transaction") != string::npos);
+	REQUIRE(timestamp == 0);
+	REQUIRE(sequence == 0);
+	REQUIRE_FALSE(has_hlc);
+	REQUIRE_FALSE(con.context->transaction.HasActiveTransaction());
+	REQUIRE_THROWS(pending->Execute());
+	RequireCommitHLC(tester.connection, before);
+	REQUIRE_NO_FAIL(tester.Query("SELECT 42"));
 }
 
 TEST_CASE("C API commit returns the modified attached database HLC", "[capi][commit_hlc]") {

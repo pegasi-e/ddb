@@ -10385,9 +10385,10 @@ DUCKDB_C_API duckdb_state duckdb_merger_create_ext(duckdb_connection connection,
  * The HLC belongs to the DuckDB database modified by the transaction, even if it is not the default database.
  * Empty/read-only transactions commit successfully with out_has_commit_hlc false and both values zero.
  * Temporary-only changes do not produce a database commit HLC through this API.
+ * Outstanding pending/streaming query results are closed before committing, as with SQL COMMIT.
  * On failure, the outputs are false/zero. An aborted transaction is rolled back and returns DuckDBError.
  * Errors during post-commit checkpointing can be reported after the transaction has committed, as with SQL COMMIT.
- * @param connection Connection with an explicit transaction and no active query.
+ * @param connection Connection with an explicit transaction.
  * @param out_timestamp Required output pointer for the Unix microsecond timestamp.
  * @param out_sequence Required output pointer for the unsigned lifetime sequence.
  * @param out_has_commit_hlc Required output pointer; true only on success with an assigned commit HLC.

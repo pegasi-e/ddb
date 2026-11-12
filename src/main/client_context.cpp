@@ -1646,9 +1646,7 @@ void ClientContext::SetActiveResult(ClientContextLock &lock, BaseQueryResult &re
 // Start Anybase changes
 void ClientContext::CommitWithHLC(int64_t &timestamp, uint64_t &sequence, bool &has_commit_hlc) {
 	auto lock = LockContext();
-	if (active_query) {
-		throw TransactionException("Cannot commit while this connection has an active query");
-	}
+	InitialCleanup(*lock);
 	if (ValidChecker::IsInvalidated(*db)) {
 		throw IOException("%s", ValidChecker::InvalidatedMessage(*db));
 	}
