@@ -30,6 +30,104 @@ static void RequireCommitHLC(duckdb_connection connection, CommitHLC expected) {
 	REQUIRE(actual.sequence == expected.sequence);
 }
 
+// Start Anybase changes
+namespace {
+struct CommitHLCCDCEvent {
+	cdc_event_type type;
+	string transaction_id;
+};
+
+thread_local duckdb::vector<CommitHLCCDCEvent> commit_hlc_cdc_events;
+
+void CaptureCommitHLCCDC(cdc_event_type type, const char *transaction_id, idx_t, idx_t, idx_t *, const char *,
+                        const char **, idx_t *, duckdb_data_chunk values, duckdb_data_chunk previous_values) {
+	commit_hlc_cdc_events.push_back({type, transaction_id ? transaction_id : ""});
+	if (values) {
+		duckdb_destroy_data_chunk(&values);
+	}
+	if (previous_values) {
+		duckdb_destroy_data_chunk(&previous_values);
+	}
+}
+} // namespace
+
+TEST_CASE("CDC events carry the transaction commit HLC", "[capi][commit_hlc][anybase_cdc]") {
+	bool persistent = false;
+	SECTION("In-memory database") {
+	}
+	SECTION("Persistent database and WAL recovery") {
+		persistent = true;
+	}
+	auto path = TestCreatePath("cdc_transaction_commit_hlc.db");
+	if (persistent) {
+		DeleteDatabase(path);
+	}
+	CommitHLC committed;
+	commit_hlc_cdc_events.clear();
+	{
+		CAPITester tester;
+		REQUIRE(tester.OpenDatabase(persistent ? path.c_str() : nullptr));
+		REQUIRE_NO_FAIL(tester.Query("PRAGMA disable_checkpoint_on_shutdown"));
+		REQUIRE_NO_FAIL(tester.Query("SET debug_skip_checkpoint_on_commit = true"));
+		REQUIRE_NO_FAIL(tester.Query("CREATE TABLE cdc_commit_hlc(i INTEGER, v INTEGER)"));
+		REQUIRE_NO_FAIL(tester.Query("CREATE TABLE cdc_commit_hlc_other(i INTEGER)"));
+		REQUIRE_NO_FAIL(tester.Query("INSERT INTO cdc_commit_hlc VALUES (1, 10), (2, 20)"));
+		auto before = ReadCommitHLC(tester.connection);
+		duckdb_set_cdc_callback(tester.database, CaptureCommitHLCCDC);
+		REQUIRE(duckdb_begin_transaction(tester.connection, 12345, 99, nullptr) == DuckDBSuccess);
+		REQUIRE_NO_FAIL(tester.Query("INSERT INTO cdc_commit_hlc VALUES (3, 30)"));
+		REQUIRE_NO_FAIL(tester.Query("UPDATE cdc_commit_hlc SET v = 11 WHERE i = 1"));
+		REQUIRE_NO_FAIL(tester.Query("DELETE FROM cdc_commit_hlc WHERE i = 2"));
+		REQUIRE_NO_FAIL(tester.Query("INSERT INTO cdc_commit_hlc_other VALUES (1)"));
+		REQUIRE(commit_hlc_cdc_events.empty());
+		REQUIRE_NO_FAIL(tester.Query("COMMIT"));
+		committed = ReadCommitHLC(tester.connection);
+		REQUIRE(committed.sequence == before.sequence + 1);
+		auto expected_id = to_string(committed.timestamp) + ":" + to_string(committed.sequence);
+		REQUIRE(commit_hlc_cdc_events.size() >= 5);
+		REQUIRE(commit_hlc_cdc_events.front().type == DUCKDB_CDC_EVENT_BEGIN_TRANSACTION);
+		REQUIRE(commit_hlc_cdc_events.back().type == DUCKDB_CDC_EVENT_END_TRANSACTION);
+		bool saw_insert = false;
+		bool saw_update = false;
+		bool saw_delete = false;
+		for (auto &event : commit_hlc_cdc_events) {
+			REQUIRE(event.transaction_id == expected_id);
+			saw_insert |= event.type == DUCKDB_CDC_EVENT_INSERT;
+			saw_update |= event.type == DUCKDB_CDC_EVENT_UPDATE;
+			saw_delete |= event.type == DUCKDB_CDC_EVENT_DELETE;
+		}
+		REQUIRE(saw_insert);
+		REQUIRE(saw_update);
+		REQUIRE(saw_delete);
+		commit_hlc_cdc_events.clear();
+		REQUIRE_NO_FAIL(tester.Query("BEGIN"));
+		REQUIRE_NO_FAIL(tester.Query("INSERT INTO cdc_commit_hlc VALUES (4, 40)"));
+		REQUIRE_NO_FAIL(tester.Query("ROLLBACK"));
+		REQUIRE(commit_hlc_cdc_events.empty());
+		RequireCommitHLC(tester.connection, committed);
+		REQUIRE_NO_FAIL(tester.Query("INSERT INTO cdc_commit_hlc VALUES (5, 50)"));
+		auto next = ReadCommitHLC(tester.connection);
+		REQUIRE(next.sequence == committed.sequence + 1);
+		REQUIRE(next.timestamp >= committed.timestamp);
+		expected_id = to_string(next.timestamp) + ":" + to_string(next.sequence);
+		REQUIRE(commit_hlc_cdc_events.size() == 3);
+		for (auto &event : commit_hlc_cdc_events) {
+			REQUIRE(event.transaction_id == expected_id);
+		}
+		committed = next;
+		duckdb_set_cdc_callback(tester.database, nullptr);
+	}
+	if (persistent) {
+		CAPITester tester;
+		REQUIRE(tester.OpenDatabase(path.c_str()));
+		RequireCommitHLC(tester.connection, committed);
+		tester.Cleanup();
+		DeleteDatabase(path);
+	}
+	commit_hlc_cdc_events.clear();
+}
+// End Anybase changes
+
 TEST_CASE("Commit HLC clamps wall time and never resets its sequence", "[commit_hlc]") {
 	CommitVersionManager manager;
 	REQUIRE(manager.GetCommitHLC().timestamp == 0);
@@ -1362,8 +1460,8 @@ TEST_CASE("Test MergeDataChunk in C API", "[cAnybaseApi]") {
 // 				duckdb_data_chunk previous_values) {
 //
 // 	// printf("type: %d\n", type);
-// 	// printf("time: %s\n", transaction_id);
-// 	// printf("column_count: %llu\n", column_count);
+// 	printf("time: %s\n", transaction_id);
+// 	printf("column_count: %llu\n", column_count);
 // 	// printf("table_version: %llu\n", table_version);
 // 	//
 // 	// int totalSize = sizeof(column_names);
@@ -1387,7 +1485,7 @@ TEST_CASE("Test MergeDataChunk in C API", "[cAnybaseApi]") {
 // 		previous_values = nullptr;
 // 	}
 // }
-
+//
 // TEST_CASE("Test WAL Generation2", "[capi]") {
 // 	duckdb_database db;
 // 	duckdb_connection connection1;

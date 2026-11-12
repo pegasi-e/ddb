@@ -431,6 +431,7 @@ ErrorData DuckTransactionManager::CommitTransaction(ClientContext &context, Tran
 		try {
 			commit_hlc =
 			    commit_version_manager.NextCommitHLC(Timestamp::GetEpochMicroSeconds(Timestamp::GetCurrentTimestamp()));
+			transaction.commit_hlc = commit_hlc;
 			if (commit_state) {
 				commit_state->commit_hlc = commit_hlc;
 			}
@@ -454,6 +455,7 @@ ErrorData DuckTransactionManager::CommitTransaction(ClientContext &context, Tran
 		// Start Anybase changes
 		// A clock allocation failure can leave staged WAL data that has not been passed to Commit.
 		commit_state.reset();
+		transaction.commit_hlc = CommitHLC();
 		// End Anybase changes
 		DUCKDB_LOG(context, TransactionLogType, db, "Rollback (after failed commit)", info.commit_id);
 

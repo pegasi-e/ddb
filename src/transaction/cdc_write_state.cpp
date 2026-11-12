@@ -94,7 +94,7 @@ void CDCWriteState::EmitDelete(DeleteInfo &info) {
 
 		delete_chunk->Flatten();
 		std::ostringstream oss;
-		oss << transaction.meta_startTime.value << ":" << transaction.meta_sequenceNumber;
+		oss << transaction.commit_hlc.timestamp << ":" << transaction.commit_hlc.sequence;
 		const auto t_id = strdup(oss.str().c_str());
 
 		config.change_data_capture.EmitChange(
@@ -143,7 +143,7 @@ void CDCWriteState::EmitInsert(AppendInfo &info) {
 
 		auto &config = DBConfig::GetConfig(info.table->db.GetDatabase());
 		std::ostringstream oss;
-		oss << transaction.meta_startTime.value << ":" << transaction.meta_sequenceNumber;
+		oss << transaction.commit_hlc.timestamp << ":" << transaction.commit_hlc.sequence;
 		const auto t_id = strdup(oss.str().c_str());
 		config.change_data_capture.EmitChange(
 			DUCKDB_CDC_EVENT_INSERT,
@@ -308,7 +308,7 @@ void CDCWriteState::Flush() {
 		}
 
 		std::ostringstream oss;
-		oss << transaction.meta_startTime.value << ":" << transaction.meta_sequenceNumber;
+		oss << transaction.commit_hlc.timestamp << ":" << transaction.commit_hlc.sequence;
 		const auto t_id = strdup(oss.str().c_str());
 
 		config.change_data_capture.EmitChange(
@@ -385,7 +385,7 @@ void CDCWriteState::EmitTransactionEntry(CDC_EVENT_TYPE type){
 	auto context = transaction.context.lock();
 	auto &config = DBConfig::GetConfig(*context);
 	std::ostringstream oss;
-	oss << transaction.meta_startTime.value << ":" << transaction.meta_sequenceNumber;
+	oss << transaction.commit_hlc.timestamp << ":" << transaction.commit_hlc.sequence;
 	const auto t_id = strdup(oss.str().c_str());
 
 	config.change_data_capture.EmitChange(
