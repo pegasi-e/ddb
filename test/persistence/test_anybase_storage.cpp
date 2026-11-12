@@ -11,10 +11,170 @@
 #include "duckdb/storage/data_table.hpp"
 #include "duckdb/storage/table/row_group.hpp"
 #include "duckdb/storage/table/row_group_collection.hpp"
+#include "duckdb/storage/table/row_group_segment_tree.hpp"
 #include "duckdb/storage/table/update_segment.hpp"
 #include "test_helpers.hpp"
 
 using namespace duckdb;
+
+TEST_CASE("Anybase column version reads only load the root row group", "[anybase_storage][column_versions]") {
+	bool batch = false;
+	SECTION("Scalar version read") {
+	}
+	SECTION("Batch version read") {
+		batch = true;
+	}
+	auto path = TestCreatePath("anybase_lazy_column_versions.db");
+	DeleteDatabase(path);
+	duckdb::vector<string> names;
+	string definition;
+	string values;
+	for (idx_t i = 0; i < 64; i++) {
+		names.push_back("c" + to_string(i));
+		definition += (i ? ", " : "") + names.back() + " BIGINT";
+		values += (i ? ", " : "") + string("i");
+	}
+	{
+		DuckDB db(nullptr);
+		Connection con(db);
+		REQUIRE_NO_FAIL(con.Query("ATTACH '" + path + "' AS version_db (ROW_GROUP_SIZE 2048)"));
+		REQUIRE_NO_FAIL(con.Query("USE version_db"));
+		REQUIRE_NO_FAIL(con.Query("CREATE TABLE versions(" + definition + ")"));
+		duckdb::vector<const char *> columns;
+		for (auto &name : names) {
+			columns.push_back(name.c_str());
+		}
+		idx_t table_version;
+		auto versions = con.context->GetColumnVersions("main", "versions", columns.data(), columns.size(), table_version);
+		REQUIRE(table_version == 0);
+		REQUIRE(versions == duckdb::vector<idx_t>(columns.size(), 0));
+		REQUIRE_NO_FAIL(con.Query("INSERT INTO versions SELECT " + values + " FROM range(6144) t(i)"));
+		REQUIRE_NO_FAIL(con.Query("CHECKPOINT"));
+	}
+	{
+		DuckDB db(path);
+		Connection con(db);
+		REQUIRE_NO_FAIL(con.Query("BEGIN"));
+		{
+			auto &entry = Catalog::GetEntry<TableCatalogEntry>(*con.context, INVALID_CATALOG, "main", "versions");
+			auto row_groups = entry.GetStorage().GetRowGroupCollection()->GetRowGroups();
+			auto loaded_count = [&]() {
+				auto lock = row_groups->Lock();
+				return row_groups->ReferenceLoadedSegmentsMutable(lock).size();
+			};
+			REQUIRE(loaded_count() == 0);
+			if (batch) {
+				duckdb::vector<const char *> columns;
+				for (auto &name : names) {
+					columns.push_back(name.c_str());
+				}
+				columns.push_back("missing");
+				columns.push_back("C0");
+				idx_t table_version;
+				auto versions =
+				    con.context->GetColumnVersions("main", "versions", columns.data(), columns.size(), table_version);
+				REQUIRE(table_version == 1);
+				REQUIRE(versions.size() == columns.size());
+				for (idx_t i = 0; i < names.size(); i++) {
+					REQUIRE(versions[i] == 1);
+				}
+				REQUIRE(versions[names.size()] == 0);
+				REQUIRE(versions.back() == 1);
+			} else {
+				REQUIRE(con.context->GetColumnVersion("main", "versions", "c0") == 1);
+			}
+			REQUIRE(loaded_count() == 1);
+			REQUIRE(row_groups->GetSegmentCount() == 3);
+		}
+		REQUIRE_NO_FAIL(con.Query("COMMIT"));
+	}
+	DeleteDatabase(path);
+}
+
+TEST_CASE("Anybase wide-table column versions advance once for mixed commits", "[anybase_storage][column_versions]") {
+	auto path = TestCreatePath("anybase_wide_column_versions.db");
+	DeleteDatabase(path);
+	duckdb::vector<string> names;
+	string definition;
+	string values;
+	for (idx_t i = 0; i < 64; i++) {
+		names.push_back("c" + to_string(i));
+		definition += (i ? ", " : "") + names.back() + " BIGINT";
+		values += (i ? ", " : "") + string("i");
+	}
+	duckdb::vector<const char *> columns;
+	for (auto &name : names) {
+		columns.push_back(name.c_str());
+	}
+	duckdb::vector<idx_t> expected;
+	idx_t expected_table_version = 0;
+	{
+		DuckDB db(path);
+		Connection con(db);
+		REQUIRE_NO_FAIL(con.Query("CREATE TABLE versions(" + definition + ")"));
+		REQUIRE_NO_FAIL(con.Query("INSERT INTO versions SELECT " + values + " FROM range(8192) t(i)"));
+		REQUIRE_NO_FAIL(con.Query("UPDATE versions SET c1 = -1 WHERE c0 = 0"));
+		expected = con.context->GetColumnVersions("main", "versions", columns.data(), columns.size(),
+		                                         expected_table_version);
+		REQUIRE(expected_table_version == 2);
+		REQUIRE(expected[0] == 1);
+		REQUIRE(expected[1] == 2);
+		auto require_versions = [&]() {
+			idx_t table_version;
+			auto actual = con.context->GetColumnVersions("main", "versions", columns.data(), columns.size(),
+			                                            table_version);
+			REQUIRE(table_version == expected_table_version);
+			REQUIRE(actual == expected);
+			for (idx_t i = 0; i < names.size(); i++) {
+				REQUIRE(con.context->GetColumnVersion("main", "versions", names[i].c_str()) == expected[i]);
+			}
+		};
+		REQUIRE_NO_FAIL(con.Query("BEGIN"));
+		REQUIRE_NO_FAIL(con.Query("UPDATE versions SET c2 = -2 WHERE c0 = 0"));
+		REQUIRE_NO_FAIL(con.Query("DELETE FROM versions WHERE c0 < 6000"));
+		REQUIRE_NO_FAIL(con.Query("INSERT INTO versions SELECT " + values + " FROM range(9000, 15000) t(i)"));
+		REQUIRE_NO_FAIL(con.Query("COMMIT"));
+		expected_table_version++;
+		for (auto &version : expected) {
+			version++;
+		}
+		require_versions();
+
+		REQUIRE_NO_FAIL(con.Query("BEGIN"));
+		REQUIRE_NO_FAIL(con.Query("INSERT INTO versions SELECT " + values + " FROM range(16000, 22000) t(i)"));
+		REQUIRE_NO_FAIL(con.Query("UPDATE versions SET c3 = -3 WHERE c0 = 6000"));
+		REQUIRE_NO_FAIL(con.Query("DELETE FROM versions WHERE c0 >= 9000 AND c0 < 13000"));
+		REQUIRE_NO_FAIL(con.Query("COMMIT"));
+		expected_table_version++;
+		for (auto &version : expected) {
+			version++;
+		}
+		require_versions();
+
+		REQUIRE_NO_FAIL(con.Query("BEGIN"));
+		REQUIRE_NO_FAIL(con.Query("UPDATE versions SET c4 = -4 WHERE c0 = 6000"));
+		REQUIRE_NO_FAIL(con.Query("DELETE FROM versions"));
+		REQUIRE_NO_FAIL(con.Query("ROLLBACK"));
+		require_versions();
+		REQUIRE_NO_FAIL(con.Query("CHECKPOINT"));
+	}
+	{
+		DuckDB db(path);
+		Connection con(db);
+		idx_t table_version;
+		auto actual =
+		    con.context->GetColumnVersions("main", "versions", columns.data(), columns.size(), table_version);
+		REQUIRE(table_version == expected_table_version);
+		REQUIRE(actual == expected);
+		REQUIRE_NO_FAIL(con.Query("INSERT INTO versions SELECT " + values + " FROM range(23000, 23010) t(i)"));
+		actual = con.context->GetColumnVersions("main", "versions", columns.data(), columns.size(), table_version);
+		REQUIRE(table_version == expected_table_version + 1);
+		for (idx_t i = 0; i < actual.size(); i++) {
+			REQUIRE(actual[i] == expected[i] + 1);
+		}
+	}
+	DeleteDatabase(path);
+}
 
 TEST_CASE("Anybase versions persist alongside 1.5 VARIANT metadata", "[anybase_storage]") {
 	auto path = TestCreatePath("anybase_versions_15.db");

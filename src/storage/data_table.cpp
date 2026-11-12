@@ -2425,6 +2425,10 @@ idx_t DataTable::GetColumnVersion(const column_t idx) const {
 	return row_groups->GetVersion(idx);
 }
 
+vector<idx_t> DataTable::GetColumnVersions(const vector<column_t> &column_ids) const {
+	return row_groups->GetColumnVersions(column_ids);
+}
+
 void DataTable::ScanTableSegment(DuckTransaction &transaction, idx_t row_start, idx_t count, vector<StorageIndex> &column_ids,
 								 vector<LogicalType> types, const std::function<void(DataChunk &chunk)> &function) {
 	if (count == 0) {

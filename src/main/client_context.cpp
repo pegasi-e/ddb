@@ -1690,7 +1690,6 @@ void ClientContext::SetCommitHLC(int64_t timestamp, uint64_t sequence) {
 	hlc.sequence = sequence;
 	DuckTransactionManager::Get(*attached).SetCommitHLC(hlc);
 }
-// End Anybase changes
 
 idx_t ClientContext::GetTableVersion(const char *schema, const char *table) {
 	idx_t version = 0;
@@ -1726,15 +1725,15 @@ idx_t ClientContext::GetEstimatedTotalRows(const char *catalog, const char *sche
 	return rowCount;
 }
 
-static idx_t GetStorageColumnVersion(TableCatalogEntry &table_entry, const DataTable &storage, const char *column) {
+static column_t GetStorageColumnIndex(TableCatalogEntry &table_entry, const char *column) {
 	if (!table_entry.ColumnExists(column)) {
-		return 0;
+		return DConstants::INVALID_INDEX;
 	}
 	const auto &column_definition = table_entry.GetColumn(column);
 	if (column_definition.Generated()) {
 		throw InvalidInputException("Cannot fetch a storage version for generated column \"%s\"", column);
 	}
-	return storage.GetColumnVersion(column_definition.Physical().index);
+	return column_definition.Physical().index;
 }
 
 idx_t ClientContext::GetColumnVersion(const char *schema, const char *table, const char *column) {
@@ -1746,7 +1745,10 @@ idx_t ClientContext::GetColumnVersion(const char *schema, const char *table, con
 
 		auto &table_entry = Catalog::GetEntry<TableCatalogEntry>(*this, INVALID_CATALOG, schema, table);
 		const auto &dataTable = table_entry.GetStorage();
-		version = GetStorageColumnVersion(table_entry, dataTable, column);
+		auto column_idx = GetStorageColumnIndex(table_entry, column);
+		if (column_idx != DConstants::INVALID_INDEX) {
+			version = dataTable.GetColumnVersion(column_idx);
+		}
 	});
 
 	return version;
@@ -1762,16 +1764,18 @@ vector<idx_t> ClientContext::GetColumnVersions(const char *schema, const char *t
 			throw InvalidInputException("Column name at index %llu must not be NULL", i);
 		}
 	}
-	vector<idx_t> versions(column_count);
+	vector<idx_t> versions;
 	idx_t version = 0;
 	RunFunctionInTransaction([&]() {
 		auto &table_entry =
 		    Catalog::GetEntry<TableCatalogEntry>(*this, INVALID_CATALOG, schema ? schema : INVALID_SCHEMA, table);
 		const auto &storage = table_entry.GetStorage();
 		version = storage.GetVersion();
+		vector<column_t> column_ids(column_count);
 		for (idx_t i = 0; i < column_count; i++) {
-			versions[i] = GetStorageColumnVersion(table_entry, storage, columns[i]);
+			column_ids[i] = GetStorageColumnIndex(table_entry, columns[i]);
 		}
+		versions = storage.GetColumnVersions(column_ids);
 	});
 	table_version = version;
 	return versions;

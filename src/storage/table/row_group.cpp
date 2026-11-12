@@ -1890,10 +1890,14 @@ idx_t RowGroup::GetColumnVersion(const idx_t vector_idx) {
 }
 
 void RowGroup::UpdateColumnVersions(const transaction_t commit_id) {
+	if (last_column_version_commit_id == commit_id) {
+		return;
+	}
 	const auto count = GetColumnCount();
 	for (idx_t col_idx = 0; col_idx < count; col_idx++) {
 		GetColumn(col_idx).commit_version_manager.DidCommitTransaction(commit_id);
 	}
+	last_column_version_commit_id = commit_id;
 }
 // end Anybase changes
 
