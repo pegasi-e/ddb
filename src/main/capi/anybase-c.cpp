@@ -509,6 +509,30 @@ duckdb_error_data duckdb_append_arrow(duckdb_connection connection, duckdb_appen
 	return nullptr;
 }
 
+// Start Anybase changes
+duckdb_state duckdb_set_commit_hlc(duckdb_connection connection, int64_t timestamp, uint64_t sequence, char **out_error) {
+	if (out_error) {
+		*out_error = nullptr;
+	}
+	if (!connection) {
+		if (out_error) {
+			*out_error = strdup("connection cannot be nullptr");
+		}
+		return DuckDBError;
+	}
+	try {
+		reinterpret_cast<Connection *>(connection)->context->SetCommitHLC(timestamp, sequence);
+		return DuckDBSuccess;
+	} catch (std::exception &ex) {
+		if (out_error) {
+			ErrorData error(ex);
+			*out_error = strdup(error.Message().c_str());
+		}
+		return DuckDBError;
+	}
+}
+// End Anybase changes
+
 duckdb_state duckdb_get_commit_hlc(duckdb_connection connection, int64_t *out_timestamp, uint64_t *out_sequence) {
 	if (!connection || !out_timestamp || !out_sequence) {
 		return DuckDBError;

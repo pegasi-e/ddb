@@ -60,6 +60,7 @@ public:
 	WALReplayState replay_state;
 	// Start Anybase changes
 	CommitHLC commit_hlc;
+	bool has_commit_hlc = false;
 	// End Anybase changes
 
 	struct ReplayIndexInfo {
@@ -211,10 +212,15 @@ public:
 		auto wal_type = deserializer.ReadProperty<WALType>(100, "wal_type");
 		if (wal_type == WALType::WAL_FLUSH) {
 			// Start Anybase changes
-			state.commit_hlc.timestamp =
-			    deserializer.ReadPropertyWithDefault<int64_t>(CommitHLC::TIMESTAMP_FIELD_ID, "commit_hlc_timestamp");
-			state.commit_hlc.sequence =
-			    deserializer.ReadPropertyWithDefault<uint64_t>(CommitHLC::SEQUENCE_FIELD_ID, "commit_hlc_sequence");
+			Deserializer &properties = deserializer;
+			state.has_commit_hlc =
+			    properties.CanDeserializeProperty(CommitHLC::TIMESTAMP_FIELD_ID, "commit_hlc_timestamp");
+			if (state.has_commit_hlc) {
+				state.commit_hlc.timestamp =
+				    properties.ReadProperty<int64_t>(CommitHLC::TIMESTAMP_FIELD_ID, "commit_hlc_timestamp");
+				state.commit_hlc.sequence =
+				    properties.ReadProperty<uint64_t>(CommitHLC::SEQUENCE_FIELD_ID, "commit_hlc_sequence");
+			}
 			// End Anybase changes
 			deserializer.End();
 			return true;
@@ -577,7 +583,10 @@ unique_ptr<WriteAheadLog> WriteAheadLogReplayer::ReplayLog(unique_ptr<FileHandle
 			if (deserializer.ReplayEntry()) {
 				con.Commit();
 				// Start Anybase changes
-				DuckTransactionManager::Get(database).RestoreCommitHLC(state.commit_hlc);
+				if (state.has_commit_hlc) {
+					// WAL order is authoritative, including explicit backward resets and later commits.
+					DuckTransactionManager::Get(database).ReplayCommitHLC(state.commit_hlc);
+				}
 				// End Anybase changes
 
 				// Commit any outstanding indexes.

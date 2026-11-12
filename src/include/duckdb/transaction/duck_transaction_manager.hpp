@@ -78,6 +78,8 @@ public:
 	CommitHLC GetCommitHLC();
 	CommitHLC GetCheckpointHLC();
 	void RestoreCommitHLC(CommitHLC hlc);
+	void SetCommitHLC(CommitHLC hlc);
+	void ReplayCommitHLC(CommitHLC hlc);
 	// End Anybase changes
 
 	bool IsDuckTransactionManager() override {

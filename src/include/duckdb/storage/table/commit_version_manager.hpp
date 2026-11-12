@@ -59,6 +59,10 @@ public:
 		return hlc;
 	}
 
+	void SetCommitHLC(CommitHLC commit_hlc) {
+		hlc = commit_hlc;
+	}
+
 	void RestoreCommitHLC(CommitHLC commit_hlc) {
 		if (commit_hlc.sequence > hlc.sequence) {
 			hlc = commit_hlc;

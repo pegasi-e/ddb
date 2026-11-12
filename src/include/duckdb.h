@@ -10383,12 +10383,29 @@ DUCKDB_C_API duckdb_state duckdb_merger_create_ext(duckdb_connection connection,
 /*!
  * Retrieves the current commit timestamp and sequence number from the database connection.
  * @param connection The database connection.
- * @param out_timestamp Pointer to store the commit timestamp.
+ * @param out_timestamp Pointer to store the commit timestamp in Unix microseconds.
  * @param out_sequence Pointer to store the commit sequence number.
  * @return `DuckDBSuccess` on success or `DuckDBError` on failure.
  */
 DUCKDB_C_API duckdb_state duckdb_get_commit_hlc(duckdb_connection connection, int64_t *out_timestamp,
 												uint64_t *out_sequence);
+
+/*!
+ * Replaces the connection's default database commit HLC, including with an earlier value.
+ * Select an attached destination with USE after COPY FROM DATABASE completes.
+ * This operation is nontransactional and does not increment the sequence or emit CDC events.
+ * For persistent databases, success means the HLC is durable even without subsequent writes.
+ * In-memory databases retain it only in memory. Subsequent write commits increment the supplied sequence.
+ * The connection must have no active transaction or query, and the database must have no active write
+ * transaction or checkpoint. Read-only databases and persistent databases with WAL writes disabled are rejected.
+ * @param connection The connection whose default database to update.
+ * @param timestamp A finite, non-negative Unix timestamp in microseconds.
+ * @param sequence The unsigned lifetime commit counter to install. UINT64_MAX prevents further write commits.
+ * @param out_error Optional error message on failure; free it with duckdb_free. Set to NULL on success.
+ * @return DuckDBSuccess on success or DuckDBError on failure.
+ */
+DUCKDB_C_API duckdb_state duckdb_set_commit_hlc(duckdb_connection connection, int64_t timestamp, uint64_t sequence,
+                                             char **out_error);
 
 /*!
 Creates an merger object that allows upsert style merges with existing data while appending new data.

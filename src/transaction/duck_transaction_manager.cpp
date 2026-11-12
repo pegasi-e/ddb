@@ -150,6 +150,63 @@ void DuckTransactionManager::RestoreCommitHLC(CommitHLC hlc) {
 	lock_guard<mutex> lock(transaction_lock);
 	commit_version_manager.RestoreCommitHLC(hlc);
 }
+
+void DuckTransactionManager::ReplayCommitHLC(CommitHLC hlc) {
+	lock_guard<mutex> lock(transaction_lock);
+	commit_version_manager.SetCommitHLC(hlc);
+}
+
+void DuckTransactionManager::SetCommitHLC(CommitHLC hlc) {
+	if (ValidChecker::IsInvalidated(db)) {
+		throw IOException("%s", ValidChecker::InvalidatedMessage(db));
+	}
+	if (hlc.timestamp < 0 || hlc.timestamp == NumericLimits<int64_t>::Maximum()) {
+		throw InvalidInputException("Commit HLC timestamp must be a finite, non-negative Unix microsecond timestamp");
+	}
+	if (db.IsReadOnly()) {
+		throw InvalidInputException("Cannot set commit HLC on a read-only database");
+	}
+	auto &storage_manager = db.GetStorageManager();
+	if (!storage_manager.IsLoaded() ||
+	    (!storage_manager.InMemory() && db.GetRecoveryMode() == RecoveryMode::NO_WAL_WRITES)) {
+		throw InvalidInputException("Cannot durably set commit HLC while WAL writes are disabled");
+	}
+	lock_guard<mutex> start_lock(start_transaction_lock);
+	auto checkpoint_guard = TryGetCheckpointLock();
+	if (!checkpoint_guard) {
+		throw TransactionException("Cannot set commit HLC while a write transaction or checkpoint is active");
+	}
+	auto vacuum_guard = TryGetVacuumLock();
+	if (!vacuum_guard) {
+		throw TransactionException("Cannot set commit HLC while an insert, delete, or vacuum is active");
+	}
+	auto wal_lock = storage_manager.GetWALLock();
+	lock_guard<mutex> lock(transaction_lock);
+	if (!storage_manager.InMemory()) {
+		auto wal = storage_manager.GetWAL();
+		if (!wal) {
+			throw InternalException("Cannot persist commit HLC without a WAL");
+		}
+		auto commit_state = storage_manager.GenStorageCommitState(*wal);
+		commit_state->commit_hlc = hlc;
+		try {
+			wal->Initialize();
+			commit_state->FlushCommit();
+		} catch (std::exception &ex) {
+			ErrorData original(ex);
+			try {
+				commit_state->RevertCommit();
+				wal->Initialize().Sync();
+			} catch (std::exception &rollback_ex) {
+				db.Invalidate("Failed to revert commit HLC WAL write");
+				throw IOException("Failed to persist commit HLC: %s. Failed to revert WAL write: %s",
+				                  original.RawMessage(), rollback_ex.what());
+			}
+			throw;
+		}
+	}
+	commit_version_manager.SetCommitHLC(hlc);
+}
 // End Anybase changes
 
 DuckTransactionManager::CheckpointDecision::CheckpointDecision(string reason_p)

@@ -18,6 +18,9 @@
 #include "duckdb/main/client_data.hpp"
 #include "duckdb/main/database.hpp"
 #include "duckdb/main/database_manager.hpp"
+// Start Anybase changes
+#include "duckdb/transaction/duck_transaction_manager.hpp"
+// End Anybase changes
 #include "duckdb/main/error_manager.hpp"
 #include "duckdb/main/materialized_query_result.hpp"
 #include "duckdb/main/query_profiler.hpp"
@@ -1639,6 +1642,27 @@ void ClientContext::SetActiveResult(ClientContextLock &lock, BaseQueryResult &re
 	}
 	return active_query->SetOpenResult(result);
 }
+
+// Start Anybase changes
+void ClientContext::SetCommitHLC(int64_t timestamp, uint64_t sequence) {
+	auto lock = LockContext();
+	if (transaction.HasActiveTransaction() || active_query) {
+		throw TransactionException("Cannot set commit HLC while this connection has an active transaction or query");
+	}
+	if (ValidChecker::IsInvalidated(*db)) {
+		throw IOException("%s", ValidChecker::InvalidatedMessage(*db));
+	}
+	auto &manager = DatabaseManager::Get(*this);
+	auto attached = manager.GetDatabase(DatabaseManager::GetDefaultDatabase(*this));
+	if (!attached || !attached->GetTransactionManager().IsDuckTransactionManager()) {
+		throw InvalidInputException("Commit HLC requires a DuckDB database");
+	}
+	CommitHLC hlc;
+	hlc.timestamp = timestamp;
+	hlc.sequence = sequence;
+	DuckTransactionManager::Get(*attached).SetCommitHLC(hlc);
+}
+// End Anybase changes
 
 idx_t ClientContext::GetTableVersion(const char *schema, const char *table) {
 	idx_t version = 0;
