@@ -22,6 +22,9 @@ class MetaTransaction;
 class Transaction;
 class TransactionManager;
 struct timestamp_t;
+// Start Anybase changes
+struct CommitHLC;
+// End Anybase changes
 
 //! The transaction context keeps track of all the information relating to the
 //! current transaction
@@ -84,6 +87,7 @@ private:
 
 // start Anybase changes
 public:
+	void Commit(CommitHLC *out_commit_hlc);
 	void BeginTransaction(timestamp_t timestamp, transaction_t sequenceNumber);
 // end Anybase changes
 };

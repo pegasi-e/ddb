@@ -48,13 +48,21 @@ void TransactionContext::SetAutocheckpointError(ErrorData error) {
 }
 
 void TransactionContext::Commit() {
+	// Start Anybase changes
+	Commit(nullptr);
+}
+
+void TransactionContext::Commit(CommitHLC *out_commit_hlc) {
+	// End Anybase changes
 	if (!current_transaction) {
 		throw TransactionException("failed to commit: no transaction active");
 	}
 	autocheckpoint_error = ErrorData();
 	auto transaction = std::move(current_transaction);
 	ClearTransaction();
-	auto error = transaction->Commit();
+	// Start Anybase changes
+	auto error = transaction->Commit(out_commit_hlc);
+	// End Anybase changes
 	// Notify any registered state of transaction commit
 	if (error.HasError()) {
 		for (auto const &s : context.registered_state->States()) {

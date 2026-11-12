@@ -1644,6 +1644,34 @@ void ClientContext::SetActiveResult(ClientContextLock &lock, BaseQueryResult &re
 }
 
 // Start Anybase changes
+void ClientContext::CommitWithHLC(int64_t &timestamp, uint64_t &sequence, bool &has_commit_hlc) {
+	auto lock = LockContext();
+	if (active_query) {
+		throw TransactionException("Cannot commit while this connection has an active query");
+	}
+	if (ValidChecker::IsInvalidated(*db)) {
+		throw IOException("%s", ValidChecker::InvalidatedMessage(*db));
+	}
+	if (!transaction.HasActiveTransaction() || transaction.IsAutoCommit()) {
+		throw TransactionException("Cannot commit: no explicit transaction is active");
+	}
+	auto &meta_transaction = transaction.ActiveTransaction();
+	if (ValidChecker::IsInvalidated(meta_transaction)) {
+		ErrorData error(ExceptionType::TRANSACTION, ValidChecker::InvalidatedMessage(meta_transaction));
+		transaction.Rollback(error);
+		throw TransactionException("Cannot commit an aborted transaction; the transaction has been rolled back");
+	}
+	auto modified = meta_transaction.ModifiedDatabase();
+	if (modified && !modified->GetTransactionManager().IsDuckTransactionManager()) {
+		throw InvalidInputException("Commit HLC requires a DuckDB database");
+	}
+	CommitHLC hlc;
+	transaction.Commit(&hlc);
+	timestamp = hlc.timestamp;
+	sequence = hlc.sequence;
+	has_commit_hlc = hlc.sequence != 0;
+}
+
 void ClientContext::SetCommitHLC(int64_t timestamp, uint64_t sequence) {
 	auto lock = LockContext();
 	if (transaction.HasActiveTransaction() || active_query) {

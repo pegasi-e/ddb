@@ -510,6 +510,39 @@ duckdb_error_data duckdb_append_arrow(duckdb_connection connection, duckdb_appen
 }
 
 // Start Anybase changes
+duckdb_state duckdb_commit_transaction(duckdb_connection connection, int64_t *out_timestamp, uint64_t *out_sequence,
+                                     bool *out_has_commit_hlc, char **out_error) {
+	if (out_timestamp) {
+		*out_timestamp = 0;
+	}
+	if (out_sequence) {
+		*out_sequence = 0;
+	}
+	if (out_has_commit_hlc) {
+		*out_has_commit_hlc = false;
+	}
+	if (out_error) {
+		*out_error = nullptr;
+	}
+	if (!connection || !out_timestamp || !out_sequence || !out_has_commit_hlc) {
+		if (out_error) {
+			*out_error = strdup("connection and commit HLC output pointers cannot be nullptr");
+		}
+		return DuckDBError;
+	}
+	try {
+		reinterpret_cast<Connection *>(connection)->context->CommitWithHLC(*out_timestamp, *out_sequence,
+		                                                                *out_has_commit_hlc);
+		return DuckDBSuccess;
+	} catch (std::exception &ex) {
+		if (out_error) {
+			ErrorData error(ex);
+			*out_error = strdup(error.Message().c_str());
+		}
+		return DuckDBError;
+	}
+}
+
 duckdb_state duckdb_set_commit_hlc(duckdb_connection connection, int64_t timestamp, uint64_t sequence, char **out_error) {
 	if (out_error) {
 		*out_error = nullptr;

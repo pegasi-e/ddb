@@ -80,6 +80,7 @@ public:
 	void RestoreCommitHLC(CommitHLC hlc);
 	void SetCommitHLC(CommitHLC hlc);
 	void ReplayCommitHLC(CommitHLC hlc);
+	ErrorData CommitTransaction(ClientContext &context, Transaction &transaction, CommitHLC *out_commit_hlc);
 	// End Anybase changes
 
 	bool IsDuckTransactionManager() override {

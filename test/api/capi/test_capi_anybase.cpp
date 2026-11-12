@@ -39,16 +39,17 @@ namespace {
 struct CommitHLCCDCEvent {
 	cdc_event_type type;
 	string transaction_id;
+	string commit_hlc;
 };
 
 mutex commit_hlc_cdc_lock;
 duckdb::vector<CommitHLCCDCEvent> commit_hlc_cdc_events;
 
-void CaptureCommitHLCCDC(cdc_event_type type, const char *transaction_id, idx_t, idx_t, idx_t *, const char *,
+void CaptureCommitHLCCDC(cdc_event_type type, const char *transaction_id, const char *commit_hlc, idx_t, idx_t, idx_t *, const char *,
                         const char **, idx_t *, duckdb_data_chunk values, duckdb_data_chunk previous_values) {
 	{
 		lock_guard<mutex> lock(commit_hlc_cdc_lock);
-		commit_hlc_cdc_events.push_back({type, transaction_id ? transaction_id : ""});
+		commit_hlc_cdc_events.push_back({type, transaction_id ? transaction_id : "", commit_hlc ? commit_hlc : ""});
 	}
 	if (values) {
 		duckdb_destroy_data_chunk(&values);
@@ -59,7 +60,7 @@ void CaptureCommitHLCCDC(cdc_event_type type, const char *transaction_id, idx_t,
 }
 } // namespace
 
-TEST_CASE("CDC events carry the transaction commit HLC", "[capi][commit_hlc][anybase_cdc]") {
+TEST_CASE("CDC events carry the transaction ID and commit HLC", "[capi][commit_hlc][anybase_cdc]") {
 	bool persistent = false;
 	SECTION("In-memory database") {
 	}
@@ -91,7 +92,7 @@ TEST_CASE("CDC events carry the transaction commit HLC", "[capi][commit_hlc][any
 		REQUIRE_NO_FAIL(tester.Query("COMMIT"));
 		committed = ReadCommitHLC(tester.connection);
 		REQUIRE(committed.sequence == before.sequence + 1);
-		auto expected_id = to_string(committed.timestamp) + ":" + to_string(committed.sequence);
+		auto expected_hlc = to_string(committed.timestamp) + ":" + to_string(committed.sequence);
 		REQUIRE(commit_hlc_cdc_events.size() >= 5);
 		REQUIRE(commit_hlc_cdc_events.front().type == DUCKDB_CDC_EVENT_BEGIN_TRANSACTION);
 		REQUIRE(commit_hlc_cdc_events.back().type == DUCKDB_CDC_EVENT_END_TRANSACTION);
@@ -99,7 +100,8 @@ TEST_CASE("CDC events carry the transaction commit HLC", "[capi][commit_hlc][any
 		bool saw_update = false;
 		bool saw_delete = false;
 		for (auto &event : commit_hlc_cdc_events) {
-			REQUIRE(event.transaction_id == expected_id);
+			REQUIRE(event.transaction_id == "12345:99");
+			REQUIRE(event.commit_hlc == expected_hlc);
 			saw_insert |= event.type == DUCKDB_CDC_EVENT_INSERT;
 			saw_update |= event.type == DUCKDB_CDC_EVENT_UPDATE;
 			saw_delete |= event.type == DUCKDB_CDC_EVENT_DELETE;
@@ -117,10 +119,12 @@ TEST_CASE("CDC events carry the transaction commit HLC", "[capi][commit_hlc][any
 		auto next = ReadCommitHLC(tester.connection);
 		REQUIRE(next.sequence == committed.sequence + 1);
 		REQUIRE(next.timestamp >= committed.timestamp);
-		expected_id = to_string(next.timestamp) + ":" + to_string(next.sequence);
+		expected_hlc = to_string(next.timestamp) + ":" + to_string(next.sequence);
 		REQUIRE(commit_hlc_cdc_events.size() == 3);
+		REQUIRE_FALSE(commit_hlc_cdc_events.front().transaction_id.empty());
 		for (auto &event : commit_hlc_cdc_events) {
-			REQUIRE(event.transaction_id == expected_id);
+			REQUIRE(event.transaction_id == commit_hlc_cdc_events.front().transaction_id);
+			REQUIRE(event.commit_hlc == expected_hlc);
 		}
 		committed = next;
 		duckdb_set_cdc_callback(tester.database, nullptr);
@@ -137,6 +141,207 @@ TEST_CASE("CDC events carry the transaction commit HLC", "[capi][commit_hlc][any
 // End Anybase changes
 
 // Start Anybase changes
+static CommitHLC CommitWithHLC(duckdb_connection connection, bool expected_hlc = true) {
+	CommitHLC hlc;
+	bool has_hlc = !expected_hlc;
+	char *error = nullptr;
+	auto state = duckdb_commit_transaction(connection, &hlc.timestamp, &hlc.sequence, &has_hlc, &error);
+	string message = error ? error : "";
+	duckdb_free(error);
+	INFO(message);
+	REQUIRE(state == DuckDBSuccess);
+	REQUIRE(message.empty());
+	REQUIRE(has_hlc == expected_hlc);
+	if (!expected_hlc) {
+		REQUIRE(hlc.timestamp == 0);
+		REQUIRE(hlc.sequence == 0);
+	}
+	return hlc;
+}
+
+TEST_CASE("C API commit returns its own HLC and CDC identifier", "[capi][commit_hlc][anybase_cdc]") {
+	bool persistent = false;
+	SECTION("In memory") {
+	}
+	SECTION("WAL recovery") {
+		persistent = true;
+	}
+	auto path = TestCreatePath("capi_atomic_commit_hlc.db");
+	DeleteDatabase(path);
+	CommitHLC committed;
+	{
+		CAPITester tester;
+		REQUIRE(tester.OpenDatabase(persistent ? path.c_str() : nullptr));
+		REQUIRE_NO_FAIL(tester.Query("PRAGMA disable_checkpoint_on_shutdown"));
+		REQUIRE_NO_FAIL(tester.Query("SET debug_skip_checkpoint_on_commit = true"));
+		REQUIRE_NO_FAIL(tester.Query("CREATE TABLE atomic_hlc(i INTEGER)"));
+		auto before = ReadCommitHLC(tester.connection);
+		commit_hlc_cdc_events.clear();
+		duckdb_set_cdc_callback(tester.database, CaptureCommitHLCCDC);
+		REQUIRE(duckdb_begin_transaction(tester.connection, 12345, 99, nullptr) == DuckDBSuccess);
+		REQUIRE_NO_FAIL(tester.Query("INSERT INTO atomic_hlc VALUES (1), (2)"));
+		committed = CommitWithHLC(tester.connection);
+		REQUIRE(committed.sequence == before.sequence + 1);
+		REQUIRE(committed.timestamp >= before.timestamp);
+		RequireCommitHLC(tester.connection, committed);
+		auto expected = to_string(committed.timestamp) + ":" + to_string(committed.sequence);
+		REQUIRE(commit_hlc_cdc_events.size() == 3);
+		for (auto &event : commit_hlc_cdc_events) {
+			REQUIRE(event.transaction_id == "12345:99");
+			REQUIRE(event.commit_hlc == expected);
+		}
+		duckdb_set_cdc_callback(tester.database, nullptr);
+		commit_hlc_cdc_events.clear();
+		REQUIRE_NO_FAIL(tester.Query("BEGIN"));
+		REQUIRE_NO_FAIL(tester.Query("ALTER TABLE atomic_hlc ADD COLUMN v INTEGER"));
+		auto ddl_hlc = CommitWithHLC(tester.connection);
+		REQUIRE(ddl_hlc.sequence == committed.sequence + 1);
+		committed = ddl_hlc;
+	}
+	if (persistent) {
+		CAPITester tester;
+		REQUIRE(tester.OpenDatabase(path.c_str()));
+		RequireCommitHLC(tester.connection, committed);
+		auto rows = tester.Query("SELECT count(*) FROM atomic_hlc");
+		REQUIRE_NO_FAIL(*rows);
+		REQUIRE(rows->Fetch<int64_t>(0, 0) == 2);
+	}
+	DeleteDatabase(path);
+}
+
+TEST_CASE("C API commit handles empty transactions and invalid calls", "[capi][commit_hlc]") {
+	CAPITester tester;
+	REQUIRE(tester.OpenDatabase(nullptr));
+	REQUIRE_NO_FAIL(tester.Query("CREATE TABLE commit_guard(i INTEGER UNIQUE)"));
+	auto original = ReadCommitHLC(tester.connection);
+	auto expect_error = [&](duckdb_connection con, bool null_timestamp = false, bool null_sequence = false,
+	                        bool null_flag = false) {
+		int64_t timestamp = 99;
+		uint64_t sequence = 99;
+		bool has_hlc = true;
+		char *error = nullptr;
+		auto state = duckdb_commit_transaction(con, null_timestamp ? nullptr : &timestamp,
+		                                      null_sequence ? nullptr : &sequence, null_flag ? nullptr : &has_hlc,
+		                                      &error);
+		string message = error ? error : "";
+		duckdb_free(error);
+		REQUIRE(state == DuckDBError);
+		REQUIRE_FALSE(message.empty());
+		if (!null_timestamp) {
+			REQUIRE(timestamp == 0);
+		}
+		if (!null_sequence) {
+			REQUIRE(sequence == 0);
+		}
+		if (!null_flag) {
+			REQUIRE_FALSE(has_hlc);
+		}
+	};
+	expect_error(nullptr);
+	expect_error(tester.connection);
+	REQUIRE_NO_FAIL(tester.Query("BEGIN"));
+	expect_error(tester.connection, true);
+	expect_error(tester.connection, false, true);
+	expect_error(tester.connection, false, false, true);
+	CommitWithHLC(tester.connection, false);
+	REQUIRE_NO_FAIL(tester.Query("BEGIN"));
+	REQUIRE_NO_FAIL(tester.Query("SELECT * FROM commit_guard"));
+	CommitWithHLC(tester.connection, false);
+	RequireCommitHLC(tester.connection, original);
+	REQUIRE_NO_FAIL(tester.Query("BEGIN"));
+	REQUIRE_NO_FAIL(tester.Query("INSERT INTO commit_guard VALUES (1)"));
+	REQUIRE(tester.Query("INSERT INTO commit_guard VALUES (1)")->HasError());
+	expect_error(tester.connection);
+	RequireCommitHLC(tester.connection, original);
+	auto rows = tester.Query("SELECT count(*) FROM commit_guard");
+	REQUIRE_NO_FAIL(*rows);
+	REQUIRE(rows->Fetch<int64_t>(0, 0) == 0);
+	REQUIRE_NO_FAIL(tester.Query("BEGIN"));
+	REQUIRE_NO_FAIL(tester.Query("INSERT INTO commit_guard VALUES (2)"));
+	char *error = nullptr;
+	REQUIRE(duckdb_set_commit_hlc(tester.connection, 0, UINT64_MAX, &error) == DuckDBError);
+	duckdb_free(error);
+	auto hlc = CommitWithHLC(tester.connection);
+	REQUIRE(hlc.sequence == original.sequence + 1);
+	REQUIRE(duckdb_set_commit_hlc(tester.connection, hlc.timestamp, UINT64_MAX, nullptr) == DuckDBSuccess);
+	REQUIRE_NO_FAIL(tester.Query("BEGIN"));
+	REQUIRE_NO_FAIL(tester.Query("INSERT INTO commit_guard VALUES (3)"));
+	expect_error(tester.connection);
+	REQUIRE(ReadCommitHLC(tester.connection).sequence == UINT64_MAX);
+}
+
+TEST_CASE("C API commit returns the modified attached database HLC", "[capi][commit_hlc]") {
+	CAPITester tester;
+	REQUIRE(tester.OpenDatabase(nullptr));
+	REQUIRE_NO_FAIL(tester.Query("ATTACH ':memory:' AS commit_other"));
+	REQUIRE_NO_FAIL(tester.Query("CREATE TABLE commit_other.tbl(i INTEGER)"));
+	auto default_hlc = ReadCommitHLC(tester.connection);
+	REQUIRE_NO_FAIL(tester.Query("USE commit_other"));
+	auto other_hlc = ReadCommitHLC(tester.connection);
+	REQUIRE_NO_FAIL(tester.Query("USE memory"));
+	REQUIRE_NO_FAIL(tester.Query("BEGIN"));
+	REQUIRE_NO_FAIL(tester.Query("INSERT INTO commit_other.tbl VALUES (1)"));
+	auto committed = CommitWithHLC(tester.connection);
+	REQUIRE(committed.sequence == other_hlc.sequence + 1);
+	RequireCommitHLC(tester.connection, default_hlc);
+	REQUIRE_NO_FAIL(tester.Query("USE commit_other"));
+	RequireCommitHLC(tester.connection, committed);
+	REQUIRE_NO_FAIL(tester.Query("CREATE TEMP TABLE temporary_commit(i INTEGER)"));
+	REQUIRE_NO_FAIL(tester.Query("BEGIN"));
+	REQUIRE_NO_FAIL(tester.Query("INSERT INTO temporary_commit VALUES (1)"));
+	CommitWithHLC(tester.connection, false);
+}
+
+TEST_CASE("C API commit HLC is not replaced by commits during autocheckpoint", "[capi][commit_hlc][wal]") {
+	auto path = TestCreatePath("atomic_commit_hlc_checkpoint.db");
+	DeleteDatabase(path);
+	{
+		DuckDB db(path);
+		Connection con(db);
+		REQUIRE_NO_FAIL(con.Query("PRAGMA disable_checkpoint_on_shutdown"));
+		REQUIRE_NO_FAIL(con.Query("SET wal_autocheckpoint = '1TB'"));
+		REQUIRE_NO_FAIL(con.Query("CREATE TABLE atomic_checkpoint(i INTEGER)"));
+		auto attached = db.instance->GetDatabaseManager().GetDatabase(DatabaseManager::GetDefaultDatabase(*con.context));
+		REQUIRE(attached);
+		auto &manager = DuckTransactionManager::Get(*attached);
+		auto before = manager.GetCommitHLC();
+		REQUIRE_NO_FAIL(con.Query("SET auto_checkpoint_skip_wal_threshold = 9999999999"));
+		REQUIRE_NO_FAIL(con.Query("SET wal_autocheckpoint = '1KB'"));
+		REQUIRE_NO_FAIL(con.Query("SET debug_checkpoint_sleep_ms = 500"));
+		REQUIRE_NO_FAIL(con.Query("BEGIN"));
+		REQUIRE_NO_FAIL(con.Query("INSERT INTO atomic_checkpoint SELECT range::INTEGER FROM range(10000)"));
+		CommitHLC committed;
+		bool has_hlc = false;
+		char *error = nullptr;
+		duckdb_state state = DuckDBError;
+		std::atomic<bool> done {false};
+		std::thread committing([&]() {
+			state = duckdb_commit_transaction(reinterpret_cast<duckdb_connection>(&con), &committed.timestamp,
+			                                 &committed.sequence, &has_hlc, &error);
+			done = true;
+		});
+		while (manager.GetActiveCheckpoint() == MAX_TRANSACTION_ID && !done) {
+			std::this_thread::yield();
+		}
+		bool overlapping = !done;
+		Connection other(db);
+		auto insert = other.Query("INSERT INTO atomic_checkpoint VALUES (10000)");
+		committing.join();
+		string message = error ? error : "";
+		duckdb_free(error);
+		INFO(message);
+		REQUIRE(overlapping);
+		REQUIRE_NO_FAIL(*insert);
+		REQUIRE(state == DuckDBSuccess);
+		REQUIRE(has_hlc);
+		REQUIRE(committed.sequence == before.sequence + 1);
+		auto latest = manager.GetCommitHLC();
+		REQUIRE(latest.sequence == committed.sequence + 1);
+		REQUIRE(latest.timestamp >= committed.timestamp);
+	}
+	DeleteDatabase(path);
+}
+
 static void SetCommitHLC(duckdb_connection connection, CommitHLC hlc) {
 	char *error = nullptr;
 	auto state = duckdb_set_commit_hlc(connection, hlc.timestamp, hlc.sequence, &error);
@@ -170,9 +375,11 @@ TEST_CASE("C API replaces commit HLC without counting a commit or emitting CDC",
 	next = ReadCommitHLC(tester.connection);
 	REQUIRE(next.sequence == 1);
 	REQUIRE(commit_hlc_cdc_events.size() == 3);
-	auto expected_id = to_string(next.timestamp) + ":" + to_string(next.sequence);
+	auto expected_hlc = to_string(next.timestamp) + ":" + to_string(next.sequence);
+	REQUIRE_FALSE(commit_hlc_cdc_events.front().transaction_id.empty());
 	for (auto &event : commit_hlc_cdc_events) {
-		REQUIRE(event.transaction_id == expected_id);
+		REQUIRE(event.transaction_id == commit_hlc_cdc_events.front().transaction_id);
+		REQUIRE(event.commit_hlc == expected_hlc);
 	}
 	duckdb_set_cdc_callback(tester.database, nullptr);
 	commit_hlc_cdc_events.clear();
@@ -420,6 +627,51 @@ TEST_CASE("Failed commit HLC persistence preserves the original clock", "[capi][
 		replacement.timestamp = 12345;
 		replacement.sequence = 1;
 		SetCommitHLC(tester.connection, replacement);
+	}
+	DeleteDatabase(path);
+}
+
+TEST_CASE("C API commit does not return an HLC when WAL sync fails", "[capi][commit_hlc][wal]") {
+	auto path = TestCreatePath("atomic_commit_hlc_sync_failure.db");
+	DeleteDatabase(path);
+	CommitHLC original;
+	{
+		auto fs = make_uniq<CommitHLCFailingFileSystem>();
+		auto &failing_fs = *fs;
+		DBConfig config;
+		config.file_system = make_uniq<VirtualFileSystem>(std::move(fs));
+		config.options.checkpoint_on_shutdown = false;
+		DuckDB db(path, &config);
+		Connection con(db);
+		REQUIRE_NO_FAIL(con.Query("SET debug_skip_checkpoint_on_commit = true"));
+		REQUIRE_NO_FAIL(con.Query("CREATE TABLE atomic_sync_failure(i INTEGER)"));
+		auto connection = reinterpret_cast<duckdb_connection>(&con);
+		original = ReadCommitHLC(connection);
+		REQUIRE_NO_FAIL(con.Query("BEGIN"));
+		REQUIRE_NO_FAIL(con.Query("INSERT INTO atomic_sync_failure VALUES (1)"));
+		failing_fs.fail_wal_sync = true;
+		CommitHLC hlc;
+		hlc.timestamp = 99;
+		hlc.sequence = 99;
+		bool has_hlc = true;
+		char *error = nullptr;
+		auto state = duckdb_commit_transaction(connection, &hlc.timestamp, &hlc.sequence, &has_hlc, &error);
+		string message = error ? error : "";
+		duckdb_free(error);
+		REQUIRE(state == DuckDBError);
+		REQUIRE(message.find("Injected HLC WAL sync failure") != string::npos);
+		REQUIRE_FALSE(has_hlc);
+		REQUIRE(hlc.timestamp == 0);
+		REQUIRE(hlc.sequence == 0);
+		RequireCommitHLC(connection, original);
+	}
+	{
+		CAPITester tester;
+		REQUIRE(tester.OpenDatabase(path.c_str()));
+		RequireCommitHLC(tester.connection, original);
+		auto rows = tester.Query("SELECT count(*) FROM atomic_sync_failure");
+		REQUIRE_NO_FAIL(*rows);
+		REQUIRE(rows->Fetch<int64_t>(0, 0) == 0);
 	}
 	DeleteDatabase(path);
 }

@@ -15,12 +15,10 @@ namespace duckdb {
 struct ChangeDataCapture {
 	duckdb_change_data_capture_callback_t function = nullptr;
 	bool IsEnabled() const { return function != nullptr; }
-	// Start Anybase changes
-	//! transaction_id is the commit HLC as "Unix microseconds:lifetime sequence" for all events in the transaction.
-	// End Anybase changes
 	void EmitChange(
 		cdc_event_type type,
 		const char *transaction_id,
+		const char *commit_hlc,
 		idx_t column_count,
 		idx_t table_version,
 		idx_t *updated_column_index,

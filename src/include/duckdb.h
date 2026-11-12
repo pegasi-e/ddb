@@ -10381,6 +10381,23 @@ DUCKDB_C_API duckdb_state duckdb_merger_create_ext(duckdb_connection connection,
 											 const char *table, duckdb_appender *out_appender);
 
 /*!
+ * Commits an explicit transaction and returns the HLC assigned to that specific commit atomically.
+ * The HLC belongs to the DuckDB database modified by the transaction, even if it is not the default database.
+ * Empty/read-only transactions commit successfully with out_has_commit_hlc false and both values zero.
+ * Temporary-only changes do not produce a database commit HLC through this API.
+ * On failure, the outputs are false/zero. An aborted transaction is rolled back and returns DuckDBError.
+ * Errors during post-commit checkpointing can be reported after the transaction has committed, as with SQL COMMIT.
+ * @param connection Connection with an explicit transaction and no active query.
+ * @param out_timestamp Required output pointer for the Unix microsecond timestamp.
+ * @param out_sequence Required output pointer for the unsigned lifetime sequence.
+ * @param out_has_commit_hlc Required output pointer; true only on success with an assigned commit HLC.
+ * @param out_error Optional error message on failure; free with duckdb_free. NULL on success.
+ * @return DuckDBSuccess on success or DuckDBError on failure.
+ */
+DUCKDB_C_API duckdb_state duckdb_commit_transaction(duckdb_connection connection, int64_t *out_timestamp,
+                                                  uint64_t *out_sequence, bool *out_has_commit_hlc, char **out_error);
+
+/*!
  * Retrieves the current commit timestamp and sequence number from the database connection.
  * @param connection The database connection.
  * @param out_timestamp Pointer to store the commit timestamp in Unix microseconds.
@@ -10445,9 +10462,13 @@ typedef enum CDC_EVENT_TYPE {
 	DUCKDB_CDC_EVENT_END_TRANSACTION = 4,
 } cdc_event_type;
 
+//! transaction_id is "transaction start time in Unix microseconds:transaction sequence number".
+//! commit_hlc is "commit timestamp in Unix microseconds:commit sequence number".
+//! Both strings are identical across events in a transaction and valid only during the callback.
 typedef void (*duckdb_change_data_capture_callback_t)(
 	cdc_event_type type,
 	const char *transaction_id,
+	const char *commit_hlc,
 	idx_t column_count,
 	idx_t table_version,
 	idx_t *updated_column_index,

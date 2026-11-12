@@ -397,6 +397,16 @@ void DuckTransactionManager::CleanupTransactions() {
 }
 
 ErrorData DuckTransactionManager::CommitTransaction(ClientContext &context, Transaction &transaction_p) {
+	// Start Anybase changes
+	return CommitTransaction(context, transaction_p, nullptr);
+}
+
+ErrorData DuckTransactionManager::CommitTransaction(ClientContext &context, Transaction &transaction_p,
+                                                  CommitHLC *out_commit_hlc) {
+	if (out_commit_hlc) {
+		*out_commit_hlc = CommitHLC();
+	}
+	// End Anybase changes
 	auto &transaction = transaction_p.Cast<DuckTransaction>();
 	unique_lock<mutex> t_lock(transaction_lock);
 	// Start Anybase changes
@@ -595,6 +605,11 @@ ErrorData DuckTransactionManager::CommitTransaction(ClientContext &context, Tran
 		}
 	}
 
+	// Start Anybase changes
+	if (!error.HasError() && advance_hlc && out_commit_hlc) {
+		*out_commit_hlc = commit_hlc;
+	}
+	// End Anybase changes
 	return error;
 }
 

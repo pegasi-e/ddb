@@ -106,7 +106,7 @@ struct AnybaseCDCValues {
 };
 AnybaseCDCValues *anybase_cdc_values = nullptr;
 
-void CaptureAnybaseCDC(cdc_event_type type, const char *, idx_t count, idx_t, idx_t *, const char *table,
+void CaptureAnybaseCDC(cdc_event_type type, const char *, const char *, idx_t count, idx_t, idx_t *, const char *table,
                        const char **names, idx_t *, duckdb_data_chunk current, duckdb_data_chunk previous) {
 	if (table && string(table) == "events" && anybase_cdc_values) {
 		for (idx_t col = 0; col < count; col++) {

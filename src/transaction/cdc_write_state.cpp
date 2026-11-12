@@ -22,6 +22,7 @@ namespace duckdb {
 void ChangeDataCapture::EmitChange(
 			const cdc_event_type type,
 			const char *transaction_id,
+			const char *commit_hlc,
 			const idx_t column_count,
 			const idx_t table_version,
 			idx_t *updated_column_index,
@@ -33,7 +34,7 @@ void ChangeDataCapture::EmitChange(
 
 	if (function != nullptr) {
 
-		function(type, transaction_id, column_count, table_version, updated_column_index, table_name, column_names, column_versions, values, previous_values);
+		function(type, transaction_id, commit_hlc, column_count, table_version, updated_column_index, table_name, column_names, column_versions, values, previous_values);
 	}
 }
 
@@ -94,12 +95,17 @@ void CDCWriteState::EmitDelete(DeleteInfo &info) {
 
 		delete_chunk->Flatten();
 		std::ostringstream oss;
-		oss << transaction.commit_hlc.timestamp << ":" << transaction.commit_hlc.sequence;
+		oss << transaction.meta_startTime.value << ":" << transaction.meta_sequenceNumber;
 		const auto t_id = strdup(oss.str().c_str());
+
+		std::ostringstream hlc_oss;
+		hlc_oss << transaction.commit_hlc.timestamp << ":" << transaction.commit_hlc.sequence;
+		const auto c_hlc = strdup(hlc_oss.str().c_str());
 
 		config.change_data_capture.EmitChange(
 			DUCKDB_CDC_EVENT_DELETE,
 			t_id,
+			c_hlc,
 			columnCount,
 			table_version,
 			nullptr,
@@ -117,6 +123,7 @@ void CDCWriteState::EmitDelete(DeleteInfo &info) {
 		}
 
 		free(t_id);
+		free(c_hlc);
 	});
 }
 
@@ -143,11 +150,17 @@ void CDCWriteState::EmitInsert(AppendInfo &info) {
 
 		auto &config = DBConfig::GetConfig(info.table->db.GetDatabase());
 		std::ostringstream oss;
-		oss << transaction.commit_hlc.timestamp << ":" << transaction.commit_hlc.sequence;
+		oss << transaction.meta_startTime.value << ":" << transaction.meta_sequenceNumber;
 		const auto t_id = strdup(oss.str().c_str());
+
+		std::ostringstream hlc_oss;
+		hlc_oss << transaction.commit_hlc.timestamp << ":" << transaction.commit_hlc.sequence;
+		const auto c_hlc = strdup(hlc_oss.str().c_str());
+
 		config.change_data_capture.EmitChange(
 			DUCKDB_CDC_EVENT_INSERT,
 			t_id,
+			c_hlc,
 			column_names.size(),
 			table_version,
 			nullptr,
@@ -165,6 +178,7 @@ void CDCWriteState::EmitInsert(AppendInfo &info) {
 		}
 
 		free(t_id);
+		free(c_hlc);
 	});
 
 }
@@ -308,12 +322,17 @@ void CDCWriteState::Flush() {
 		}
 
 		std::ostringstream oss;
-		oss << transaction.commit_hlc.timestamp << ":" << transaction.commit_hlc.sequence;
+		oss << transaction.meta_startTime.value << ":" << transaction.meta_sequenceNumber;
 		const auto t_id = strdup(oss.str().c_str());
+
+		std::ostringstream hlc_oss;
+		hlc_oss << transaction.commit_hlc.timestamp << ":" << transaction.commit_hlc.sequence;
+		const auto c_hlc = strdup(hlc_oss.str().c_str());
 
 		config.change_data_capture.EmitChange(
 			DUCKDB_CDC_EVENT_UPDATE,
 			t_id,
+			c_hlc,
 			column_names_cstrings.size(),
 			update_table_version,
 			nullptr,
@@ -331,6 +350,7 @@ void CDCWriteState::Flush() {
 		}
 
 		free(t_id);
+		free(c_hlc);
 	}
 }
 
@@ -385,12 +405,17 @@ void CDCWriteState::EmitTransactionEntry(CDC_EVENT_TYPE type){
 	auto context = transaction.context.lock();
 	auto &config = DBConfig::GetConfig(*context);
 	std::ostringstream oss;
-	oss << transaction.commit_hlc.timestamp << ":" << transaction.commit_hlc.sequence;
+	oss << transaction.meta_startTime.value << ":" << transaction.meta_sequenceNumber;
 	const auto t_id = strdup(oss.str().c_str());
+
+	std::ostringstream hlc_oss;
+	hlc_oss << transaction.commit_hlc.timestamp << ":" << transaction.commit_hlc.sequence;
+	const auto c_hlc = strdup(hlc_oss.str().c_str());
 
 	config.change_data_capture.EmitChange(
 		type,
 		t_id,
+		c_hlc,
 		0,
 		0,
 		nullptr,
@@ -402,5 +427,6 @@ void CDCWriteState::EmitTransactionEntry(CDC_EVENT_TYPE type){
 		);
 
 	free(t_id);
+	free(c_hlc);
 }
 } // namespace duckdb

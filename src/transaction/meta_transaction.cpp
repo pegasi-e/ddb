@@ -5,6 +5,9 @@
 #include "duckdb/main/client_context.hpp"
 #include "duckdb/main/database.hpp"
 #include "duckdb/transaction/transaction_manager.hpp"
+// Start Anybase changes
+#include "duckdb/transaction/duck_transaction_manager.hpp"
+// End Anybase changes
 
 namespace duckdb {
 
@@ -109,6 +112,15 @@ Transaction &Transaction::Get(ClientContext &context, Catalog &catalog) {
 }
 
 ErrorData MetaTransaction::Commit() {
+	// Start Anybase changes
+	return Commit(nullptr);
+}
+
+ErrorData MetaTransaction::Commit(CommitHLC *out_commit_hlc) {
+	if (out_commit_hlc) {
+		*out_commit_hlc = CommitHLC();
+	}
+	// End Anybase changes
 	ErrorData error;
 #ifdef DEBUG
 	reference_set_t<AttachedDatabase> committed_tx;
@@ -141,7 +153,14 @@ ErrorData MetaTransaction::Commit() {
 		try {
 			if (!error.HasError()) {
 				// Commit the transaction.
-				error = transaction_manager.CommitTransaction(context, transaction);
+				// Start Anybase changes
+				if (out_commit_hlc && modified_database.get() == &db &&
+				    transaction_manager.IsDuckTransactionManager()) {
+					error = DuckTransactionManager::Get(db).CommitTransaction(context, transaction, out_commit_hlc);
+				} else {
+					error = transaction_manager.CommitTransaction(context, transaction);
+				}
+				// End Anybase changes
 				transaction_ref.state = error.HasError() ? TransactionState::ROLLED_BACK : TransactionState::COMMITTED;
 			} else {
 				// Rollback due to previous error.
