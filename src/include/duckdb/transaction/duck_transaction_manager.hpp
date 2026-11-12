@@ -12,6 +12,9 @@
 #include "duckdb/storage/storage_lock.hpp"
 #include "duckdb/common/enums/checkpoint_type.hpp"
 #include "duckdb/common/queue.hpp"
+// Start Anybase changes
+#include "duckdb/storage/table/commit_version_manager.hpp"
+// End Anybase changes
 
 namespace duckdb {
 class DuckTransactionManager;
@@ -71,6 +74,14 @@ public:
 	}
 	transaction_t GetNewCheckpointId();
 	void ResetCheckpointId();
+	// Start Anybase changes
+	CommitHLC GetCommitHLC();
+	CommitHLC GetCheckpointHLC();
+	void RestoreCommitHLC(CommitHLC hlc);
+	void SetCommitHLC(CommitHLC hlc);
+	void ReplayCommitHLC(CommitHLC hlc);
+	ErrorData CommitTransaction(ClientContext &context, Transaction &transaction, CommitHLC *out_commit_hlc);
+	// End Anybase changes
 
 	bool IsDuckTransactionManager() override {
 		return true;
@@ -138,6 +149,10 @@ private:
 	vector<unique_ptr<DuckTransaction>> recently_committed_transactions;
 	//! The lock used for transaction operations
 	mutex transaction_lock;
+	// Start Anybase changes
+	CommitVersionManager commit_version_manager;
+	CommitHLC checkpoint_hlc;
+	// End Anybase changes
 	//! The checkpoint lock
 	StorageLock checkpoint_lock;
 	//! The vacuum lock - necessary to start vacuum operations

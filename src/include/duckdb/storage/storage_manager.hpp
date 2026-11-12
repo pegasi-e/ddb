@@ -27,6 +27,10 @@ struct PersistentCollectionData;
 
 class StorageCommitState {
 public:
+	// Start Anybase changes
+	CommitHLC commit_hlc;
+	// End Anybase changes
+
 	// Destruction of this object, without prior call to FlushCommit,
 	// will roll back the committed changes.
 	virtual ~StorageCommitState() {

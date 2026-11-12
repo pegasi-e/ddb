@@ -18,6 +18,9 @@
 #include "duckdb/main/client_data.hpp"
 #include "duckdb/main/database.hpp"
 #include "duckdb/main/database_manager.hpp"
+// Start Anybase changes
+#include "duckdb/transaction/duck_transaction_manager.hpp"
+// End Anybase changes
 #include "duckdb/main/error_manager.hpp"
 #include "duckdb/main/materialized_query_result.hpp"
 #include "duckdb/main/query_profiler.hpp"
@@ -1640,6 +1643,52 @@ void ClientContext::SetActiveResult(ClientContextLock &lock, BaseQueryResult &re
 	return active_query->SetOpenResult(result);
 }
 
+// Start Anybase changes
+void ClientContext::CommitWithHLC(int64_t &timestamp, uint64_t &sequence, bool &has_commit_hlc) {
+	auto lock = LockContext();
+	InitialCleanup(*lock);
+	if (ValidChecker::IsInvalidated(*db)) {
+		throw IOException("%s", ValidChecker::InvalidatedMessage(*db));
+	}
+	if (!transaction.HasActiveTransaction() || transaction.IsAutoCommit()) {
+		throw TransactionException("Cannot commit: no explicit transaction is active");
+	}
+	auto &meta_transaction = transaction.ActiveTransaction();
+	if (ValidChecker::IsInvalidated(meta_transaction)) {
+		ErrorData error(ExceptionType::TRANSACTION, ValidChecker::InvalidatedMessage(meta_transaction));
+		transaction.Rollback(error);
+		throw TransactionException("Cannot commit an aborted transaction; the transaction has been rolled back");
+	}
+	auto modified = meta_transaction.ModifiedDatabase();
+	if (modified && !modified->GetTransactionManager().IsDuckTransactionManager()) {
+		throw InvalidInputException("Commit HLC requires a DuckDB database");
+	}
+	CommitHLC hlc;
+	transaction.Commit(&hlc);
+	timestamp = hlc.timestamp;
+	sequence = hlc.sequence;
+	has_commit_hlc = hlc.sequence != 0;
+}
+
+void ClientContext::SetCommitHLC(int64_t timestamp, uint64_t sequence) {
+	auto lock = LockContext();
+	if (transaction.HasActiveTransaction() || active_query) {
+		throw TransactionException("Cannot set commit HLC while this connection has an active transaction or query");
+	}
+	if (ValidChecker::IsInvalidated(*db)) {
+		throw IOException("%s", ValidChecker::InvalidatedMessage(*db));
+	}
+	auto &manager = DatabaseManager::Get(*this);
+	auto attached = manager.GetDatabase(DatabaseManager::GetDefaultDatabase(*this));
+	if (!attached || !attached->GetTransactionManager().IsDuckTransactionManager()) {
+		throw InvalidInputException("Commit HLC requires a DuckDB database");
+	}
+	CommitHLC hlc;
+	hlc.timestamp = timestamp;
+	hlc.sequence = sequence;
+	DuckTransactionManager::Get(*attached).SetCommitHLC(hlc);
+}
+
 idx_t ClientContext::GetTableVersion(const char *schema, const char *table) {
 	idx_t version = 0;
 	RunFunctionInTransaction([&]() {
@@ -1674,15 +1723,15 @@ idx_t ClientContext::GetEstimatedTotalRows(const char *catalog, const char *sche
 	return rowCount;
 }
 
-static idx_t GetStorageColumnVersion(TableCatalogEntry &table_entry, const DataTable &storage, const char *column) {
+static column_t GetStorageColumnIndex(TableCatalogEntry &table_entry, const char *column) {
 	if (!table_entry.ColumnExists(column)) {
-		return 0;
+		return DConstants::INVALID_INDEX;
 	}
 	const auto &column_definition = table_entry.GetColumn(column);
 	if (column_definition.Generated()) {
 		throw InvalidInputException("Cannot fetch a storage version for generated column \"%s\"", column);
 	}
-	return storage.GetColumnVersion(column_definition.Physical().index);
+	return column_definition.Physical().index;
 }
 
 idx_t ClientContext::GetColumnVersion(const char *schema, const char *table, const char *column) {
@@ -1694,7 +1743,10 @@ idx_t ClientContext::GetColumnVersion(const char *schema, const char *table, con
 
 		auto &table_entry = Catalog::GetEntry<TableCatalogEntry>(*this, INVALID_CATALOG, schema, table);
 		const auto &dataTable = table_entry.GetStorage();
-		version = GetStorageColumnVersion(table_entry, dataTable, column);
+		auto column_idx = GetStorageColumnIndex(table_entry, column);
+		if (column_idx != DConstants::INVALID_INDEX) {
+			version = dataTable.GetColumnVersion(column_idx);
+		}
 	});
 
 	return version;
@@ -1710,16 +1762,18 @@ vector<idx_t> ClientContext::GetColumnVersions(const char *schema, const char *t
 			throw InvalidInputException("Column name at index %llu must not be NULL", i);
 		}
 	}
-	vector<idx_t> versions(column_count);
+	vector<idx_t> versions;
 	idx_t version = 0;
 	RunFunctionInTransaction([&]() {
 		auto &table_entry =
 		    Catalog::GetEntry<TableCatalogEntry>(*this, INVALID_CATALOG, schema ? schema : INVALID_SCHEMA, table);
 		const auto &storage = table_entry.GetStorage();
 		version = storage.GetVersion();
+		vector<column_t> column_ids(column_count);
 		for (idx_t i = 0; i < column_count; i++) {
-			versions[i] = GetStorageColumnVersion(table_entry, storage, columns[i]);
+			column_ids[i] = GetStorageColumnIndex(table_entry, columns[i]);
 		}
+		versions = storage.GetColumnVersions(column_ids);
 	});
 	table_version = version;
 	return versions;

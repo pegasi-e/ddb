@@ -22,6 +22,9 @@ class AttachedDatabase;
 class ClientContext;
 struct DatabaseModificationType;
 class Transaction;
+// Start Anybase changes
+struct CommitHLC;
+// End Anybase changes
 
 enum class TransactionState { UNCOMMITTED, COMMITTED, ROLLED_BACK };
 
@@ -102,6 +105,7 @@ private:
 
 // start Anybase changes
 public:
+	ErrorData Commit(CommitHLC *out_commit_hlc);
 	DUCKDB_API MetaTransaction(ClientContext &context, timestamp_t start_timestamp,
 	transaction_t global_transaction_id,
 	timestamp_t meta_start,

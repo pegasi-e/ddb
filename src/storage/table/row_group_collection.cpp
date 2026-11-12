@@ -2153,29 +2153,40 @@ void RowGroupCollection::SetDistinct(column_t column_id, unique_ptr<DistinctStat
 }
 
 // start Anybase changes
+static shared_ptr<RowGroup> GetVersionRowGroup(const RowGroupCollection &collection) {
+	auto row_groups = collection.GetRowGroups();
+	auto lock = row_groups->Lock();
+	auto root = row_groups->GetRootSegment(lock);
+	return root ? root->ReferenceNode() : nullptr;
+}
+
 idx_t RowGroupCollection::GetVersion(const column_t column_idx) const {
-	const auto segmentCount = GetRowGroups()->GetSegmentCount();
-	if (segmentCount == 0) {
-		return 0;
+	auto row_group = GetVersionRowGroup(*this);
+	return row_group ? row_group->GetColumnVersion(column_idx) : 0;
+}
+
+vector<idx_t> RowGroupCollection::GetColumnVersions(const vector<column_t> &column_ids) const {
+	vector<idx_t> versions(column_ids.size(), 0);
+	shared_ptr<RowGroup> row_group;
+	for (idx_t i = 0; i < column_ids.size(); i++) {
+		if (column_ids[i] == DConstants::INVALID_INDEX) {
+			continue;
+		}
+		if (!row_group) {
+			row_group = GetVersionRowGroup(*this);
+			if (!row_group) {
+				break;
+			}
+		}
+		versions[i] = row_group->GetColumnVersion(column_ids[i]);
 	}
-
-	auto row_group = GetRowGroups()->GetSegment(0);
-	D_ASSERT(row_group);
-
-	idx_t version = 0;
-	if (row_group) {
-		version = std::max(row_group->GetNode().GetColumnVersion(column_idx), version);
-	}
-
-	return version;
+	return versions;
 }
 
 void RowGroupCollection::UpdateColumnVersions(const transaction_t commit_id) const {
-	auto row_group = GetRowGroups()->GetSegment(0);
-	D_ASSERT(row_group);
-
+	auto row_group = GetVersionRowGroup(*this);
 	if (row_group) {
-		row_group->GetNode().UpdateColumnVersions(commit_id);
+		row_group->UpdateColumnVersions(commit_id);
 	}
 }
 

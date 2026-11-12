@@ -10381,6 +10381,51 @@ DUCKDB_C_API duckdb_state duckdb_merger_create_ext(duckdb_connection connection,
 											 const char *table, duckdb_appender *out_appender);
 
 /*!
+ * Commits an explicit transaction and returns the HLC assigned to that specific commit atomically.
+ * The HLC belongs to the DuckDB database modified by the transaction, even if it is not the default database.
+ * Empty/read-only transactions commit successfully with out_has_commit_hlc false and both values zero.
+ * Temporary-only changes do not produce a database commit HLC through this API.
+ * Outstanding pending/streaming query results are closed before committing, as with SQL COMMIT.
+ * On failure, the outputs are false/zero. An aborted transaction is rolled back and returns DuckDBError.
+ * Errors during post-commit checkpointing can be reported after the transaction has committed, as with SQL COMMIT.
+ * @param connection Connection with an explicit transaction.
+ * @param out_timestamp Required output pointer for the Unix microsecond timestamp.
+ * @param out_sequence Required output pointer for the unsigned lifetime sequence.
+ * @param out_has_commit_hlc Required output pointer; true only on success with an assigned commit HLC.
+ * @param out_error Optional error message on failure; free with duckdb_free. NULL on success.
+ * @return DuckDBSuccess on success or DuckDBError on failure.
+ */
+DUCKDB_C_API duckdb_state duckdb_commit_transaction(duckdb_connection connection, int64_t *out_timestamp,
+                                                  uint64_t *out_sequence, bool *out_has_commit_hlc, char **out_error);
+
+/*!
+ * Retrieves the current commit timestamp and sequence number from the database connection.
+ * @param connection The database connection.
+ * @param out_timestamp Pointer to store the commit timestamp in Unix microseconds.
+ * @param out_sequence Pointer to store the commit sequence number.
+ * @return `DuckDBSuccess` on success or `DuckDBError` on failure.
+ */
+DUCKDB_C_API duckdb_state duckdb_get_commit_hlc(duckdb_connection connection, int64_t *out_timestamp,
+												uint64_t *out_sequence);
+
+/*!
+ * Replaces the connection's default database commit HLC, including with an earlier value.
+ * Select an attached destination with USE after COPY FROM DATABASE completes.
+ * This operation is nontransactional and does not increment the sequence or emit CDC events.
+ * For persistent databases, success means the HLC is durable even without subsequent writes.
+ * In-memory databases retain it only in memory. Subsequent write commits increment the supplied sequence.
+ * The connection must have no active transaction or query, and the database must have no active write
+ * transaction or checkpoint. Read-only databases and persistent databases with WAL writes disabled are rejected.
+ * @param connection The connection whose default database to update.
+ * @param timestamp A finite, non-negative Unix timestamp in microseconds.
+ * @param sequence The unsigned lifetime commit counter to install. UINT64_MAX prevents further write commits.
+ * @param out_error Optional error message on failure; free it with duckdb_free. Set to NULL on success.
+ * @return DuckDBSuccess on success or DuckDBError on failure.
+ */
+DUCKDB_C_API duckdb_state duckdb_set_commit_hlc(duckdb_connection connection, int64_t timestamp, uint64_t sequence,
+                                             char **out_error);
+
+/*!
 Creates an merger object that allows upsert style merges with existing data while appending new data.
 
 Note that the object must be destroyed with `duckdb_appender_destroy`.
@@ -10418,9 +10463,13 @@ typedef enum CDC_EVENT_TYPE {
 	DUCKDB_CDC_EVENT_END_TRANSACTION = 4,
 } cdc_event_type;
 
+//! transaction_id is "transaction start time in Unix microseconds:transaction sequence number".
+//! commit_hlc is "commit timestamp in Unix microseconds:commit sequence number".
+//! Both strings are identical across events in a transaction and valid only during the callback.
 typedef void (*duckdb_change_data_capture_callback_t)(
 	cdc_event_type type,
 	const char *transaction_id,
+	const char *commit_hlc,
 	idx_t column_count,
 	idx_t table_version,
 	idx_t *updated_column_index,

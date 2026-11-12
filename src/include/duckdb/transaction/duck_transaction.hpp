@@ -14,6 +14,9 @@
 #include "duckdb/common/optional_ptr.hpp"
 #include "duckdb/transaction/undo_buffer.hpp"
 #include "duckdb/common/enums/active_transaction_state.hpp"
+// Start Anybase changes
+#include "duckdb/storage/table/commit_version_manager.hpp"
+// End Anybase changes
 
 namespace duckdb {
 class CheckpointLock;
@@ -134,6 +137,8 @@ public:
 					transaction_t transaction_id, idx_t catalog_version, timestamp_t meta_start_time, transaction_t meta_transaction_id);
 	transaction_t meta_sequenceNumber;
 	timestamp_t meta_startTime;
+	//! Allocated before CDC publication; cleared if the commit fails.
+	CommitHLC commit_hlc;
 // end Anybase changes
 };
 

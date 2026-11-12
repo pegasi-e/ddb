@@ -283,6 +283,9 @@ private:
 	atomic<bool> has_changes;
 
 // start Anybase changes
+	//! Transient marker for completed all-column propagation, independent of table UPDATE versions.
+	transaction_t last_column_version_commit_id = 0;
+
 public:
 	idx_t GetColumnVersion(idx_t vector_idx);
 	void UpdateColumnVersions(transaction_t commit_id);

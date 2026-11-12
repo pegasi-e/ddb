@@ -32,6 +32,9 @@
 #include "duckdb/storage/write_ahead_log.hpp"
 #include "duckdb/transaction/meta_transaction.hpp"
 #include "duckdb/transaction/duck_transaction.hpp"
+// Start Anybase changes
+#include "duckdb/transaction/duck_transaction_manager.hpp"
+// End Anybase changes
 #include "duckdb/main/client_data.hpp"
 #include "duckdb/main/settings.hpp"
 
@@ -55,6 +58,10 @@ public:
 	optional_idx checkpoint_end_position;
 	optional_idx expected_checkpoint_id;
 	WALReplayState replay_state;
+	// Start Anybase changes
+	CommitHLC commit_hlc;
+	bool has_commit_hlc = false;
+	// End Anybase changes
 
 	struct ReplayIndexInfo {
 		ReplayIndexInfo(TableIndexList &index_list, unique_ptr<Index> index, const string &table_schema,
@@ -204,6 +211,17 @@ public:
 		deserializer.Begin();
 		auto wal_type = deserializer.ReadProperty<WALType>(100, "wal_type");
 		if (wal_type == WALType::WAL_FLUSH) {
+			// Start Anybase changes
+			Deserializer &properties = deserializer;
+			state.has_commit_hlc =
+			    properties.CanDeserializeProperty(CommitHLC::TIMESTAMP_FIELD_ID, "commit_hlc_timestamp");
+			if (state.has_commit_hlc) {
+				state.commit_hlc.timestamp =
+				    properties.ReadProperty<int64_t>(CommitHLC::TIMESTAMP_FIELD_ID, "commit_hlc_timestamp");
+				state.commit_hlc.sequence =
+				    properties.ReadProperty<uint64_t>(CommitHLC::SEQUENCE_FIELD_ID, "commit_hlc_sequence");
+			}
+			// End Anybase changes
 			deserializer.End();
 			return true;
 		}
@@ -564,6 +582,12 @@ unique_ptr<WriteAheadLog> WriteAheadLogReplayer::ReplayLog(unique_ptr<FileHandle
 			auto deserializer = WriteAheadLogDeserializer::GetEntryDeserializer(state, wal_reader);
 			if (deserializer.ReplayEntry()) {
 				con.Commit();
+				// Start Anybase changes
+				if (state.has_commit_hlc) {
+					// WAL order is authoritative, including explicit backward resets and later commits.
+					DuckTransactionManager::Get(database).ReplayCommitHLC(state.commit_hlc);
+				}
+				// End Anybase changes
 
 				// Commit any outstanding indexes.
 				for (auto &info : state.replay_index_infos) {

@@ -205,6 +205,7 @@ private:
 // start Anybase changes
 public:
 	idx_t GetVersion(column_t column_idx) const;
+	vector<idx_t> GetColumnVersions(const vector<column_t> &column_ids) const;
 	void UpdateColumnVersions(transaction_t commit_id) const;
 	//! Get the row-group by the row id
 	optional_ptr<SegmentNode<RowGroup>> GetRowGroupByRowNumber(idx_t row_id);

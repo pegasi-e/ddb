@@ -334,6 +334,8 @@ public:
 	DUCKDB_API void Merge(TableDescription &description, ColumnDataCollection &collection, optional_ptr<const vector<LogicalIndex>> column_ids);
 	DUCKDB_API void SetActiveResult(ClientContextLock &lock, BaseQueryResult &result);
 	DUCKDB_API idx_t GetTableVersion(const char *schema, const char *table);
+	DUCKDB_API void SetCommitHLC(int64_t timestamp, uint64_t sequence);
+	DUCKDB_API void CommitWithHLC(int64_t &timestamp, uint64_t &sequence, bool &has_commit_hlc);
 	DUCKDB_API idx_t GetEstimatedTotalRows(const char *catalog, const char *schema, const char *table);
 	DUCKDB_API idx_t GetColumnVersion(const char *schema, const char *table, const char *column);
 	DUCKDB_API vector<idx_t> GetColumnVersions(const char *schema, const char *table, const char *const *columns,

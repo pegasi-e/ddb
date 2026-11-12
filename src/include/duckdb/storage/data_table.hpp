@@ -349,6 +349,8 @@ public:
 	idx_t GetVersion() const;
 	void DidCommitTransaction(transaction_t commit_id, bool update_all_columns = true) const;
 	idx_t GetColumnVersion(column_t idx) const;
+	//! Read physical-column versions in order; INVALID_INDEX entries return zero.
+	vector<idx_t> GetColumnVersions(const vector<column_t> &column_ids) const;
 	void Merge(TableCatalogEntry &table, ClientContext &context, ColumnDataCollection &collection, const vector<unique_ptr<BoundConstraint>> &bound_constraints,
 					const unordered_set<column_t> &conflict_target, const vector<PhysicalIndex> &set_columns);
 // end Anybase additions

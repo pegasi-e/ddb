@@ -8,6 +8,9 @@
 #include "duckdb/common/types.hpp"
 #include "duckdb/function/table/arrow.hpp"
 #include "duckdb/common/helper.hpp"
+#include "duckdb/main/attached_database.hpp"
+#include "duckdb/main/database_manager.hpp"
+#include "duckdb/transaction/duck_transaction_manager.hpp"
 
 using duckdb::ArrowConverter;
 using duckdb::ArrowAppender;
@@ -504,4 +507,84 @@ duckdb_error_data duckdb_append_arrow(duckdb_connection connection, duckdb_appen
 	}
 
 	return nullptr;
+}
+
+// Start Anybase changes
+duckdb_state duckdb_commit_transaction(duckdb_connection connection, int64_t *out_timestamp, uint64_t *out_sequence,
+                                     bool *out_has_commit_hlc, char **out_error) {
+	if (out_timestamp) {
+		*out_timestamp = 0;
+	}
+	if (out_sequence) {
+		*out_sequence = 0;
+	}
+	if (out_has_commit_hlc) {
+		*out_has_commit_hlc = false;
+	}
+	if (out_error) {
+		*out_error = nullptr;
+	}
+	if (!connection || !out_timestamp || !out_sequence || !out_has_commit_hlc) {
+		if (out_error) {
+			*out_error = strdup("connection and commit HLC output pointers cannot be nullptr");
+		}
+		return DuckDBError;
+	}
+	try {
+		reinterpret_cast<Connection *>(connection)->context->CommitWithHLC(*out_timestamp, *out_sequence,
+		                                                                *out_has_commit_hlc);
+		return DuckDBSuccess;
+	} catch (std::exception &ex) {
+		if (out_error) {
+			ErrorData error(ex);
+			*out_error = strdup(error.Message().c_str());
+		}
+		return DuckDBError;
+	}
+}
+
+duckdb_state duckdb_set_commit_hlc(duckdb_connection connection, int64_t timestamp, uint64_t sequence, char **out_error) {
+	if (out_error) {
+		*out_error = nullptr;
+	}
+	if (!connection) {
+		if (out_error) {
+			*out_error = strdup("connection cannot be nullptr");
+		}
+		return DuckDBError;
+	}
+	try {
+		reinterpret_cast<Connection *>(connection)->context->SetCommitHLC(timestamp, sequence);
+		return DuckDBSuccess;
+	} catch (std::exception &ex) {
+		if (out_error) {
+			ErrorData error(ex);
+			*out_error = strdup(error.Message().c_str());
+		}
+		return DuckDBError;
+	}
+}
+// End Anybase changes
+
+duckdb_state duckdb_get_commit_hlc(duckdb_connection connection, int64_t *out_timestamp, uint64_t *out_sequence) {
+	if (!connection || !out_timestamp || !out_sequence) {
+		return DuckDBError;
+	}
+	auto &context = *reinterpret_cast<Connection *>(connection)->context;
+	try {
+		duckdb::CommitHLC hlc;
+		context.RunFunctionInTransaction([&]() {
+			auto &manager = duckdb::DatabaseManager::Get(context);
+			auto db = manager.GetDatabase(duckdb::DatabaseManager::GetDefaultDatabase(context));
+			if (!db || !db->GetTransactionManager().IsDuckTransactionManager()) {
+				throw duckdb::InvalidInputException("Commit HLC requires a DuckDB database");
+			}
+			hlc = duckdb::DuckTransactionManager::Get(*db).GetCommitHLC();
+		});
+		*out_timestamp = hlc.timestamp;
+		*out_sequence = hlc.sequence;
+		return DuckDBSuccess;
+	} catch (std::exception &) {
+		return DuckDBError;
+	}
 }

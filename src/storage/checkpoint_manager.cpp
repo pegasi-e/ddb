@@ -229,6 +229,11 @@ void SingleFileCheckpointWriter::CreateCheckpoint() {
 		auto &entry = catalog_entries[i];
 		list.WriteObject([&](Serializer &obj) { WriteEntry(entry.get(), obj); });
 	});
+	// Start Anybase changes
+	auto commit_hlc = transaction_manager.GetCheckpointHLC();
+	serializer.WriteProperty(CommitHLC::TIMESTAMP_FIELD_ID, "commit_hlc_timestamp", commit_hlc.timestamp);
+	serializer.WriteProperty(CommitHLC::SEQUENCE_FIELD_ID, "commit_hlc_sequence", commit_hlc.sequence);
+	// End Anybase changes
 	serializer.End();
 
 	metadata_writer->Flush();
@@ -337,7 +342,17 @@ void CheckpointReader::LoadCheckpoint(CatalogTransaction transaction, MetadataRe
 	deserializer.ReadList(100, "catalog_entries", [&](Deserializer::List &list, idx_t i) {
 		return list.ReadObject([&](Deserializer &obj) { ReadEntry(transaction, obj); });
 	});
+	// Start Anybase changes
+	CommitHLC commit_hlc;
+	commit_hlc.timestamp =
+	    deserializer.ReadPropertyWithDefault<int64_t>(CommitHLC::TIMESTAMP_FIELD_ID, "commit_hlc_timestamp");
+	commit_hlc.sequence =
+	    deserializer.ReadPropertyWithDefault<uint64_t>(CommitHLC::SEQUENCE_FIELD_ID, "commit_hlc_sequence");
+	// End Anybase changes
 	deserializer.End();
+	// Start Anybase changes
+	DuckTransactionManager::Get(catalog.GetAttached()).RestoreCommitHLC(commit_hlc);
+	// End Anybase changes
 	deserializer.Unset<Catalog>();
 }
 

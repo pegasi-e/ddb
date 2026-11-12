@@ -608,7 +608,9 @@ void SingleFileStorageCommitState::FlushCommit() {
 		return;
 	}
 	// Move the blocks in this COMMIT into the WAL and mark them as "in use".
-	wal.Flush();
+	// Start Anybase changes
+	wal.Flush(&commit_hlc);
+	// End Anybase changes
 	state = WALCommitState::FLUSHED;
 }
 
